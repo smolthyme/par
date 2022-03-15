@@ -29,8 +29,8 @@ from ._compat import u, string_types, import_
 #    * Add inner and outter anchor class
 #    * Add header anchor notation 
 #    * Add footnote support
-#
-#
+
+
 from par.pyPEG import *
 import re
 import types
@@ -215,7 +215,7 @@ class MarkdownGrammar(WikiGrammar):
         def blockquote(): return -2, quote_lines, -1, blankline
             
         ## links
-        #def protocal(): return [_(r'http://'), _(r'https://'), _(r'ftp://')]
+        # def protocal(): return [_(r'http://'), _(r'https://'), _(r'ftp://')]
         def direct_link(): return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
         def image_link(): return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)', re.I)
         def mailto(): return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
@@ -223,7 +223,7 @@ class MarkdownGrammar(WikiGrammar):
     
         def inline_text(): return _(r'[^\]\^]*')
         def inline_image_alt(): return _(r'!\['), inline_text, _(r'\]')
-        #def inline_image_title(): return literal
+        # def inline_image_title(): return literal
         def inline_href(): return _(r'[^\s\)]+')
         def inline_image_link(): return _(r'\('), inline_href, 0, space, 0, inline_link_title, 0, space, _(r'\)')
         def inline_image(): return inline_image_alt, inline_image_link
@@ -231,7 +231,7 @@ class MarkdownGrammar(WikiGrammar):
         def refer_image_alt(): return _(r'!\['), inline_text, _(r'\]')
         def refer_image_refer(): return _(r'[^\]]*')
         def refer_image(): return refer_image_alt, 0, space, _(r'\['), refer_image_refer, _(r'\]')
-        #def refer_image_title(): return [literal, literal1, r'\(.*?\)']
+        # def refer_image_title(): return [literal, literal1, r'\(.*?\)']
         
         def inline_link_caption(): return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
         def inline_link_title(): return literal
