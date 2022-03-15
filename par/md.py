@@ -1,5 +1,5 @@
 from __future__ import print_function, unicode_literals
-from ._compat import u, string_types, import_
+from ._compat import import_
 
 # Parsing Markdown
 # This version has some differences between Standard Markdown
@@ -290,7 +290,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         
     def parse_text(self, text, peg=None):
         g = self.grammar
-        if isinstance(peg, string_types):
+        if isinstance(peg, str):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
@@ -375,7 +375,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         for x in node.find_all('attr_def_class'):
             _cls.append(x.text[1:])
             
-        return self.tag('h'+u(level), title + anchor, id=_id, _class=' '.join(_cls))
+        return self.tag('h'+ str(level), title + anchor, id=_id, _class=' '.join(_cls))
         
     def visit_title1(self, node):
         return self._get_title(node, 1)
