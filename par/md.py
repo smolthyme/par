@@ -85,8 +85,10 @@ class MarkdownGrammar(WikiGrammar):
         #     code_string_short, htmlentity, underscore_words, op, link, 
         #     html_inline_block, inline_tag, string, default_string]
 
+        def longdash(): return _(r"--")
+
         def word(): return [escape_string, code_string, 
-            code_string_short, htmlentity, footnote, link, 
+            code_string_short, htmlentity, longdash, footnote, link, 
             html_inline_block, inline_tag, string, default_string]
         # def words(): return [simple_op, word], -1, [simple_op, space, word]
         def words(): return -1, [word, space]
@@ -361,6 +363,9 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     def visit_blankline(self, node):
         return '\n'
     
+    def visit_longdash(self, node):
+        return '&mdash;'
+
     def _get_title(self, node, level):
         if node.find('attr_def_id'):
             _id = node.find('attr_def_id').text[1:]
