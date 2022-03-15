@@ -1,6 +1,6 @@
 from __future__ import print_function, unicode_literals
 from ._compat import u, string_types, import_
-#coding=utf8
+
 # Parsing Markdown
 # This version has some differences between Standard Markdown
 # Syntax according from http://daringfireball.net/projects/markdown/syntax
@@ -43,7 +43,8 @@ class MarkdownGrammar(WikiGrammar):
         super(MarkdownGrammar, self).__init__()
         
     def _get_rules(self):
-        # 0 ?
+        ## Cheats for return value repeats
+        #  0 ?
         # -1 *
         # -2 +
         #basic
@@ -92,15 +93,13 @@ class MarkdownGrammar(WikiGrammar):
         #footnote
         def footnote(): return _(r'\[\^\w+\]')
         def footnote_text(): return list_first_para, -1, [list_content_indent_lines, list_content_lines]
-        def footnote_desc():
-            return footnote, _(r':'), footnote_text
+        def footnote_desc(): return footnote, _(r':'), footnote_text
     
         #custome inline tag
         def inline_tag_name(): return _(r'[^\}:]*')
         def inline_tag_index(): return _(r'[^\]]*')
         def inline_tag_class(): return _(r'[^\}:]*')
-        def inline_tag():
-            return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
+        def inline_tag(): return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
     
         #pre
         def indent_line_text(): return _(r'.+')
@@ -134,7 +133,7 @@ class MarkdownGrammar(WikiGrammar):
         def title(): return [title6, title5, title4, title3, title2, title1]
     
         #table
-#        def table_column(): return -2, [space, escape_string, code_string_short, code_string, op, link, _(r'[^\\\*_\^~ \t\r\n`,\|]+', re.U)], _(r'\|\|')
+        # def table_column(): return -2, [space, escape_string, code_string_short, code_string, op, link, _(r'[^\\\*_\^~ \t\r\n`,\|]+', re.U)], _(r'\|\|')
         def table_column(): return _(r'.+?(?=\|\|)'), _(r'\|\|')
         def table_line(): return _(r'\|\|'), -2, table_column, eol
         def table(): return -2, table_line, -1, blankline
@@ -153,7 +152,7 @@ class MarkdownGrammar(WikiGrammar):
         def table2():
             return table_head, table_separator, table_body
         
-        #definition
+        #definition lists
         def dl_dt_1(): return _(r'[^ \t\r\n]+.*--'), -2, blankline
         def dl_dd_1(): return -1, [list_content_indent_lines, blankline]
         def dl_dt_2(): return _(r'[^ \t\r\n]+.*'), -1, blankline
@@ -230,7 +229,7 @@ class MarkdownGrammar(WikiGrammar):
         def refer_image_alt(): return _(r'!\['), inline_text, _(r'\]')
         def refer_image_refer(): return _(r'[^\]]*')
         def refer_image(): return refer_image_alt, 0, space, _(r'\['), refer_image_refer, _(r'\]')
-        def refer_image_title(): return [literal, literal1, '\(.*?\)']
+        def refer_image_title(): return [literal, literal1, r'\(.*?\)']
         
         def inline_link_caption(): return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
         def inline_link_title(): return literal
@@ -255,16 +254,16 @@ class MarkdownGrammar(WikiGrammar):
     
 class MarkdownHtmlVisitor(WikiHtmlVisitor):
     op_maps = {
-        '`':['<code>', '</code>'],
-        '*':['<em>', '</em>'],
-        '_':['<em>', '</em>'],
-        '**':['<strong>', '</strong>'],
-        '***':['<strong><em>', '</em></strong>'],
-        '___':['<strong><em>', '</em></strong>'],
-        '__':['<strong>', '</strong>'],
-        '~~':['<span style="text-decoration: line-through">', '</span>'],
-        '^':['<sup>', '</sup>'],
-        ',,':['<sub>', '</sub>'],
+        '`'  :  ['<code>', '</code>'],
+        '*'  :  ['<em>', '</em>'],
+        '_'  :  ['<em>', '</em>'],
+        '**' :  ['<strong>', '</strong>'],
+        '***':  ['<strong><em>', '</em></strong>'],
+        '___':  ['<strong><em>', '</em></strong>'],
+        '__' :  ['<strong>', '</strong>'],
+        '~~' :  ['<span style="text-decoration: line-through">', '</span>'],
+        '^'  :  ['<sup>', '</sup>'],
+        ',,' :  ['<sub>', '</sub>'],
     }
     tag_class = {}
     
@@ -740,7 +739,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             return func(self, block)
         else:
             return ''
-#            return node.text
+            # return node.text
         
     def visit_table_column(self, node):
         text = self.parse_text(node.text[:-2].strip(), 'words')
