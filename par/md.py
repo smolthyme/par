@@ -465,9 +465,13 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         kwargs['src'] = src
         if title:
             kwargs['title'] = title.text[1:-1]
-        alt = node.find('inline_text')
         if alt:
             kwargs['alt'] = alt.text
+
+        # controls disablePictureInPicture playsinline 
+        if src.endswith(".mp4") or src.endswith(".m4v") or src.endswith(".mkv") or src.endswith(".webm"):
+            return self.tag('video', enclose=1, type="video/mp4", controls="yesplz", disablePictureInPicture=True, playsinline="True", **kwargs)
+
         return self.tag('img', enclose=1, **kwargs)
     
     def visit_refer_link(self, node):
