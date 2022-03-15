@@ -101,7 +101,7 @@ class MarkdownGrammar(WikiGrammar):
         def footnote_text(): return list_first_para, -1, [list_content_indent_lines, list_content_lines]
         def footnote_desc(): return footnote, _(r':'), footnote_text
     
-        ## custome inline tag
+        ## custom inline tag
         def inline_tag_name(): return _(r'[^\}:]*')
         def inline_tag_index(): return _(r'[^\]]*')
         def inline_tag_class(): return _(r'[^\}:]*')
