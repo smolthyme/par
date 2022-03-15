@@ -458,8 +458,11 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     
     def visit_inline_image(self, node):
         kwargs = {}
-        kwargs['src'] = node.find('inline_href').text
         title = node.find('inline_link_title')
+        alt = node.find('inline_text')
+        src = "./images/" + node.find('inline_href').text
+
+        kwargs['src'] = src
         if title:
             kwargs['title'] = title.text[1:-1]
         alt = node.find('inline_text')
@@ -564,7 +567,8 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                 else:
                     cls += ' height="%s"' % height
             
-            s = '<img src="%s" %s/>' % (filename, cls)
+            #TODO: Move to .tag
+            s = '<img src="/images/%s" %s/>' % (filename, cls)
             if align:
                 s = '<div class="float%s">%s</div>' % (align, s)
             return s
@@ -578,7 +582,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             b = 0
             e = len(t)
         href = t[b:e]
-        return self.tag('img', src=href, enclose=1)
+        return self.tag('img', src="/images/" + href, enclose=1)
     
     def visit_mailto(self, node):
         href = node.text[1:-1]
