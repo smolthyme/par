@@ -366,7 +366,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             _id = node.find('attr_def_id').text[1:]
         else:
             _id = self.get_title_id(level)
-        anchor = '<a class="anchor" href="#%s">&para;</a>' % _id
+        anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
         title = node.find('title_text').text.strip()
         self.titles.append((level, _id, title))
         
