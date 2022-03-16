@@ -1,5 +1,5 @@
 from __future__ import absolute_import, unicode_literals
-from ._compat import range, u
+from ._compat import range
 from .pyPEG import *
 import re
 import types
@@ -93,7 +93,6 @@ class WikiGrammar(dict):
         return peg_rules, article
     
     def parse(self, text, root=None, skipWS=False, **kwargs):
-        text = u(text)
         if not text:
             text = '\n'
         if text[-1] not in ('\r', '\n'):
