@@ -1,5 +1,5 @@
 from __future__ import print_function, unicode_literals
-from ._compat import import_
+from urllib.parse import urljoin
 
 # Parsing Markdown
 # This version has some differences between Standard Markdown
@@ -535,7 +535,6 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             float = 'left', 'right'
             width or height = '' will not set
         """
-        urljoin = import_('urllib.parse', ['urljoin'], via='urlparse')
 
         t = node.text[2:-2].strip()
         type = 'wiki'
