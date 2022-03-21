@@ -183,13 +183,12 @@ class MarkdownGrammar(WikiGrammar):
         #  content
         #  {% endblockname %}
         #
-        def new_block_head(): return _(r'\{% blockname %\}'), eol
-        def new_block_name(): print("lole"); return _(r'[\w\d]+')
-        def new_block_end(): print("lole2"); return _(r'\{% endblock %\}')
+        def new_block_head(): return _(r'\|\|\|'),  eol
+        def new_block_name(): 0, space, _(r'[\w\d]+')
         def new_block_content(): print("ganp"); return -2, [common_line, space]
-        def new_block_item():  return new_block_head, -2, new_block_content, -1, new_block_end
+        def new_block_item():  return new_block_head, 0, new_block_name, -2, new_block_content
         def new_block(): return -2, new_block_item
-        
+
         ## lists
         def check_radio(): return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
         def common_text(): return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
@@ -248,7 +247,9 @@ class MarkdownGrammar(WikiGrammar):
         def link(): return [inline_image, refer_image, inline_link, refer_link, image_link, direct_link, wiki_link, mailto], -1, space
         
         #article
-        def article(): return -1, [blanklines, hr, title, refer_link_note, pre, html_block, table, table2, lists, dl, blockquote, new_block, footnote_desc, paragraph]
+        def content(): return -2, [ blanklines, hr, title, refer_link_note, pre, html_block, new_block, table, table2, lists, dl, blockquote, footnote_desc, paragraph ]
+        #def metacontent(): return -2, [ content ]
+        def article(): return content
     
         peg_rules = {}
         for k, v in ((x, y) for (x, y) in list(locals().items()) if isinstance(y, types.FunctionType)):
@@ -557,6 +558,9 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                 name = '#' + anchor    
             else:
                 name = _v
+            
+            #from ._compat import import_
+            #urljoin = import_('urllib.parse', ['urljoin'], via='urlparse')
 
             return self.tag('a', caption, href="%s" % urljoin(_prefix, name))
         elif type == 'image':
@@ -729,13 +733,13 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     def visit_new_block_item(self, node):
         txt = self.visit(node).rstrip()
         content = [ self.parse_text(thing.text, 'content') for thing in node.find('new_block_content') ]
-            
+
         print(content)
-            
+
         #node[kwargs]
         kwargs= {"class": "collection-horiz"}
         return self.tag('div', "\n".join(content), enclose=1, **kwargs)
-            
+    
     #def visit_new_block_end(self, node):
     #    pass
         
