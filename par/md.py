@@ -52,29 +52,22 @@ class MarkdownGrammar(WikiGrammar):
         def ws(): return _(r'\s+')
         def space(): return _(r'[ \t]+')
         def eol(): return _(r'\r\n|\r|\n')
-        # def seperator(): return _(r'[\.,!?\-$ \t\^]')
+        def seperator(): return _(r'[\.,!?\-$ \t\^]')
     
-        ## hr
-        def hr1(): return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
-        def hr2(): return _(r'-[ \t]*-[ \t]*-[ \t]*[- \t]*'), -2, blankline
-        def hr3(): return _(r'_[ \t]*_[ \t]*_[ \t]*[_ \t]*'), -2, blankline
-        def hr(): return [hr1, hr2, hr3]
-          
-        ## html block
-        def html_block(): return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL), -2, blankline
-        def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup).*?>.*?<(/\1)>|<(img|br).*?/>', re.I|re.DOTALL)
-                        
         ## paragraph
-        # def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
-        # def op_string(): return _(r'\*\*\*|\*\*|\*|___|__|_|~~|\^|,,')
-        # def op(): return [(-1, seperator, op_string), (op_string, -1, seperator)]
+        #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
+        def op_string(): return _(r'\*\*\*|\*\*|\*|___|__|_|~~|\^|,,')
+        def op(): return [(-1, seperator, op_string), (op_string, -1, seperator)]
         # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
         # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
 
         def blankline(): return 0, space, eol
-        def htmlentity(): return _(r'&\w+;')
+
         def literal(): return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
         def literal1(): return _(r"u?r?'[^'\\]*(?:\\.[^'\\]*)*'", re.I|re.DOTALL)
+
+        def htmlentity(): return _(r'&\w+;')
+        def longdash(): return _(r"--")
 
         def escape_string(): return _(r'\\'), _(r'.')
         def string(): return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
@@ -85,13 +78,13 @@ class MarkdownGrammar(WikiGrammar):
         #     code_string_short, htmlentity, underscore_words, op, link, 
         #     html_inline_block, inline_tag, string, default_string]
 
-        def longdash(): return _(r"--")
+
 
         def word(): return [escape_string, code_string, 
             code_string_short, htmlentity, longdash, footnote, link, 
             html_inline_block, inline_tag, string, default_string]
-        # def words(): return [simple_op, word], -1, [simple_op, space, word]
-        def words(): return -1, [word, space]
+        def words(): return [op, word], -1, [op, space, word]
+        #def words(): return -1, [word, space]
         def line(): return 0, space, words, eol
         def paragraph(): return line, -1, (0, space, common_line), -1, blanklines
         def blanklines(): return -2, blankline
@@ -107,6 +100,16 @@ class MarkdownGrammar(WikiGrammar):
         def inline_tag_class(): return _(r'[^\}:]*')
         def inline_tag(): return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
     
+        ## hr
+        def hr1(): return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
+        def hr2(): return _(r'-[ \t]*-[ \t]*-[ \t]*[- \t]*'), -2, blankline
+        def hr3(): return _(r'_[ \t]*_[ \t]*_[ \t]*[_ \t]*'), -2, blankline
+        def hr(): return [hr1, hr2, hr3]
+
+        ## html block
+        def html_block(): return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL), -2, blankline
+        def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup).*?>.*?<(/\1)>|<(img|br).*?/>', re.I|re.DOTALL)
+
         ## pre
         def indent_line_text(): return _(r'.+')
         def indent_line(): return _(r'[ ]{4}|\t'), indent_line_text, eol
