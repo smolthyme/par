@@ -40,10 +40,10 @@ class MarkdownGrammar(WikiGrammar):
         # -2 +
 
         ## basic
-        def ws(): return _(r'\s+')
-        def space(): return _(r'[ \t]+')
-        def eol(): return _(r'\r\n|\r|\n')
-        def seperator(): return _(r'[\.,!?\-$ \t\^]')
+        def ws():       return _(r'\s+')
+        def space():    return _(r'[ \t]+')
+        def eol():      return _(r'\r\n|\r|\n')
+        def seperator():return _(r'[\.,!?\-$ \t\^]')
     
         ## paragraph
         #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
@@ -54,17 +54,17 @@ class MarkdownGrammar(WikiGrammar):
 
         def blankline(): return 0, space, eol
 
-        def literal(): return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
+        def literal():  return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
         def literal1(): return _(r"u?r?'[^'\\]*(?:\\.[^'\\]*)*'", re.I|re.DOTALL)
 
         def htmlentity(): return _(r'&\w+;')
-        def longdash(): return _(r"--")
+        def longdash():   return _(r"--")
 
-        def escape_string(): return _(r'\\'), _(r'.')
-        def string(): return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
-        def code_string_short(): return _(r'`'), _(r'[^`]*'), _(r'`')
-        def code_string(): return _(r'``'), _(r'.+(?=``)'), _(r'``')
-        def default_string(): return _(r'\S+')
+        def escape_string():    return _(r'\\'), _(r'.')
+        def string():           return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
+        def code_string_short():return _(r'`'), _(r'[^`]*'), _(r'`')
+        def code_string():      return _(r'``'), _(r'.+(?=``)'), _(r'``')
+        def default_string():   return _(r'\S+')
         # def word(): return [escape_string, code_string, 
         #     code_string_short, htmlentity, underscore_words, op, link, 
         #     html_inline_block, inline_tag, string, default_string]
@@ -86,15 +86,15 @@ class MarkdownGrammar(WikiGrammar):
         def footnote_desc(): return footnote, _(r':'), footnote_text
     
         ## custom inline tag
-        def inline_tag_name(): return _(r'[^\}:]*')
+        def inline_tag_name():  return _(r'[^\}:]*')
         def inline_tag_index(): return _(r'[^\]]*')
         def inline_tag_class(): return _(r'[^\}:]*')
         def inline_tag(): return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
     
         ## hr
         def hr1(): return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
-        def hr2(): return _(r'-[ \t]*-[ \t]*-[ \t]*[- \t]*'), -2, blankline
-        def hr3(): return _(r'_[ \t]*_[ \t]*_[ \t]*[_ \t]*'), -2, blankline
+        def hr2(): return _(r'\-[ \t]*\-[ \t]*\-[ \t]*[- \t]*'), -2, blankline
+        def hr3(): return _(r'\_[ \t]*\_[ \t]*\_[ \t]*[_ \t]*'), -2, blankline
         def hr(): return [hr1, hr2, hr3]
 
         ## html block
@@ -106,10 +106,10 @@ class MarkdownGrammar(WikiGrammar):
         def indent_line(): return _(r'[ ]{4}|\t'), indent_line_text, eol
         def indent_block(): return -2, [indent_line, blankline]
         def pre_lang(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
-        def pre_text1(): return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
-        def pre_text2(): return _(r'.+?(?=</code>)', re.M|re.DOTALL)
-        def pre_extra1(): return _(r'```|~{3,}'), 0, pre_lang, 0, space, eol, pre_text1, _(r'```|~{3,}'), -2, blankline
-        def pre_extra2(): return _(r'<code>'), 0, pre_lang, 0, space, eol, pre_text2, _(r'</code>'), -2, blankline
+        def pre_text1():    return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
+        def pre_text2():    return _(r'.+?(?=</code>)', re.M|re.DOTALL)
+        def pre_extra1():   return _(r'```|~{3,}'), 0, pre_lang, 0, space, eol, pre_text1, _(r'```|~{3,}'), -2, blankline
+        def pre_extra2():   return _(r'<code>'), 0, pre_lang, 0, space, eol, pre_text2, _(r'</code>'), -2, blankline
         def pre(): return [indent_block, pre_extra1, pre_extra2]
     
         ## class and id definition
@@ -122,20 +122,20 @@ class MarkdownGrammar(WikiGrammar):
         def setext_title1(): return title_text, 0, space, 0, attr_def, blankline, _(r'={1,}'), -2, blankline
         def setext_title2(): return title_text, 0, space, 0, attr_def, blankline, _(r'-{1,}'), -2, blankline
         def title_text(): return _(r'.+?(?= #| \{#| \{\.)|.+', re.U)
-        def atx_title1(): return _(r'# '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def atx_title1(): return _(r'# '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
         def atx_title2(): return _(r'## '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
         def title1(): return [atx_title1, setext_title1]
         def title2(): return [atx_title2, setext_title2]
-        def title3(): return _(r'### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title4(): return _(r'#### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title5(): return _(r'##### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title3(): return _(r'### '),    title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title4(): return _(r'#### '),   title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title5(): return _(r'##### '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
         def title6(): return _(r'###### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
         def title(): return [title6, title5, title4, title3, title2, title1]
     
         ## table
         # def table_column(): return -2, [space, escape_string, code_string_short, code_string, op, link, _(r'[^\\\*_\^~ \t\r\n`,\|]+', re.U)], _(r'\|\|')
         def table_column(): return _(r'.+?(?=\|\|)'), _(r'\|\|')
-        def table_line(): return _(r'\|\|'), -2, table_column, eol
+        def table_line():   return _(r'\|\|'), -2, table_column, eol
         def table(): return -2, table_line, -1, blankline
     
         def table_td(): return _(r'[^\|\r\n]*\|')
@@ -163,8 +163,8 @@ class MarkdownGrammar(WikiGrammar):
         #       content
         #
         # def block_name(): return _(r'[a-zA-Z_\-][a-zA-Z_\-0-9]*')
-        def block_kwargs_key(): return _(r'[^=,\)\n]+')
-        def block_kwargs_value(): return _(r'[^\),\n]+')
+        def block_kwargs_key():     return _(r'[^=,\)\n]+')
+        def block_kwargs_value():   return _(r'[^\),\n]+')
         def block_kwargs(): return block_kwargs_key, 0, (_(r'='), block_kwargs_value)
         # def block_args(): return _(r'\('), 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space, _(r'\)')
         # def block_head(): return _(r'\[\['), 0, space, block_name, 0, space, 0, block_args, 0, space, _(r'\]\]:'), eol
@@ -179,7 +179,7 @@ class MarkdownGrammar(WikiGrammar):
         #
         def new_block_head(): return _(r'\|\|\|'),  eol
         def new_block_name(): 0, space, _(r'[\w\d]+')
-        def new_block_content(): print("ganp"); return -2, [common_line, space]
+        def new_block_content(): return -2, [common_line, space]
         def new_block_item():  return new_block_head, 0, new_block_name, -2, new_block_content
         def new_block(): return -2, new_block_item
 
@@ -202,29 +202,29 @@ class MarkdownGrammar(WikiGrammar):
         def lists(): return -2, list_item, -1, blankline
 
         ## quote
-        def quote_text(): return _(r'[^\r\n]*'), eol
+        def quote_text():       return _(r'[^\r\n]*'), eol
         def quote_blank_line(): return _(r'>[ \t]*'), eol
-        def quote_line(): return _(r'> '), quote_text
+        def quote_line():       return _(r'> '), quote_text
         def quote_lines(): return [quote_blank_line, quote_line]
         def blockquote(): return -2, quote_lines, -1, blankline
 
         ## links
         # def protocal(): return [_(r'http://'), _(r'https://'), _(r'ftp://')]
-        def direct_link(): return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
-        def image_link(): return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)', re.I)
-        def mailto(): return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
-        def wiki_link(): return _(r'(\[\[)(.*?)((1)?\]\])')
+        def direct_link():  return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
+        def image_link():   return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)', re.I)
+        def mailto():       return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
+        def wiki_link():    return _(r'(\[\[)(.*?)((1)?\]\])')
 
-        def inline_text(): return _(r'[^\]\^]*')
-        def inline_image_alt(): return _(r'!\['), inline_text, _(r'\]')
         # def inline_image_title(): return literal
-        def inline_href(): return _(r'[^\s\)]+')
-        def inline_image_link(): return _(r'\('), inline_href, 0, space, 0, inline_link_title, 0, space, _(r'\)')
+        def inline_text():      return _(r'[^\]\^]*')
+        def inline_image_alt(): return _(r'!\['), inline_text, _(r'\]')
+        def inline_href():      return _(r'[^\s\)]+')
+        def inline_image_link():return _(r'\('), inline_href, 0, space, 0, inline_link_title, 0, space, _(r'\)')
         def inline_image(): return inline_image_alt, inline_image_link
 
-        def refer_image_alt(): return _(r'!\['), inline_text, _(r'\]')
-        def refer_image_refer(): return _(r'[^\]]*')
-        def refer_image(): return refer_image_alt, 0, space, _(r'\['), refer_image_refer, _(r'\]')
+        def refer_image_alt():  return _(r'!\['), inline_text, _(r'\]')
+        def refer_image_refer():return _(r'[^\]]*')
+        def refer_image():      return refer_image_alt, 0, space, _(r'\['), refer_image_refer, _(r'\]')
         # def refer_image_title(): return [literal, literal1, r'\(.*?\)']
 
         def inline_link_caption(): return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
