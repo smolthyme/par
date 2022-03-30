@@ -19,16 +19,7 @@ from urllib.parse import urljoin
 #     Multiple underscores in words
 #     Fenced code blocks
 #     Syntax highlighting
-#
-#   2013/7/11
-#    * Add wiki_link support [[xxx]]
-#    * Remove old block support
-#    * Add head line id support
-#        ## header2 ## {#id}
-#    * Add ~~~ code block support
-#    * Add inner and outter anchor class
-#    * Add header anchor notation 
-#    * Add footnote support
+
 
 
 from par.pyPEG import *
@@ -897,5 +888,5 @@ def parseText(text, filename=None, grammer=None, visitor=None):
     resultSoFar = []
     result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
     v = (visitor or SimpleVisitor)(g, filename=filename)
-    
+
     return v.visit(result, root=True)
