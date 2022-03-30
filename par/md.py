@@ -266,16 +266,16 @@ class MarkdownGrammar(WikiGrammar):
 
 class MarkdownHtmlVisitor(WikiHtmlVisitor):
     op_maps = {
-        '`'  :  ['<code>', '</code>'],
-        '*'  :  ['<em>', '</em>'],
-        '_'  :  ['<em>', '</em>'],
-        '**' :  ['<strong>', '</strong>'],
-        '***':  ['<strong><em>', '</em></strong>'],
-        '___':  ['<strong><em>', '</em></strong>'],
-        '__' :  ['<strong>', '</strong>'],
+        '`'  :  ['<code>',          '</code>'],
+        '*'  :  ['<em>',            '</em>'],
+        '_'  :  ['<em>',            '</em>'],
+        '**' :  ['<strong>',        '</strong>'],
+        '***':  ['<strong><em>',    '</em></strong>'],
+        '___':  ['<strong><em>',    '</em></strong>'],
+        '__' :  ['<strong>',        '</strong>'],
+        '^'  :  ['<sup>',           '</sup>'],
+        ',,' :  ['<sub>',           '</sub>'],
         '~~' :  ['<span style="text-decoration: line-through">', '</span>'],
-        '^'  :  ['<sup>', '</sup>'],
-        ',,' :  ['<sub>', '</sub>'],
     }
     tag_class = {}
 
@@ -284,8 +284,8 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                     wiki_prefix='./', footnote_id=None, filename=None):
         super(MarkdownHtmlVisitor, self).__init__(template, tag_class,
                                                     grammar, title, block_callback, init_callback, filename=filename)
-        self.refer_links = {}
 
+        self.refer_links = {}
         self.chars = list(self.op_maps.keys())
         self.chars.sort(key=lambda x: len(x), reverse=True)
         self.wiki_prefix = wiki_prefix
@@ -296,6 +296,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         if root:
             for obj in nodes[0].find_all('refer_link_note'):
                 self.visit_refer_link_note(obj)
+        
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
 
     def parse_text(self, text, peg=None):
@@ -311,6 +312,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         v.refer_links = self.refer_links
         r = v.visit(result)
         self.footnote_id = v.footnote_id
+
         return r
 
     def process_line(self, line):
@@ -360,6 +362,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             if i < len(codes):
                 buf.append(codes[i])
                 i += 1
+        
         return ''.join(buf)
 
     def visit_string(self, node):
@@ -429,6 +432,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     def visit_paragraph(self, node):
         txt = node.text.rstrip().replace('\n', ' ')
         text = self.parse_text(txt, 'words')
+
         return self.tag('p', self.process_line(text))
 
     def visit_pre(self, node):
@@ -452,6 +456,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                     cwargs[k] = v
                     continue
                 kwargs[k] = v
+        
         return self.tag('pre', self.tag('code', self.to_html(self.visit(node).rstrip()), newline=False, **cwargs),
                         **kwargs)
 
@@ -468,6 +473,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         caption = node[0].text[1:-1].strip()
         if not caption:
             caption = kwargs['href']
+        
         return self.tag('a', caption, newline=False, **kwargs)
 
     def visit_inline_image(self, node):
@@ -492,10 +498,12 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     def visit_refer_link(self, node):
         caption = node.find('refer_link_caption')[1]
         key = node.find('refer_link_refer')
+
         if not key:
             key = caption
         else:
             key = key.text
+        
         return self.tag('a', caption, **self.refer_links.get(key.upper(), {}))
 
     def visit_refer_image(self, node):
@@ -511,16 +519,20 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             key = alt
         else:
             key = key.text
+        
         d = self.refer_links.get(key.upper(), {})
         kwargs.update({'src': d.get('href', ''), 'title': d.get('title', '')})
+
         return self.tag('img', enclose=1, **kwargs)
 
     def visit_refer_link_note(self, node):
         key = node.find('inline_link_caption').text[1:-1].upper()
         self.refer_links[key] = {'href': node.find('refer_link_link').text}
+
         r = node.find('refer_link_title')
         if r:
             self.refer_links[key]['title'] = r.text[1:-1]
+        
         return ''
 
     def template(self, node):
@@ -529,9 +541,11 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
 
     def visit_direct_link(self, node):
         t = node.text
+
         if t.startswith('<'):
             t = t[1:-1]
         href = t
+
         return self.tag('a', href, newline=False, href=href)
 
     def visit_wiki_link(self, node):
@@ -593,6 +607,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             s = '<img src="/images/%s" %s/>' % (filename, cls)
             if align:
                 s = '<div class="float%s">%s</div>' % (align, s)
+            
             return s
 
     def visit_image_link(self, node):
@@ -604,6 +619,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             b = 0
             e = len(t)
         href = t[b:e]
+
         return self.tag('img', src="/images/" + href, enclose=1)
 
     def visit_mailto(self, node):
@@ -664,6 +680,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         if node.text[1] == '*' or node.text[1].upper() == 'X':
             tag.append(' checked')
         tag.append('\></input> ')
+
         return ''.join(tag)
 
     def visit_lists_end(self, node):
@@ -672,20 +689,19 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             for node in n:
                 txt.append(self.visit(node))
             text = ''.join(txt)
-            #            print '------------------'
-            #            print text
-            #            print '=================='
             t = self.parse_text(text, 'article').rstrip()
             if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>'):
                 ret = t[3:-4].rstrip()
             else:
                 ret = t
+            
             return ret
 
         def create_list(lists):
             buf = []
             old = None
             parent = None
+
             for _type, _node in lists:
                 if _type == old:
                     buf.append(self.tag('li', process_node(_node)))
@@ -702,6 +718,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                     old = _type
             if buf:
                 buf.append('</' + parent + '>\n')
+            
             return ''.join(buf)
 
         return create_list(self.lists)
@@ -737,10 +754,8 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         name = node.find('inline_tag_name').text.strip()
         _c = node.find('inline_tag_class')
         rel = rel or name
-        if _c:
-            cls = ' ' + _c.text.strip()
-        else:
-            cls = ''
+        cls = ' ' + _c.text.strip() if _c is not None else ''
+
         return ('<span class="inline-tag%s" data-rel="' % cls) + rel + '">' + name + '</span>'
 
     def visit_new_block_item(self, node):
@@ -796,6 +811,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                     text = text[:-1]
                 s.append('<th>%s</th>' % self.process_line(text.strip()))
         s.append('</tr>\n</thead>\n')
+
         return ''.join(s)
 
     def visit_table_separator(self, node):
@@ -805,6 +821,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         s = ['<tbody>\n']
         s.append(self.visit(node))
         s.append('</tbody>')
+
         return ''.join(s)
 
     def visit_table_body_line(self, node):
@@ -822,12 +839,14 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             s.append(self.tag('td', self.process_line(text.strip()),
                               align=self.table_align.get(i, ''), newline=False, enclose=2))
         s.append('</tr>\n')
+
         return ''.join(s)
 
     def visit_footnote(self, node):
         name = node.text[2:-1]
         _id = self.footnote_id
         self.footnote_id += 1
+
         return '<sup id="fnref-%s"><a href="#fn-%s" class="footnote-rel inner">%d</a></sup>' % (name, name, _id)
 
     def visit_footnote_desc(self, node):
@@ -839,6 +858,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         text = self.parse_text(txt, 'article')
         n = {'name': '%s' % name, 'text': text}
         self.footnodes.append(n)
+
         return ''
 
     def __end__(self):
@@ -847,12 +867,13 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             s.append('<div class="footnotes"><ol>')
             for n in self.footnodes:
                 name = n['name']
-                s.append('<li id="fn-%s">' % (name,))
+                s.append('<li id="fn-%s">' % (name, ))
                 s.append(n['text'])
                 s.append(self.tag('a', '&#8617;', href='#fnref-%s' %
                                     name, _class='footnote-backref'))
                 s.append('</li>')
             s.append('</ol></div>')
+        
         return '\n'.join(s)
 
 
@@ -867,6 +888,7 @@ def parseHtml(text, template=None, tag_class=None, block_callback=None,
                                             block_callback=block_callback,
                                             init_callback=init_callback,
                                             filename=filename)
+    
     return v.template(result)
 
 
@@ -875,4 +897,5 @@ def parseText(text, filename=None, grammer=None, visitor=None):
     resultSoFar = []
     result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
     v = (visitor or SimpleVisitor)(g, filename=filename)
+    
     return v.visit(result, root=True)
