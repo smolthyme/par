@@ -276,7 +276,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     
     def __init__(self, template=None, tag_class=None, grammar=None, 
         title='Untitled', block_callback=None, init_callback=None, 
-        wiki_prefix='/wiki/', footnote_id=None, filename=None):
+        wiki_prefix='./', footnote_id=None, filename=None):
         super(MarkdownHtmlVisitor, self).__init__(template, tag_class, 
             grammar, title, block_callback, init_callback, filename=filename)
         self.refer_links = {}
