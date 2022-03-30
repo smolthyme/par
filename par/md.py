@@ -366,7 +366,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         return '\n'
 
     def visit_longdash(self, node):
-        return '&mdash;'
+        return '—' # &mdash;
 
     def _get_title(self, node, level):
         if node.find('attr_def_id'):
