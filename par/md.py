@@ -860,7 +860,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                 name = n['name']
                 s.append('<li id="fn-%s">' % (name, ))
                 s.append(n['text'])
-                s.append(self.tag('a', '&#8617;', href='#fnref-%s' %
+                s.append(self.tag('a', '↩', href='#fnref-%s' %
                                     name, _class='footnote-backref'))
                 s.append('</li>')
             s.append('</ol></div>')
