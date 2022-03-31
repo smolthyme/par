@@ -256,8 +256,7 @@ class MarkdownGrammar(WikiGrammar):
         def refer_link_note(): return 0, _(r' {1,3}'), inline_link_caption, _(
             r':'), space, refer_link_link, 0, (ws, refer_link_title), -2, blankline
         
-        def link(): return [inline_image, refer_image, inline_link,
-                            refer_link, image_link, direct_link, wiki_link, mailto], -1, space
+        def link(): return [inline_image, refer_image, inline_link, refer_link, image_link, direct_link, wiki_link, mailto], -1, space
 
         ## article
         def content(): return -2, [blanklines, hr, title, refer_link_note, pre, html_block,
@@ -487,7 +486,12 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         kwargs = {}
         title = node.find('inline_link_title')
         alt = node.find('inline_text')
-        src = "./images/" + node.find('inline_href').text
+        imgpath = node.find('inline_href').text
+
+        # TODO: Move to .tag
+        if not re.match(r'^\w{3,5}://.+', imgpath):
+            imgpath = "./images/" + imgpath
+        src = imgpath
 
         kwargs['src'] = src
         if title:
@@ -579,21 +583,20 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
 
         t = t[begin:]
         if type == 'wiki':
+            #_prefix = self.wiki_prefix # FIXME: Should go back to using this
             _v, caption = (t.split('|', 1) + [''])[:2]
             name, anchor = (_v.split('#', 1) + [''])[:2]
+            if anchor:
+                anchor = "#" + anchor
+
             if not caption:
                 caption = name
-            _prefix = self.wiki_prefix
+            
             if not name:
-                _prefix = ''
-                name = '#' + anchor
-            else:
-                name = _v
+                return self.tag('a', caption, href=anchor)
 
-            # from ._compat import import_
-            # urljoin = import_('urllib.parse', ['urljoin'], via='urlparse')
-
-            return self.tag('a', caption, href="%s" % urljoin(_prefix, name))
+            # FIXME: file path should be verified since 'wiki' is local.
+            return self.tag('a', caption, href=f"{name}.html{anchor}")
 
         elif type == 'image':
             _v = (t.split('|') + ['', '', ''])[:4]

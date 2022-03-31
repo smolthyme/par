@@ -609,11 +609,11 @@ def test_link_1():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p><a class="inner" href="/wiki/Page">Hello world</a>
-     <a class="inner" href="/wiki/Page#title">Hello world</a>
-     <a class="inner" href="/wiki/Page">Hello world</a>
+    <p><a class="inner" href="Page.html">Hello world</a>
+     <a class="inner" href="Page.html#title">Hello world</a>
+     <a class="inner" href="Page.html">Hello world</a>
     </p>
-    <p><img src="a.png" /> <div class="floatright"><img src="a.png" /></div> <img src="a.png"  width="250px"/> <Page> <a class="outter" href="http://localhost:8000">http://localhost:8000</a></p>
+    <p><img src="/images/a.png" /> <div class="floatright"><img src="/images/a.png" /></div> <img src="/images/a.png"  width="250px"/> <Page> <a class="outter" href="http://localhost:8000">http://localhost:8000</a></p>
     <BLANKLINE>
     """
     
@@ -631,7 +631,7 @@ def test_link_2():
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p><a class="outter" href="http://aaaa.com">http://aaaa.com</a> <img src="http://aaaa.com"/>
-     <a class="inner" href="page">page</a> <a class="outter" href="http://aaaa.com">http://aaaa.com</a> <a class="inner" href="/wiki/Page">Page</a>
+     <a class="inner" href="page">page</a> <a class="outter" href="http://aaaa.com">http://aaaa.com</a> <a class="inner" href="Page.html">Page</a>
      <a class="inner" href="#edit">
      <a class="inner" href="#">abc</a>
     </p>
