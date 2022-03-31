@@ -58,7 +58,7 @@ class MarkdownGrammar(WikiGrammar):
         def literal1(): return _(r"u?r?'[^'\\]*(?:\\.[^'\\]*)*'", re.I|re.DOTALL)
 
         def htmlentity(): return _(r'&\w+;')
-        def longdash():   return _(r"--")
+        def longdash():   return _(r"--\B")
 
         def escape_string():    return _(r'\\'), _(r'.')
         def string():           return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
@@ -71,9 +71,15 @@ class MarkdownGrammar(WikiGrammar):
 
 
 
-        def word(): return [escape_string, code_string, 
-            code_string_short, htmlentity, longdash, footnote, link, 
-            html_inline_block, inline_tag, string, default_string]
+        def word(): return [ # Tries to show parse-order
+                escape_string, 
+                code_string, code_string_short,
+                html_inline_block, inline_tag,
+                footnote, link, 
+                htmlentity, longdash,
+                string, default_string
+            ]
+        
         def words(): return [op, word], -1, [op, space, word]
         #def words(): return -1, [word, space]
         def line(): return 0, space, words, eol
@@ -177,11 +183,21 @@ class MarkdownGrammar(WikiGrammar):
         #  content
         #  {% endblockname %}
         #
-        def new_block_head(): return _(r'\|\|\|'),  eol
-        def new_block_name(): 0, space, _(r'[\w\d]+')
-        def new_block_content(): return -2, [common_line, space]
-        def new_block_item():  return new_block_head, 0, new_block_name, -2, new_block_content
-        def new_block(): return -2, new_block_item
+
+        def new_block_args(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space
+        def new_block_name(): return _(r'([a-zA-Z_\-][a-zA-Z_\-0-9]*)')
+        def new_block_head(): return _(r'\{%'), 0, space, new_block_name, new_block_args, _(r'%\}'), eol
+        def new_block_end(): return _(r'\{%'), 0, space, _(r'end\1'), 0, space, _(r'%\}'), eol
+        def new_block_item(): return new_block_head, new_block_body, new_block_end
+#        def new_block(): return -2, new_block_item
+        def new_block(): return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
+
+
+        def side_block_head(): return _(r'\|\|\|'),  eol
+        def side_block_name(): 0, space, _(r'[\w\d]+')
+        def side_block_content(): return -2, [common_line, space]
+        def side_block_item():  return side_block_head, 0, side_block_name, -2, side_block_content
+        def side_block(): return -2, side_block_item
 
         ## lists
         def check_radio(): return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
@@ -245,7 +261,7 @@ class MarkdownGrammar(WikiGrammar):
 
         ## article
         def content(): return -2, [blanklines, hr, title, refer_link_note, pre, html_block,
-                                   new_block, table, table2, lists, dl, blockquote, footnote_desc, paragraph]
+                                   side_block, new_block, table, table2, lists, dl, blockquote, footnote_desc, paragraph]
         #def metacontent(): return -2, [ content ]
         def article(): return content
 
@@ -749,18 +765,45 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
 
         return ('<span class="inline-tag%s" data-rel="' % cls) + rel + '">' + name + '</span>'
 
-    def visit_new_block_item(self, node):
+    def visit_new_block(self, node):
+        block = {'new':True}
+        r = re.compile(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)\s*(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL)
+        m = r.match(node.text)
+        if m:
+            block['name'] = m.group(1)
+            block_args = m.group(2).strip()
+            block['body'] = m.group(3).strip()
+            
+            resultSoFar = []
+            result, rest = self.grammar.parse(block_args, root=self.grammar['new_block_args'], resultSoFar=resultSoFar, skipWS=False)
+            kwargs = {}
+            for node in result[0].find_all('block_kwargs'):
+                k = node.find('block_kwargs_key').text.strip()
+                v = node.find('block_kwargs_value')
+                if v:
+                    v = v.text.strip()
+                kwargs[k] = v
+            
+            block['kwargs'] = kwargs
+            
+        func = self.block_callback.get(block['name'])
+        if func:
+            return func(self, block)
+        else:
+            return ''
+#            return node.text
+
+    def visit_side_block_item(self, node):
         txt = self.visit(node).rstrip()
         content = [self.parse_text(thing.text, 'content')
-                    for thing in node.find('new_block_content')]
+                    for thing in node.find('side_block_content')]
 
         print(content)
 
         # node[kwargs]
-        kwargs = {"class": "collection-horiz"}
-        return self.tag('div', "\n".join(content), enclose=1, **kwargs)
+        return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz")
 
-    # def visit_new_block_end(self, node):
+    # def visit_side_block_end(self, node):
     #    pass
 
     def visit_table_column(self, node):

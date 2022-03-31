@@ -546,7 +546,7 @@ def test_footnote():
     <li id="fn-1">
     <p> <strong>aaaa</strong></p>
     <BLANKLINE>
-    <a class="footnote-backref inner" href="#fnref-1">&#8617;</a>
+    <a class="footnote-backref inner" href="#fnref-1">↩</a>
     <BLANKLINE>
     </li>
     </ol></div>
@@ -567,10 +567,10 @@ def test_attr_1():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <h1 id="test">test<a class="anchor" href="#test">&para;</a></h1>
-    <h2 id="hello">hello<a class="anchor" href="#hello">&para;</a></h2>
-    <h3 id="subject">subject<a class="anchor" href="#subject">&para;</a></h3>
-    <h3 id="subject">subject<a class="anchor" href="#subject">&para;</a></h3>
+    <h1 id="test">test<a class="anchor" href="#test"></a></h1>
+    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
+    <h3 id="subject">subject<a class="anchor" href="#subject"></a></h3>
+    <h3 id="subject">subject<a class="anchor" href="#subject"></a></h3>
     <p><a class="inner" href="#anchor">link to anchor</a></p>
     <BLANKLINE>
     """
@@ -586,11 +586,11 @@ def test_attr_2():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <h2 id="hello">hello<a class="anchor" href="#hello">&para;</a></h2>
-    <h2 class="hello" id="title_0-1">hello<a class="anchor" href="#title_0-1">&para;</a></h2>
-    <h2 id="hello">hello<a class="anchor" href="#hello">&para;</a></h2>
-    <h2 class="hello" id="title_0-2">hello<a class="anchor" href="#title_0-2">&para;</a></h2>
-    <h2 class="hello class" id="title">hello<a class="anchor" href="#title">&para;</a></h2>
+    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
+    <h2 class="hello" id="title_0-1">hello<a class="anchor" href="#title_0-1"></a></h2>
+    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
+    <h2 class="hello" id="title_0-2">hello<a class="anchor" href="#title_0-2"></a></h2>
+    <h2 class="hello class" id="title">hello<a class="anchor" href="#title"></a></h2>
     <BLANKLINE>
     """
 

@@ -184,7 +184,6 @@ class WikiHtmlVisitor(SimpleVisitor):
             
         #process inner and outter link
         if tag == 'a':
-            print ('------', kw)
             href = kw.get('href', '#')
             if href and (href.startswith('http:') or href.startswith('https:') or href.startswith('ftp:')):
                 _cls = 'outter'
