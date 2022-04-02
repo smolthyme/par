@@ -98,9 +98,10 @@ class MarkdownGrammar(WikiGrammar):
         def inline_tag(): return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
     
         ## hr
+        # Note: is something like (?:([-_\*])[ \t]*\1){3,} slower?
         def hr1(): return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
-        def hr2(): return _(r'\-[ \t]*\-[ \t]*\-[ \t]*[- \t]*'), -2, blankline
-        def hr3(): return _(r'\_[ \t]*\_[ \t]*\_[ \t]*[_ \t]*'), -2, blankline
+        def hr2(): return _(r'\-[ \t]*\-[ \t]*\-[ \t]*[\- \t]*'), -2, blankline
+        def hr3(): return _(r'\_[ \t]*\_[ \t]*\_[ \t]*[\_ \t]*'), -2, blankline
         def hr(): return [hr1, hr2, hr3]
 
         ## html block
