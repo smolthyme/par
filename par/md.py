@@ -522,13 +522,20 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         kwargs = {}
         title = node.find('inline_link_title')
         alt = node.find('inline_text')
-        imgpath = node.find('inline_href').text
+        location = node.find('inline_href').text
 
         # TODO: Move to .tag
-        if not re.match(r'^\w{3,5}://.+', imgpath):
-            imgpath = "./images/" + imgpath
-        src = imgpath
+        if re.match(r'^\w{3,5}://.+', location):
+            scheme = re.search(r'^(\w{3,5})://.+', location).group(1)
+            # NOTE: Double check and look for modern alternatives, never know what gets entered.
+            if scheme.lower() in ['javascript', 'vbscript', 'data']:
+                return ""
+            yt_id = re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)
+            if yt_id:
+                return f"<object class='yt-embed' data='https://www.youtube.com/embed/{yt_id.group(1)}'></object>"
+        location = "images/" + location  # later may need to split media so bbl
 
+        src = location
         kwargs['src'] = src
         if title:
             kwargs['title'] = title.text[1:-1]
