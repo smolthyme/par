@@ -86,6 +86,10 @@ class MarkdownGrammar(WikiGrammar):
         def paragraph(): return line, -1, (0, space, common_line), -1, blanklines
         def blanklines(): return -2, blankline
     
+        def directive_name(): return _(r'\w+')
+        def directive_title(): return _(r'[^\n\r]*')
+        def directive(): return _(r'\.\.\s+'), directive_name, _(r'\s*::\s*'), directive_title
+    
         ## footnote
         def footnote(): return _(r'\[\^\w+\]')
         def footnote_text(): return list_first_para, -1, [list_content_indent_lines, list_content_lines]
@@ -260,8 +264,14 @@ class MarkdownGrammar(WikiGrammar):
         def link(): return [inline_image, refer_image, inline_link, refer_link, image_link, direct_link, wiki_link, mailto], -1, space
 
         ## article
-        def content(): return -2, [blanklines, hr, title, refer_link_note, pre, html_block,
-                                   side_block, new_block, table, table2, lists, dl, blockquote, footnote_desc, paragraph]
+        def content(): return -2, [ blanklines, hr, title, refer_link_note, directive,
+                                    pre, html_block,
+                                    side_block, new_block,
+                                    table, table2,
+                                    lists, dl,
+                                    blockquote, footnote_desc,
+                                    paragraph
+                                ]
         #def metacontent(): return -2, [ content ]
         def article(): return content
 
@@ -298,11 +308,16 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         self.wiki_prefix = wiki_prefix
         self.footnote_id = footnote_id or 1
         self.footnodes = []
+        self.tocitems = []
 
     def visit(self, nodes, root=False):
         if root:
             for obj in nodes[0].find_all('refer_link_note'):
                 self.visit_refer_link_note(obj)
+        
+            # Collect titles for use in ToC
+            for onk in nodes[0].find_all('title'):
+                self._alt_title(onk)
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
 
@@ -384,14 +399,34 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     def visit_longdash(self, node):
         return '—' # &mdash;
 
+    def _alt_title(self, node):
+        node = node.what[0]
+        _nm = node.__name__
+
+        if   _nm == 'title1': lvl = 1
+        elif _nm == 'title2': lvl = 2
+        elif _nm == 'title3': lvl = 3
+        elif _nm == 'title3': lvl = 4
+        elif _nm == 'title3': lvl = 5
+        level = lvl or 1
+        
+        if node.find('attr_def_id'):
+            _id = node.find('attr_def_id').text[1:]
+        else:
+            _id = self.get_title_id(level)
+        
+        title = node.find('title_text').text.strip()
+        self.tocitems.append((level, _id, title))
+
+
     def _get_title(self, node, level):
         if node.find('attr_def_id'):
             _id = node.find('attr_def_id').text[1:]
         else:
             _id = self.get_title_id(level)
+        
         anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
         title = node.find('title_text').text.strip()
-        self.titles.append((level, _id, title))
 
         # process classes
         _cls = []
@@ -877,6 +912,34 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             s.append(self.tag('td', self.process_line(text.strip()),
                               align=self.table_align.get(i, ''), newline=False, enclose=2))
         s.append('</tr>\n')
+
+        return ''.join(s)
+    
+    def visit_directive(self, node):
+        name = node.find('directive_name').text
+        title = node.find('directive_title')
+
+        s = []
+
+        if name in ['toc', 'contents']:
+            if len(self.tocitems):
+                print("ToC:")
+                hi = 0
+                s.append("<section class='toc'><ul>")
+                for lvl, anchor, title in self.tocitems:
+                    if lvl > hi:
+                        hi = lvl
+                        s.append("<ul>")
+                    elif lvl < hi:
+                        hi = lvl
+                        s.append("</ul>")
+                    s.append(f"<li><a href='#{anchor}'>{title}</a></li>")
+                    print(f"+ {lvl} | {anchor}\t| {title}")
+                    
+                s.append("</ul></section>")
+
+            # Since we visited these before generating, reset the dict to make sure headings get correct id's
+            self.titles_ids = {}
 
         return ''.join(s)
 
