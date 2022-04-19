@@ -326,8 +326,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         if isinstance(peg, str):
             peg = g[peg]
         resultSoFar = []
-        result, rest = g.parse(
-            text, root=peg, resultSoFar=resultSoFar, skipWS=False)
+        result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
         v = self.__class__('', self.tag_class, g, block_callback=self.block_callback,
                            init_callback=self.init_callback, wiki_prefix=self.wiki_prefix, filename=self.filename,
                            footnote_id=self.footnote_id)
@@ -630,7 +629,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         t = t[begin:]
         if type == 'wiki':
             #_prefix = self.wiki_prefix # FIXME: Should go back to using this
-            _v, caption = (t.split('|', 1) + [''])[:2]
+            _v,   caption = (t.split('|', 1) + [''])[:2]
             name, anchor = (_v.split('#', 1) + [''])[:2]
             if anchor:
                 anchor = "#" + anchor
@@ -641,7 +640,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             if not name:
                 return self.tag('a', caption, href=anchor)
 
-            # FIXME: file path should be verified since 'wiki' is local.
+            # FIXME: file path should be verified since 'wiki' is local. //central store??
             return self.tag('a', caption, href=f"{name}.html{anchor}")
 
         elif type == 'image':
@@ -847,13 +846,10 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         content = [self.parse_text(thing.text, 'content')
                     for thing in node.find('side_block_content')]
 
-        print(content)
-
+        #print(content)
         # node[kwargs]
         return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz")
 
-    # def visit_side_block_end(self, node):
-    #    pass
 
     def visit_table_column(self, node):
         text = self.parse_text(node.text[:-2].strip(), 'words')
@@ -920,7 +916,9 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             if text.endswith('|'):
                 text = text[:-1]
             s.append(self.tag('td', self.process_line(text.strip()),
-                              align=self.table_align.get(i, ''), newline=False, enclose=2))
+                                align=self.table_align.get(i, ''),
+                                newline=False,
+                                enclose=2))
         s.append('</tr>\n')
 
         return ''.join(s)
@@ -974,6 +972,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
 
     def __end__(self):
         s = []
+       
         if len(self.footnodes):
             s.append('<div class="footnotes"><ol>')
             for n in self.footnodes:
