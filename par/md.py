@@ -1003,6 +1003,26 @@ def parseHtml(text, template=None, tag_class=None, block_callback=None,
     return v.template(result)
 
 
+def parseEmbeddedHtml(text, template=None, tag_class=None, block_callback=None,
+                init_callback=None, filename=None, grammer=None, visitor=None):
+    tag_class = tag_class or {}
+    g = (grammer or MarkdownGrammar)()
+    resultSoFar = []
+    result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
+    v = (visitor or MarkdownHtmlVisitor)(template, tag_class, g,
+                                            block_callback=block_callback,
+                                            init_callback=init_callback,
+                                            filename=filename)
+    parsed = v.template(result)
+
+    reobj = re.compile("<p>")
+    clean = re.compile(r"</?p\b[^>]*>", re.I | re.MULTILINE)
+    if len(reobj.findall(parsed)) == 1:
+        parsed = re.sub(clean, "", parsed)
+
+    return parsed
+
+
 def parseText(text, filename=None, grammer=None, visitor=None):
     g = (grammer or MarkdownGrammar)()
     resultSoFar = []
