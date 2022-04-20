@@ -85,7 +85,7 @@ class MarkdownGrammar(WikiGrammar):
         def line(): return 0, space, words, eol
         def paragraph(): return line, -1, (0, space, common_line), -1, blanklines
         def blanklines(): return -2, blankline
-    
+
         def directive_name(): return _(r'\w+')
         def directive_title(): return _(r'[^\n\r]*')
         def directive(): return _(r'\.\.\s+'), directive_name, _(r'\s*::\s*'), directive_title
@@ -225,9 +225,12 @@ class MarkdownGrammar(WikiGrammar):
         ## quote
         def quote_text():       return _(r'[^\r\n]*'), eol
         def quote_blank_line(): return _(r'>[ \t]*'), eol
-        def quote_line():       return _(r'> '), quote_text
+        def quote_line():       return _(r'> (?!- )'), quote_text
+        def quote_name():       return _(r'[^\r\n\(\)\d]*')
+        def quote_date():       return _(r'[^\r\n\)]+')
+        def quote_attr():       return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), eol 
         def quote_lines(): return [quote_blank_line, quote_line]
-        def blockquote(): return -2, quote_lines, -1, blankline
+        def blockquote(): return -2, quote_lines, 0, quote_attr, -1, blankline
 
         ## links
         # def protocal(): return [_(r'http://'), _(r'https://'), _(r'ftp://')]
@@ -314,7 +317,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         if root:
             for obj in nodes[0].find_all('refer_link_note'):
                 self.visit_refer_link_note(obj)
-        
+
             # Collect titles for use in ToC
             for onk in nodes[0].find_all('title'):
                 self._alt_title(onk)
@@ -706,6 +709,13 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         for line in node.find_all('quote_lines'):
             text.append(self.visit(line))
         result = self.parse_text(''.join(text), 'article')
+        
+        attrib = node.find("quote_name")
+        atrdat = node.find("quote_date")
+        if attrib:
+            result = result + f"&mdash; <i class='quote-attrib'>{attrib.text}</i>"
+        if atrdat:
+            result = result + f"<span class='quote-timeplace'>(<span class='text-date'>{atrdat.text}</span>)</span>"
         return self.tag('blockquote', result)
 
     def visit_lists_begin(self, node):
