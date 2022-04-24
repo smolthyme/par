@@ -856,7 +856,6 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         content = [self.parse_text(thing.text, 'content')
                     for thing in node.find('side_block_content')]
 
-        #print(content)
         # node[kwargs]
         return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz")
 
@@ -941,7 +940,6 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
 
         if name in ['toc', 'contents']:
             if len(self.tocitems):
-                print("ToC:")
                 hi = 0
                 s.append("<section class='toc'><ul>")
                 for lvl, anchor, title in self.tocitems:
@@ -952,7 +950,6 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                         hi = lvl
                         s.append("</ul>")
                     s.append(f"<li><a href='#{anchor}'>{title}</a></li>")
-                    print(f"+ {lvl} | {anchor}\t| {title}")
                     
                 s.append("</ul></section>")
 
