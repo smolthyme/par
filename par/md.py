@@ -45,13 +45,6 @@ class MarkdownGrammar(WikiGrammar):
         def eol():      return _(r'\r\n|\r|\n')
         def seperator():return _(r'[\.,!?\-$ \t\^]')
     
-        ## paragraph
-        #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
-        def op_string(): return _(r'\*\*\*|\*\*|\*|___|__|_|~~|\^|,,')
-        def op(): return [(-1, seperator, op_string), (op_string, -1, seperator)]
-        # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
-        # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
-
         def blankline(): return 0, space, eol
 
         def literal():  return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
@@ -65,10 +58,13 @@ class MarkdownGrammar(WikiGrammar):
         def code_string_short():return _(r'`'), _(r'[^`]*'), _(r'`')
         def code_string():      return _(r'``'), _(r'.+(?=``)'), _(r'``')
         def default_string():   return _(r'\S+')
-        # def word(): return [escape_string, code_string, 
-        #     code_string_short, htmlentity, underscore_words, op, link, 
-        #     html_inline_block, inline_tag, string, default_string]
 
+        ## paragraph
+        #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
+        def op_string(): return _(r'\*\*\*|\*\*|\*|___|__|_|~~|\^|,,')
+        def op(): return [(-1, longdash, seperator, op_string), (op_string, -1, seperator)]
+        # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
+        # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
 
 
         def word(): return [ # Tries to show parse-order
@@ -83,6 +79,9 @@ class MarkdownGrammar(WikiGrammar):
         def words(): return [op, word], -1, [op, space, word]
         #def words(): return -1, [word, space]
         def line(): return 0, space, words, eol
+        def common_text(): return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
+        def common_line(): return common_text, eol 
+
         def paragraph(): return line, -1, (0, space, common_line), -1, blanklines
         def blanklines(): return -2, blankline
 
@@ -206,8 +205,6 @@ class MarkdownGrammar(WikiGrammar):
 
         ## lists
         def check_radio(): return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
-        def common_text(): return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
-        def common_line(): return common_text, eol 
         def list_rest_of_line(): return _(r'.+'), eol
         def list_first_para(): return 0, check_radio, list_rest_of_line, -1, (0, space, common_line), -1, blanklines
         # def list_content_text(): return list_rest_of_line, -1, [list_content_norm_line, blankline]
