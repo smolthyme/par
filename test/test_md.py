@@ -1,7 +1,9 @@
-from __future__ import print_function
-from __future__ import unicode_literals
+#from __future__ import print_function
+#from __future__ import unicode_literals
+
 import sys
 sys.path.insert(0, '..')
+
 from par.md import parseHtml
 from par.semantic_ext import blocks as semantic_blocks
 from par.bootstrap_ext import blocks as bootstrap_blocks
@@ -859,3 +861,62 @@ def test_list_check_radio():
     </ul>
     <BLANKLINE>
     """
+
+def test_toc():
+    """
+    >>> text = '''
+    ... .. toc::
+    ... ## First heading
+    ... Something here
+    ... ## Second heading
+    ... '''
+    >>> print (parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <section class="toc">
+    <ul>
+    <li><a href="#toc_1">First heading</a></li>
+    <li><a href="#toc_2">Second heading</a>
+    </ul>
+    </section>
+    <h2 id="title_0-1">First heading<a class="anchor" href="#title_0-1"></a></h2>
+    <p>Something here</p>
+    <h2 id="title_0-2">Second heading<a class="anchor" href="#title_0-2"></a></h2>
+    <BLANKLINE>
+    """
+
+def test_video_direct():
+    """
+    >>> text = '''
+    ... ![](cool.mp4)
+    ... '''
+    >>> print (parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p><video controls="yesplz" disablePictureInPicture="True" playsinline="True" src="images/cool.mp4" type="video/mp4"/>
+    </p>
+    <BLANKLINE>
+    """
+
+def test_video_youtube():
+    """
+    >>> text = '''
+    ... ![](https://www.youtube.com/watch?v=iNiImDNtLpQ)
+    ... '''
+    >>> print (parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p><object class='yt-embed' data='https://www.youtube.com/embed/iNiImDNtLpQ'></object></p>
+    <BLANKLINE>
+    """
+
+def test_blockquote():
+    """
+    >>> text = '''
+    ... > "I have been using the AquaBoostAG liquefied polymer" -- Mystery Mountain Grove
+    ... '''
+    >>> print (parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <blockquote><p>"I have been using the AquaBoostAG liquefied polymer" — Mystery Mountain Grove</p>
+    </blockquote>
+    <BLANKLINE>z
+    """
+    
+
