@@ -61,7 +61,7 @@ class MarkdownGrammar(WikiGrammar):
 
         ## paragraph
         #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
-        def op_string(): return _(r'\*\*\*|\*\*|\*|___|__|_|~~|\^|,,')
+        def op_string(): return _(r'\*{1,3}}|_{1,3}|~~|\^|,,')
         def op(): return [(-1, longdash, seperator, op_string), (op_string, -1, seperator)]
         # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
         # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
@@ -147,7 +147,6 @@ class MarkdownGrammar(WikiGrammar):
         def table_column(): return _(r'.+?(?=\|\|)'), _(r'\|\|')
         def table_line():   return _(r'\|\|'), -2, table_column, eol
         def table(): return -2, table_line, -1, blankline
-    
         def table_td(): return _(r'[^\|\r\n]*\|')
         def table_separator_line(): return _(r'\s*:?-+:?\s*\|')
         # def table_separator_char(): return _(r'\|')
@@ -343,7 +342,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         buf = []
         pos = []  # stack of special chars
         i = 0
-        codes = re.split('([ \t\r\n.,?:]+)', line)
+        codes = re.split('(\s+)', line)
         while i < len(codes):
             left = codes[i]
 
