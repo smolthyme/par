@@ -658,7 +658,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                     cls += ' height="%s"' % height
 
             # TODO: Move to .tag
-            s = '<img src="/images/%s" %s/>' % (filename, cls)
+            s = '<img src="images/%s" %s/>' % (filename, cls)
             if align:
                 s = '<div class="float%s">%s</div>' % (align, s)
             
@@ -674,7 +674,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             e = len(t)
         href = t[b:e]
 
-        return self.tag('img', src="/images/" + href, enclose=1)
+        return self.tag('img', src="images/" + href, enclose=1)
 
     def visit_mailto(self, node):
         href = node.text[1:-1]
