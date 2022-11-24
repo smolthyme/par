@@ -163,7 +163,7 @@ class MarkdownGrammar(WikiGrammar):
         def dl_dt_2(): return _(r'[^ \t\r\n]+.*'), -1, blankline
         def dl_dd_2(): return _(r':'), _(r' {1,3}'), list_rest_of_line, -1, [list_content_indent_lines, blankline]
         def dl_line_1(): return dl_dt_1, dl_dd_1
-        def dl_line_2(): return dl_dt_2, dl_dd_2
+        def dl_line_2(): return dl_dt_2, -2, dl_dd_2
         def dl(): return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
         # def dl(): return -2, dl_line_1
     
