@@ -920,7 +920,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             text = x.text
             if text.endswith('|'):
                 text = text[:-1]
-            s.append(self.tag('td', self.process_line(text.strip()),
+            s.append(self.tag('td', self.parse_text(text.strip(), 'words'),
                                 align=self.table_align.get(i, ''),
                                 newline=False,
                                 enclose=2))
