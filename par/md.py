@@ -61,7 +61,7 @@ class MarkdownGrammar(WikiGrammar):
 
         ## paragraph
         #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
-        def op_string(): return _(r'\*{1,3}}|_{1,3}|~~|\^|,,')
+        def op_string(): return _(r'\*{1,3}|_{1,3}|~~|\^|,,')
         def op(): return [(-1, longdash, seperator, op_string), (op_string, -1, seperator)]
         # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
         # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
@@ -909,13 +909,13 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         return ''.join(s)
 
     def visit_table_body_line(self, node):
-        s = ['<tr>']
 
         def get_node():
             for t in ('table_td', 'table_other'):
                 for x in node.find_all(t):
                     yield x
 
+        s = ['<tr>']
         for i, x in enumerate(get_node()):
             text = x.text
             if text.endswith('|'):
