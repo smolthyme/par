@@ -66,13 +66,14 @@ class MarkdownGrammar(WikiGrammar):
         # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
         # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
 
+        def star_rating(): return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
         def word(): return [ # Tries to show parse-order
                 escape_string, 
                 code_string, code_string_short,
                 html_inline_block, inline_tag,
                 footnote, link, 
-                htmlentity, longdash,
+                htmlentity, longdash, star_rating,
                 string, default_string
             ]
         
@@ -972,6 +973,14 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         self.footnodes.append(n)
 
         return ''
+
+    def visit_star_rating(self, node):
+        r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
+        m = r.match(node.text)
+        if m:
+            numstars = len(str(m.group("stars")))
+
+            return f"<span>{'⭐' * numstars}</span>"
 
     def __end__(self):
         s = []
