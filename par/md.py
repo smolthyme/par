@@ -43,7 +43,7 @@ class MarkdownGrammar(WikiGrammar):
         def ws():       return _(r'\s+')
         def space():    return _(r'[ \t]+')
         def eol():      return _(r'\r\n|\r|\n')
-        def seperator():return _(r'[\.,!?\-$ \t\^]')
+        def seperator():return _(r'[\.,!?$ \t\^]')
     
         def blankline(): return 0, space, eol
 
