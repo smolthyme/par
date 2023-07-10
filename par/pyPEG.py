@@ -1,12 +1,9 @@
-from __future__ import division, unicode_literals
-from ._compat import u, string_types, range, python_2_unicode_compatible
-
 # YPL parser 1.5
 
 # written by VB.
 
 import re
-import sys, codecs
+import sys
 
 class keyword(str): pass
 class code(str): pass
@@ -23,39 +20,34 @@ class _not(_and): pass
 class Name(str):
     def __init__(self, *args):
         self.line = 0
-        self.file = u""
+        self.file = ""
 
-@python_2_unicode_compatible
 class Symbol(list):
     def __init__(self, name, what):
         self.__name__ = name
-#        self.append(name)
         self.what = what
-#        self.append((name, what))
         self.extend(what)
     def __call__(self):
         return self.what
     def __str__(self):
-        return u'Symbol<' + repr(self.__name__) + '>: ' + repr(self.what)
+        return 'Symbol<' + repr(self.__name__) + '>: ' + repr(self.what)
     def __repr__(self):
         return str(self)
     def render(self, index=0):
-        if isinstance(self.what,string_types):
-            return u' '*2*index+'%s:%r\n' % (self.__name__, self.what)
+        if isinstance(self.what, str):
+            return ' '*2*index+'%s:%r\n' % (self.__name__, self.what)
         else:
             buf = []
-            buf.append(u' '*2*index+'%s:\n' % self.__name__)
+            buf.append(' '*2*index+'%s:\n' % self.__name__)
             for x in self.what:
-                if isinstance(x, string_types):
-                    buf.append(u' '*4*(index+1)+':%r\n' % x)
+                if isinstance(x, str):
+                    buf.append(' '*4*(index+1)+':%r\n' % x)
                 else:
                     buf.append(x.render(index+1))
-        return u''.join(buf)
+        return ''.join(buf)
     def find(self, name):
         for x in self.what:
-            if isinstance(x, string_types):
-                continue
-            else:
+            if not isinstance(x, str):
                 if x.__name__ == name:
                     return x
                 r = x.find(name)
@@ -63,9 +55,7 @@ class Symbol(list):
                     return r
     def find_all(self, name):
         for x in self.what:
-            if isinstance(x, string_types):
-                continue
-            else:
+            if not isinstance(x, str):
                 if x.__name__ == name:
                     yield x
                 for r in x.find_all(name):
@@ -73,35 +63,32 @@ class Symbol(list):
                         yield r
     def find_all_here(self, name):
         for x in self.what:
-            if isinstance(x, string_types):
-                continue
-            else:
+            if not isinstance(x, str):
                 if x.__name__ == name:
                     yield x
     
     @property
     def text(self):
         buf = []
-        if isinstance(self.what, string_types):
+        if isinstance(self.what, str):
             buf.append(self.what)
         else:
             for node in self.what:
-                if isinstance(node, string_types):
+                if isinstance(node, str):
                     buf.append(node)
                 else:
                     buf.append(node.text)
-        return u''.join(buf)
+        return ''.join(buf)
 
-word_regex = re.compile(u"\\w+")
-rest_regex = re.compile(u".*")
+word_regex = re.compile(r"\w+")
+rest_regex = re.compile(r".*")
 
 print_trace = False
 
 def skip(skipper, text, skipWS, skipComments):
     if skipWS:
-        t = text.lstrip()
-    else:
-        t = text
+        t = text.lstrip() if skipWS else text
+
     if skipComments:
         try:
             while True:
@@ -109,6 +96,7 @@ def skip(skipper, text, skipWS, skipComments):
                 if skipWS:
                     t = t.lstrip()
         except: pass
+
     return t
 
 class parser(object):
@@ -144,17 +132,17 @@ class parser(object):
         _pattern = pattern
 
         def R(result, text):
-            if __debug__:
-                if print_trace:
-                    try:
-                        if _pattern.__name__ != "comment":
-                            sys.stderr.write(u"match: " + _pattern.__name__ + u"\n")
-                    except: pass
+            if __debug__ and print_trace:
+                try:
+                    if _pattern.__name__ != "comment":
+                        sys.stderr.write("match: " + _pattern.__name__ + "\n")
+                except: pass
 
             if self.restlen == -1:
                 self.restlen = len(text)
             else:
                 self.restlen = min(self.restlen, len(text))
+            
             res = resultSoFar
             if name and result:
                 name.line = self.lineNo()
@@ -167,8 +155,10 @@ class parser(object):
                     res.extend(result)
                 else:
                     res.extend([result])
+            
             if self.packrat:
                 self.memory[(len(_textline), id(_pattern))] = (res, text)
+            
             return res, text
 
         def syntaxError(error=None):
@@ -190,7 +180,7 @@ class parser(object):
                 if print_trace:
                     try:
                         if pattern.__name__ != "comment":
-                            sys.stderr.write(u"testing with " + pattern.__name__ + u": " + textline[:40] + u"\n")
+                            sys.stderr.write("testing with " + pattern.__name__ + ": " + textline[:40] + "\n")
                     except: pass
 
             if pattern.__name__[0] != "_":
@@ -204,7 +194,7 @@ class parser(object):
 
         pattern_type = type(pattern)
 
-        if isinstance(pattern_type, string_types):
+        if isinstance(pattern_type, str):
             if text[:len(pattern)] == pattern:
                 text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
                 return R(None, text)
@@ -246,7 +236,6 @@ class parser(object):
             else:
                 #syntaxError(pattern.pattern+' text='+repr(text))
                 syntaxError()
-                
 
         elif pattern_type is tuple:
             result = []
@@ -356,14 +345,14 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
     while callable(language):
         language = language()
 
-    orig, ld = u"", 0
+    orig, ld = "", 0
     for line in lineSource:
         if lineSource.isfirstline():
             ld = 1
         else:
             ld += 1
         lines.append((len(orig), lineSource.filename(), lineSource.lineno() - 1))
-        orig += u(line)
+        orig += line
 
     textlen = len(orig)
 
@@ -382,7 +371,7 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
     except SyntaxError as msg:
         parsed = textlen - p.restlen
         textlen = 0
-        nn, lineNo, file = 0, 0, u""
+        nn, lineNo, file = 0, 0, ""
         for n, ld, l in lines:
             if n >= parsed:
                 break
@@ -394,6 +383,6 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
         lineNo += 1
         nn -= 1
         lineCont = orig.splitlines()[nn]
-        raise SyntaxError(u"syntax error in " + u(file) + u":" + u(lineNo) + u": " + lineCont)
+        raise SyntaxError("syntax error in " + file + ":" + lineNo + ": " + lineCont)
 
     return result
