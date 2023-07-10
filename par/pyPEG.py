@@ -287,36 +287,30 @@ class parser(object):
                 syntaxError()
 
         else:
-            #raise SyntaxError(u"illegal type in grammar: " + u(pattern_type))
+            #raise SyntaxError("illegal type in grammar: " + (pattern_type))
             raise SyntaxError()
 
     def lineNo(self):
-        if not(self.lines): return u""
-        if self.restlen == -1: return u""
-        parsed = self.textlen - self.restlen
+        if self.lines == None or self.restlen == -1:
+            return ""
+        else:
+            print("hi")
+            parsed = self.textlen - self.restlen
+            left, right = 0, len(self.lines)
 
-        left, right = 0, len(self.lines)
-
-        while True:
-            mid = int((right + left) / 2)
-            if self.lines[mid][0] <= parsed:
-                try:
+            while True:
+                mid = int((right + left) / 2)
+                if self.lines[mid][0] <= parsed:
+                    
                     if self.lines[mid + 1][0] >= parsed:
-                        try:
-                            return u(self.lines[mid + 1][1]) + u":" + u(self.lines[mid + 1][2])
-                        except:
-                            return u""
+                        return self.lines[mid + 1][1] + ":" + self.lines[mid + 1][2]
                     else:
                         left = mid + 1
-                except:
-                    try:
-                        return u(self.lines[mid + 1][1]) + u":" + u(self.lines[mid + 1][2])
-                    except:
-                        return u""
-            else:
-                right = mid - 1
-            if left > right:
-                return u""
+                    return self.lines[mid + 1][1] + ":" + self.lines[mid + 1][2]
+                else:
+                    right = mid - 1
+                if left > right:
+                    return ""
 
 # plain module API
 
