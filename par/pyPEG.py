@@ -71,6 +71,13 @@ class Symbol(list):
                 for r in x.find_all(name):
                     if r:
                         yield r
+    def find_all_here(self, name):
+        for x in self.what:
+            if isinstance(x, string_types):
+                continue
+            else:
+                if x.__name__ == name:
+                    yield x
     
     @property
     def text(self):
