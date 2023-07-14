@@ -86,8 +86,7 @@ rest_regex = re.compile(r".*")
 print_trace = False
 
 def skip(skipper, text, skipWS, skipComments):
-    if skipWS:
-        t = text.lstrip() if skipWS else text
+    t = text.lstrip() if skipWS else text
 
     if skipComments:
         try:
@@ -96,7 +95,6 @@ def skip(skipper, text, skipWS, skipComments):
                 if skipWS:
                     t = t.lstrip()
         except: pass
-
     return t
 
 class parser(object):
