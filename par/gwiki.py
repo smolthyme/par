@@ -1,5 +1,4 @@
 from __future__ import absolute_import, unicode_literals
-from ._compat import range
 from .pyPEG import *
 import re
 import types

@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 def semantic_alert(visitor, block):
     """
     Format:

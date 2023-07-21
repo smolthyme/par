@@ -6,11 +6,9 @@
 #
 # license: BSD
 #
-from __future__ import absolute_import
-from ._compat import string_types
+
 from .pyPEG import *
 import re
-import types
 
 __author__ = 'limodou'
 __author_email__ = 'limodou@gmail.com'
@@ -34,7 +32,7 @@ class SimpleVisitor(object):
             if method:
                 buf.append(method())
         for node in nodes:
-            if isinstance(node, string_types):
+            if isinstance(node, str):
                 buf.append(node)
             else:
                 if hasattr(self, 'before_visit'):
@@ -46,7 +44,7 @@ class SimpleVisitor(object):
                 if method:
                     buf.append(method(node))
                 else:
-                    if isinstance(node.what, string_types):
+                    if isinstance(node.what, str):
                         buf.append(node.what)
                     else:
                         buf.append(self.visit(node.what))
