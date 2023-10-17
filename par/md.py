@@ -399,14 +399,14 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
 
     def _alt_title(self, node):
         node = node.what[0]
-        _nm = node.__name__
 
-        if   _nm == 'title1': lvl = 1
-        elif _nm == 'title2': lvl = 2
-        elif _nm == 'title3': lvl = 3
-        elif _nm == 'title3': lvl = 4
-        elif _nm == 'title3': lvl = 5
-        level = lvl or 1
+        match node.__name__:
+            case 'title1':  level = 1
+            case 'title2':  level = 2
+            case 'title3':  level = 3
+            case 'title4':  level = 4
+            case 'title5':  level = 5
+            case _:         level = 1
         
         if node.find('attr_def_id'):
             _id = node.find('attr_def_id').text[1:]
