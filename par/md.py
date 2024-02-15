@@ -544,9 +544,10 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         if src.endswith(".mp4") or src.endswith(".m4v") or src.endswith(".mkv") or src.endswith(".webm"):
             return self.tag('video', enclose=1, type="video/mp4", controls="yesplz", disablePictureInPicture=True,
                             playsinline="True", **kwargs)
-
         elif src.endswith(".m4a") or src.endswith(".aac") or src.endswith(".ogg") or src.endswith(".oga") or src.endswith(".opus"):
             return self.tag('audio', enclose=1, type="video/mp4", controls="yesplz", **kwargs)
+        elif src.endswith(".mp3"):
+            return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
 
         return self.tag('img', enclose=1, **kwargs)
 
