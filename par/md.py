@@ -165,7 +165,6 @@ class MarkdownGrammar(WikiGrammar):
         def dl_line_1(): return dl_dt_1, dl_dd_1
         def dl_line_2(): return dl_dt_2, -2, dl_dd_2
         def dl(): return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
-        # def dl(): return -2, dl_line_1
     
         ## block
         #   [[tabs(filename=hello.html)]]:
@@ -187,19 +186,18 @@ class MarkdownGrammar(WikiGrammar):
         #  {% endblockname %}
         #
 
-        def new_block_args(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space
-        def new_block_name(): return _(r'([a-zA-Z_\-][a-zA-Z_\-0-9]*)')
-        def new_block_head(): return _(r'\{%'), 0, space, new_block_name, new_block_args, _(r'%\}'), eol
-        def new_block_end(): return _(r'\{%'), 0, space, _(r'end\1'), 0, space, _(r'%\}'), eol
-        def new_block_item(): return new_block_head, new_block_body, new_block_end
-#        def new_block(): return -2, new_block_item
+        # def new_block_args(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space
+        # def new_block_name(): return _(r'([a-zA-Z_\-][a-zA-Z_\-0-9]*)')
+        # def new_block_head(): return _(r'\{%'), 0, space, new_block_name, new_block_args, _(r'%\}'), eol
+        # def new_block_end(): return _(r'\{%'), 0, space, _(r'end\1'), 0, space, _(r'%\}'), eol
+        # def new_block_item(): return new_block_head, new_block_body, new_block_end
+        # def new_block(): return -2, new_block_item
         def new_block(): return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
 
 
-        def side_block_head(): return _(r'\|\|\|'),  eol
-        def side_block_name(): 0, space, _(r'[\w\d]+')
+        def side_block_head(): return _(r'\|\|\|'), eol
         def side_block_content(): return -2, [common_line, space]
-        def side_block_item():  return side_block_head, 0, side_block_name, -2, side_block_content
+        def side_block_item():  return side_block_head, -2, side_block_content
         def side_block(): return -2, side_block_item
 
         ## lists
@@ -321,19 +319,20 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
 
     def parse_text(self, text, peg=None):
-        g = self.grammar
+        g = self.grammar or MarkdownGrammar()
         if isinstance(peg, str):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
         v = self.__class__('', self.tag_class, g, block_callback=self.block_callback,
-                           init_callback=self.init_callback, wiki_prefix=self.wiki_prefix, filename=self.filename,
-                           footnote_id=self.footnote_id)
+                        init_callback=self.init_callback, wiki_prefix=self.wiki_prefix, filename=self.filename,
+                        footnote_id=self.footnote_id)
         v.refer_links = self.refer_links
         r = v.visit(result)
         self.footnote_id = v.footnote_id
-
+        
         return r
+
 
     def process_line(self, line):
         chars = self.chars
@@ -342,7 +341,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         buf = []
         pos = []  # stack of special chars
         i = 0
-        codes = re.split('(\s+)', line)
+        codes = re.split(r'\s+', line)
         while i < len(codes):
             left = codes[i]
 
@@ -523,10 +522,11 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         location = node.find('inline_href').text
 
         # TODO: Move to .tag
-        if re.match(r'^\w{3,5}://.+', location):
-            scheme = re.search(r'^(\w{3,5})://.+', location).group(1)
-            # NOTE: Double check and look for modern alternatives, never know what gets entered.
-            if scheme.lower() in ['javascript', 'vbscript', 'data']:
+        scheme = re.search(r'^(\w{3,5})://.+', location)
+        if scheme:
+            scheme = scheme.group(1)
+            
+            if scheme.lower() in ['javascript', 'vbscript', 'data']: #Just be safe
                 return ""
             yt_id = re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)
             if yt_id:
@@ -741,7 +741,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             tag.append('<input type="radio"')
         if node.text[1] == '*' or node.text[1].upper() == 'X':
             tag.append(' checked')
-        tag.append('\></input> ')
+        tag.append(r'\></input> ')
 
         return ''.join(tag)
 
@@ -778,7 +778,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                     buf.append(self.tag(parent))
                     buf.append(self.tag('li', process_node(_node)))
                     old = _type
-            if buf:
+            if buf and parent:
                 buf.append('</' + parent + '>\n')
             
             return ''.join(buf)
@@ -821,14 +821,11 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         return ('<span class="inline-tag%s" data-rel="' % cls) + rel + '">' + name + '</span>'
 
     def visit_new_block(self, node):
-        block = {'new':True}
+        block = { 'new': True }
         r = re.compile(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)\s*(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL)
         m = r.match(node.text)
-        if m:
-            block['name'] = m.group(1)
+        if m and self.grammar:
             block_args = m.group(2).strip()
-            block['body'] = m.group(3).strip()
-            
             resultSoFar = []
             result, rest = self.grammar.parse(block_args, root=self.grammar['new_block_args'], resultSoFar=resultSoFar, skipWS=False)
             kwargs = {}
@@ -839,7 +836,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                     v = v.text.strip()
                 kwargs[k] = v
             
-            block['kwargs'] = kwargs
+            block = {'name': m.group(1), 'body': m.group(3).strip(), 'kwargs': kwargs}
             
         func = self.block_callback.get(block['name'])
         if func:
