@@ -341,7 +341,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         buf = []
         pos = []  # stack of special chars
         i = 0
-        codes = re.split(r'\s+', line)
+        codes = re.split(r"\\s+", line)
         while i < len(codes):
             left = codes[i]
 
@@ -741,7 +741,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             tag.append('<input type="radio"')
         if node.text[1] == '*' or node.text[1].upper() == 'X':
             tag.append(' checked')
-        tag.append(r'\></input> ')
+        tag.append('></input> ')
 
         return ''.join(tag)
 
