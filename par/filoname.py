@@ -38,25 +38,26 @@ class FileParts():
         """Checks if a file's properties match a given pattern.
         Returns True if they ALL match in their respective way."""
         
-        simple_ext_chars_re = re.compile(r'^[\.a-z]+$')        
+        simple_ext_chars_re = re.compile(r'^[\.a-z]+$')
+        
         
         if ck_parts.title and not re.match(ck_parts.title, self.title):
             return False
-        elif ck_parts.exts and self.exts:
+        if ck_parts.exts and self.exts:
             # if they only consist of [\.a-z] characters, we can do a simple comparison
             if re.match(simple_ext_chars_re, ck_parts.exts) and ck_parts.exts == self.exts:
                 return True
             elif re.match(ck_parts.exts, self.exts):
                 return True
         
-        elif ck_parts.group and self.group and not re.match(ck_parts.group, self.group):
+        if ck_parts.group and self.group and not re.match(ck_parts.group, self.group):
             return False
-        elif ck_parts.tags and not any([tag in self.tags for tag in ck_parts.tags]):
+        if ck_parts.tags and not any([tag in self.tags for tag in ck_parts.tags]):
             return False
-        elif ck_parts.meta and not all([self.meta.get(k) == v for k, v in ck_parts.meta.items()]):
+        if ck_parts.meta and not all([self.meta.get(k) == v for k, v in ck_parts.meta.items()]):
             return False
         
-        elif ck_parts.sort and self.sort and ck_parts.sort == self.sort:
+        if ck_parts.sort and self.sort and ck_parts.sort == self.sort:
             return True
         
         return True
@@ -154,7 +155,7 @@ def get_filename_parts(fname_str: str) -> FileParts:
     sort_order = rootnode.find("sort_order").text.strip() if rootnode.find("sort_order") else None
     title      = rootnode.find("title").text.strip()
     tags       = [tag.text for tag in rootnode.find_all("tag")]
-    group      = rootnode.find("group_name").text if rootnode.find("group") else None
+    group      = rootnode.find("group_name").text if rootnode.find("group") else None  # FIXME: 'Group' is the wrong word for this
     meta_dict  = {match[0].text: match[1].text for match in rootnode.find_all("key_n_val")}
     extensions = rootnode.find("extension").text if rootnode.find("extension") else None
     
