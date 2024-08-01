@@ -2,13 +2,65 @@
 
 # BIG HUEG NOTE: This is a work in progress, and is not intended for use yet. 2023/07
 
+import re, types
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+
 from .pyPEG import *
-import re
-import types
 from .__init__ import SimpleVisitor
 
 rx = re.compile
 ig = ignore
+
+@dataclass
+class FileParts():
+    """Simple dataclass to hold the parts of a filename, either as a definite set or set of regular expression."""
+    title: str
+    tags: List[str] = field(default_factory=list)
+    meta: Dict[str, str] = field(default_factory=dict)
+    group: Optional[str] = None
+    exts: Optional[str] = None
+    sort: Optional[str] = None
+    
+    def __str__(self):
+        # Meta is a dict-like syntax
+        meta_str = f" {{{','.join([f'{k}={v}' for k, v in self.meta.items()])}}}" if self.meta and self.meta != {} else ""
+        
+        # Tags are represented as hashtags
+        tag_str   = "".join([f" #{tag}" for tag in self.tags])
+        
+        # e.g. "1.0 Title #tag1 [group] {meta1=val1,meta2=val2}.txt"
+        return  f"{self.sort + ' ' if self.sort else ''}{self.title}{tag_str}" \
+                f"{f' [{self.group}]' if self.group else ''}{meta_str}" \
+                f"{f'.{self.exts}' if self.exts  else ''}"
+    
+    def __eq__(self, ck_parts) -> bool:
+        """Checks if a file's properties match a given pattern.
+        Returns True if they ALL match in their respective way."""
+        
+        simple_ext_chars_re = re.compile(r'^[\.a-z]+$')        
+        
+        if ck_parts.title and not re.match(ck_parts.title, self.title):
+            return False
+        elif ck_parts.exts and self.exts:
+            # if they only consist of [\.a-z] characters, we can do a simple comparison
+            if re.match(simple_ext_chars_re, ck_parts.exts) and ck_parts.exts == self.exts:
+                return True
+            elif re.match(ck_parts.exts, self.exts):
+                return True
+        
+        elif ck_parts.group and self.group and not re.match(ck_parts.group, self.group):
+            return False
+        elif ck_parts.tags and not any([tag in self.tags for tag in ck_parts.tags]):
+            return False
+        elif ck_parts.meta and not all([self.meta.get(k) == v for k, v in ck_parts.meta.items()]):
+            return False
+        
+        elif ck_parts.sort and self.sort and ck_parts.sort == self.sort:
+            return True
+        
+        return True
+
 
 class FilonameGrammar(dict):
     def __init__(self):
@@ -26,13 +78,13 @@ class FilonameGrammar(dict):
         def sort_order(): return rx(r'[\-\d_!][\d\.\^]{0,5}')
         def prefix()    : return [fname_spam, sort_order]
         
-        def title()     : return rx(r'[^\{\.]+'), 0, ws
+        def title()     : return rx(r'[^\[\{\.]+'), 0, ws
         
         def tag()       : return word
         def hashtags()  : return ig(r"\#"), tag, -1, ig(r"[,; ]")
         
         def group_name(): return word
-        def group()     : return ig(r"\["), group_name,  ig(r"\]"), 0, ws
+        def group()     : return ig(r"\[ *"), group_name,  ig(r" *\]"), 0, ws
         
         def key()       : return word
         def key_n_val() : return key, ig(r'\s*[=:]\s*'), word, -1, ig(r"[,; ]")
@@ -40,7 +92,7 @@ class FilonameGrammar(dict):
         
         def extension() : return ig(r'\.'), rx(r'((?:[\w\.]{1,5}){1,2})$')
         
-        def filoname_parts(): return 0, prefix, title, 0, hashtags, 0, group, 0, metas, -1, extension
+        def filoname_parts(): return 0, prefix, title, 0, group, 0, hashtags, 0, metas, -1, extension
         
         # Collect functions from this funct and add them to the peg_rules dict, for returning with the top level rule
         _peg_rules = {(k, v) for (k, v) in locals().items() if isinstance(v, types.FunctionType)}
@@ -87,53 +139,23 @@ def parseFiloname(text, root=None, skipWS=False, **kwargs):
     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
     return v.visit(result)
 
-
-from dataclasses import dataclass
-
-@dataclass
-class FileParts():
-    """Simple dataclass to hold the parts of a filename."""
-    sort   : str|None; title  : str; tags : list; meta : dict; extensions : str ; group: str; #prefix     : str
-    
-    def __str__(self):
-        meta_str = f" {{{','.join([f'{k}={v}' for k, v in self.meta.items()])}}}" if self.meta and self.meta != {} else ""
-        tag_str   = "".join([f"#{tag} " for tag in self.tags])
-        return f"{self.sort + ' ' if self.sort else ''}{self.title}{tag_str}{f"[{self.group}]" if self.group != '' else ''}{meta_str}{'.' + self.extensions if self.extensions not in ["", "/"] else ''}"
-
 def get_filename_parts(fname_str: str) -> FileParts:
-    g = FilonameGrammar()
-    result, rest = g.parse(fname_str, resultSoFar=[], skipWS=False)
+    """Parse a filename string into its component parts if possible.
+    There are MANY valid filenames which will not parse, this is acceptable.
+    In the case that parsing is not possible, just use a FileParts object with the filename."""
+    
+    try:
+        g = FilonameGrammar()
+        result, rest = g.parse(fname_str, resultSoFar=[], skipWS=False)
+    except:
+        return FileParts(title=fname_str)
     
     rootnode   = result[0]
-    sort_order = rootnode.find("sort_order").text.strip() if rootnode.find("sort_order") else ""
+    sort_order = rootnode.find("sort_order").text.strip() if rootnode.find("sort_order") else None
     title      = rootnode.find("title").text.strip()
-    extensions = rootnode.find("extension").text if rootnode.find("extension") else ""
-    group      = rootnode.find("group_name").text.strip() if rootnode.find("group_name") else ""
     tags       = [tag.text for tag in rootnode.find_all("tag")]
+    group      = rootnode.find("group_name").text if rootnode.find("group") else None
     meta_dict  = {match[0].text: match[1].text for match in rootnode.find_all("key_n_val")}
+    extensions = rootnode.find("extension").text if rootnode.find("extension") else None
     
-    return FileParts(sort=sort_order, title=title, group=group, tags=tags, meta=meta_dict , extensions=extensions)
-
-class fileoFilter():
-    """Uses a registry to filter files based on their parts.
-        Classes register themselves with a decorator. The decorator specifies the filter criteria.
-        Criteria include: fname regex, extension, group and meta info matching."""
-    
-    def __init__(self):
-        self.filters = {}
-    
-    def register(self, fname_re=None, ext=None, group=None, meta=None):
-        def decorator(cls):
-            self.filters[cls.__name__] = (cls, (fname_re, ext, group, meta))
-            return cls
-        return decorator
-    
-    def check_file(self, fileparts: FileParts):
-        for name, (cls, (fname_re, ext, group, meta)) in self.filters.items():
-            if  (fname_re is None or re.match(fname_re, fileparts.title)) and \
-                (ext is None or fileparts.extensions == ext) and \
-                (group is None or fileparts.group == group) and \
-                (meta is None or all(fileparts.meta.get(k) == v for k, v in meta.items())):
-                
-                return cls
-        return None
+    return FileParts(sort=sort_order, title=title, group=group, tags=tags, meta=meta_dict , exts=extensions)
