@@ -40,7 +40,6 @@ class FileParts():
         
         simple_ext_chars_re = re.compile(r'^[\.a-z]+$')
         
-        
         if ck_parts.title and not re.match(ck_parts.title, self.title):
             return False
         if ck_parts.exts and self.exts:
@@ -54,14 +53,26 @@ class FileParts():
             return False
         if ck_parts.tags and not any([tag in self.tags for tag in ck_parts.tags]):
             return False
-        if ck_parts.meta and not all([self.meta.get(k) == v for k, v in ck_parts.meta.items()]):
-            return False
+        # if ck_parts.meta and not all([self.meta.get(k) == v for k, v in ck_parts.meta.items()]):
+        #     return False
         
         if ck_parts.sort and self.sort and ck_parts.sort == self.sort:
             return True
         
         return True
-
+    
+    def __hash__(self):
+        return hash(self.title)
+    
+    def __lt__(self, other):
+        if not isinstance(other, FileParts):
+            return NotImplemented
+        elif self.sort and other.sort:
+            return self.sort < other.sort
+        elif self.sort and not hasattr(other, 'sort'):
+            return self.sort < other.title
+        else:
+            return self.title < other.title
 
 class FilonameGrammar(dict):
     def __init__(self):
