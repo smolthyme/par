@@ -105,7 +105,7 @@ class parser(object):
             self.skipper.packrat = p
         else:
             self.skipper = self
-        self.lines = None
+        self.lines = []
         self.textlen = 0
         self.memory = {}
         self.packrat = p
@@ -288,27 +288,24 @@ class parser(object):
             #raise SyntaxError("illegal type in grammar: " + (pattern_type))
             raise SyntaxError()
 
-    def lineNo(self):
-        if self.lines == None or self.restlen == -1:
-            return ""
-        else:
-            print("hi")
-            parsed = self.textlen - self.restlen
-            left, right = 0, len(self.lines)
+    def lineNo(self) -> int:
+        # NOTE TEST: This is a re-write of a function that was clearly broken. It... partially works?
+        if not self.lines or self.restlen == -1:
+            return -1  # Return -1 to indicate an invalid line number
 
-            while True:
-                mid = int((right + left) / 2)
-                if self.lines[mid][0] <= parsed:
-                    
-                    if self.lines[mid + 1][0] >= parsed:
-                        return self.lines[mid + 1][1] + ":" + self.lines[mid + 1][2]
-                    else:
-                        left = mid + 1
-                    return self.lines[mid + 1][1] + ":" + self.lines[mid + 1][2]
-                else:
-                    right = mid - 1
-                if left > right:
-                    return ""
+        parsed = self.textlen - self.restlen
+        left, right = 0, len(self.lines) - 1
+
+        while left <= right:
+            mid = (left + right) // 2
+            if self.lines[mid][0] <= parsed:
+                if mid + 1 < len(self.lines) and self.lines[mid + 1][0] > parsed:
+                    return self.lines[mid][1]
+                left = mid + 1
+            else:
+                right = mid - 1
+
+        return -1  # Return -1 if no valid line number is found
 
 # plain module API
 
@@ -354,7 +351,7 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
         if lineCount:
             p.lines = lines
         else:
-            p.line = None
+            p.lines = []
         text = skip(p.skipper, orig, skipWS, skipComments)
         result, text = p.parseLine(text, language, [], skipWS, skipComments)
         if text:
@@ -375,6 +372,6 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
         lineNo += 1
         nn -= 1
         lineCont = orig.splitlines()[nn]
-        raise SyntaxError("syntax error in " + file + ":" + lineNo + ": " + lineCont)
+        raise SyntaxError(f"syntax error in {file}:{lineNo}: {lineCont}")
 
     return result
