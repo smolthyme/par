@@ -151,6 +151,28 @@ def parseFiloname(text, root=None, skipWS=False, **kwargs):
     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
     return v.visit(result)
 
+# Legacy code for ref. Del after 2024
+# def getfilesortorder(fn) -> float:
+#     s = re.search(_reFileNameTitle, fn)
+#     l = s.group('srt') or "1.0" if s else "1.0"
+#     if l[0] == '_': return 888.0
+
+#     # remove trailing decimal point if present
+#     return float(l[:-1]) if l and l.endswith(".") else float(l)
+
+def file_sort_init(sort_var, sort_default=1.0) -> float:
+    """While the filename parser is good, the sort variable sometimes contains strange values.
+        This function is a helper to ensure that sort is always a float"""
+    first = -888.0  ; firstchars = "^!"
+    last  =  888.0  ; lastchars  = "_zv"
+    
+    if sort_var == None:            return sort_default
+    elif sort_var[0] in firstchars: return first
+    elif sort_var[0] in lastchars:  return last
+    else:
+        try:                        return float(sort_var)
+        except:                     return sort_default
+
 def get_filename_parts(fname_str: str) -> FileParts:
     """Parse a filename string into its component parts if possible.
     There are MANY valid filenames which will not parse, this is acceptable.
