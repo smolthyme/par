@@ -981,8 +981,8 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
 
     def __end__(self):
         s = []
-       
-        if len(self.footnodes):
+        
+        if len(self.footnodes) > 0:
             s.append('<div class="footnotes"><ol>')
             for n in self.footnodes:
                 name = n['name']
