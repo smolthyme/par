@@ -84,13 +84,12 @@ class FilonameGrammar(dict):
         #  0 = ?         -1 = *          -2 = +
         def ws()        : return ig(r'\s+')         # All whitespace incl newline/return/half spaces etc
         def word()      : return rx(r'\w+')         # Word character
-        #return rx(r'[\w]+\s*=\s*[\w\'"]+')
         
         def fname_spam(): return ig(r'[^a-z\s\.]{6,10}'), ws
-        def sort_order(): return rx(r'[\-\d_!][\d\.\^]{0,5}')
+        def sort_order(): return rx(r'(?!\d+\.\w+$)[\-\d_!][\d\.\^]{0,5}')
         def prefix()    : return [fname_spam, sort_order]
         
-        def title()     : return rx(r'[^\[\{\.]+'), 0, ws
+        def title()     : return rx(r'[^\{\[]+?(?=(\.[a-zA-Z]{2,5}){1,2}\b|[\[\{])'), 0, ws
         
         def tag()       : return word
         def hashtags()  : return ig(r"\#"), tag, -1, ig(r"[,; ]")
@@ -102,9 +101,9 @@ class FilonameGrammar(dict):
         def key_n_val() : return key, ig(r'\s*[=:]\s*'), word, -1, ig(r"[,; ]")
         def metas()     : return ig(r"\{"), -1, [key_n_val, ws], ig(r"\}"), 0, ws
         
-        def extension() : return ig(r'\.'), rx(r'((?:[\w\.]{1,5}){1,2})$')
+        def extension() : return ig(r'\.'), rx(r'(\w{1,5}(?:\.\w{1,5})?)$')
         
-        def filoname_parts(): return 0, prefix, title, 0, group, 0, hashtags, 0, metas, -1, extension
+        def filoname_parts(): return 0, prefix, title, 0, group, 0, hashtags, 0, metas, 0, extension
         
         # Collect functions from this funct and add them to the peg_rules dict, for returning with the top level rule
         _peg_rules = {(k, v) for (k, v) in locals().items() if isinstance(v, types.FunctionType)}
