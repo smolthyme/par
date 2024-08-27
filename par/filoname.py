@@ -112,43 +112,32 @@ class FilonameGrammar(dict):
     def parse(self, text, root=None, skipWS=False, **kwargs):
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
-class FiloNameVisitor(SimpleVisitor):
-    def __init__(self, grammar=None, filename=None):
-        super().__init__(grammar, filename)
-    
-    # More elegant version of visit_filoname_parts() to roll logic into the return statement
-    # def visit_filoname_parts(self, node):
-    #     prefix     = self.visit(node.find("prefix")) if node.find("prefix") else ""
-    #     title      = node.find("title").text.strip()
-    #     typen       = list(node.find_all("group_name"))
-    #     type_str   = f"[{','.join([t.text.strip() for t in typen])}]" if typen != [] else ""
-    #     meta       = list(node.find_all("key_n_val"))
-    #     meta_info    = " {" + ",".join([t.text.strip() for t in meta]) + "}" if meta != [] else ""
-    #     extensions = node.find("extension").text if node.find("extension") else ""
-    
-    #     # Directories do not have extensions; Space before tags if there are any; Space after prefix if present
-    #     return (prefix + " " if prefix else "") + title + type_str + (meta_info if meta != [] else "") + ("." + extensions if extensions else "")
-    
-    def visit_title(self, node):
-        return node.text.strip()
-    
-    def visit_sort_order(self, node):
-        txt = node.text.strip()
-        if txt[0] in "_!":
-            return txt[0]
-        else:
-            order_float = float(txt)
-            order_int = int(order_float)
-            if order_float != order_int:
-                return f"{order_float:02.1f}" if order_float != 0.0 else ""
-            else:
-                return f"{order_int:d}." if order_int != 0 else "" # {order_int:02d}
+# Legacy code for ref. Del after 2024
 
-def parseFiloname(text, root=None, skipWS=False, **kwargs):
-    g = FilonameGrammar()
-    v = FiloNameVisitor(g)
-    result, rest = g.parse(text, resultSoFar=[], skipWS=False)
-    return v.visit(result)
+# class FiloNameVisitor(SimpleVisitor):
+#     def __init__(self, grammar=None, filename=None):
+#         super().__init__(grammar, filename)
+    
+#     def visit_title(self, node):
+#         return node.text.strip()
+    
+#     def visit_sort_order(self, node):
+#         txt = node.text.strip()
+#         if txt[0] in "_!":
+#             return txt[0]
+#         else:
+#             order_float = float(txt)
+#             order_int = int(order_float)
+#             if order_float != order_int:
+#                 return f"{order_float:02.1f}" if order_float != 0.0 else ""
+#             else:
+#                 return f"{order_int:d}." if order_int != 0 else "" # {order_int:02d}
+
+# def parseFiloname(text, root=None, skipWS=False, **kwargs):
+#     g = FilonameGrammar()
+#     v = FiloNameVisitor(g)
+#     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
+#     return v.visit(result)
 
 # Legacy code for ref. Del after 2024
 # def getfilesortorder(fn) -> float:
