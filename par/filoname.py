@@ -30,7 +30,7 @@ class FileParts():
         tag_str   = "".join([f" #{tag}" for tag in self.tags])
         
         # e.g. "1.0 Title #tag1 [group] {meta1=val1,meta2=val2}.txt"
-        return  f"{self.sort + ' ' if self.sort else ''}{self.title}{tag_str}" \
+        return  f"{self.sort.strip(" .") + ' ' if self.sort else ''}{self.title}{tag_str}" \
                 f"{f' [{self.group}]' if self.group else ''}{meta_str}" \
                 f"{f'.{self.exts}' if self.exts  else ''}"
     
