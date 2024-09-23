@@ -33,7 +33,7 @@ class SCSSGrammar(dict):
         def css_selector()     : return rx(r'([\.\#\w\_\-\=\~\*\^\>\?\:\(\)\[\]\'\" ]+)')
         def css_selectors()    : return -2, [css_at_rule, css_selector, ig(",")]
 
-        def css_block()        : return -2, css_selectors, ig('\{'), css_block_content, ig('\}')
+        def css_block()        : return -2, css_selectors, ig(r'\{'), css_block_content, ig(r'\}')
         def css_block_content(): return -1, [css_block, css_property]
 
         def css_prop_name()    : return rx(r'([\*\w\-]+)', re.ASCII)  # the \* might be useless, check googles code
