@@ -86,8 +86,8 @@ class MarkdownGrammar(WikiGrammar):
         def blanklines(): return -2, blankline
 
         def directive_name(): return _(r'\w+')
-        def directive_title(): return _(r'[^\n\r]*')
-        def directive(): return _(r'\.\.\s+'), directive_name, _(r'\s*::\s*'), directive_title
+        def directive_title(): return _(r'[^\n\r]+')
+        def directive(): return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
     
         ## footnote
         def footnote(): return _(r'\[\^\w+\]')
