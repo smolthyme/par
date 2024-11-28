@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
 from .pyPEG import *
-from .__init__ import SimpleVisitor
 
 rx = re.compile
 ig = ignore
@@ -34,7 +33,7 @@ class FileParts():
                 f"{f' [{self.group}]' if self.group else ''}{meta_str}" \
                 f"{f'.{self.exts}' if self.exts  else ''}"
     
-    def __eq__(self, ck_parts) -> bool:
+    def __eq__(self, ck_parts: 'FileParts') -> bool:
         """Checks if a file's properties match a given pattern.
         Returns True if they ALL match in their respective way."""
         
@@ -42,21 +41,21 @@ class FileParts():
         
         if ck_parts.title and not re.match(ck_parts.title, self.title):
             return False
-        if ck_parts.exts and self.exts:
+        elif ck_parts.exts and self.exts:
             # if they only consist of [\.a-z] characters, we can do a simple comparison
             if re.match(simple_ext_chars_re, ck_parts.exts) and ck_parts.exts == self.exts:
                 return True
             elif re.match(ck_parts.exts, self.exts):
                 return True
         
-        if ck_parts.group and self.group and not re.match(ck_parts.group, self.group):
+        elif ck_parts.group and self.group and not re.match(ck_parts.group, self.group):
             return False
-        if ck_parts.tags and not any([tag in self.tags for tag in ck_parts.tags]):
+        elif ck_parts.tags and not any([tag in self.tags for tag in ck_parts.tags]):
             return False
         # if ck_parts.meta and not all([self.meta.get(k) == v for k, v in ck_parts.meta.items()]):
         #     return False
         
-        if ck_parts.sort and self.sort and ck_parts.sort == self.sort:
+        elif ck_parts.sort and self.sort and ck_parts.sort == self.sort:
             return True
         
         return True
@@ -85,11 +84,14 @@ class FilonameGrammar(dict):
         def ws()        : return ig(r'\s+')         # All whitespace incl newline/return/half spaces etc
         def word()      : return rx(r'\w+')         # Word character
         
+        # Avoid the title getting filled with spam from some software/cameras etc
         def fname_spam(): return ig(r'[^a-z\s\.]{6,10}'), ws
+        # Looks for a numerical value to sort things by if its before the title
         def sort_order(): return rx(r'(?!\d+\.\w+$)[\-\d_!][\d\.\^]{0,5}')
         def prefix()    : return [fname_spam, sort_order]
         
-        def title()     : return rx(r'[^\{\[]+?(?=(\.[a-zA-Z]{2,5}){1,2}\b|[\[\{])'), 0, ws
+        # Try to find the title by avoiding extensions and tags (Can we do it without?)
+        def title()     : return rx(r'[^\{\[]+?(?=(\.[a-zA-Z\d]{2,5}){1,2}\b|[\[\{])'), 0, ws
         
         def tag()       : return word
         def hashtags()  : return ig(r"\#"), tag, -1, ig(r"[,; ]")
@@ -112,42 +114,6 @@ class FilonameGrammar(dict):
     def parse(self, text, root=None, skipWS=False, **kwargs):
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
-# Legacy code for ref. Del after 2024
-
-# class FiloNameVisitor(SimpleVisitor):
-#     def __init__(self, grammar=None, filename=None):
-#         super().__init__(grammar, filename)
-    
-#     def visit_title(self, node):
-#         return node.text.strip()
-    
-#     def visit_sort_order(self, node):
-#         txt = node.text.strip()
-#         if txt[0] in "_!":
-#             return txt[0]
-#         else:
-#             order_float = float(txt)
-#             order_int = int(order_float)
-#             if order_float != order_int:
-#                 return f"{order_float:02.1f}" if order_float != 0.0 else ""
-#             else:
-#                 return f"{order_int:d}." if order_int != 0 else "" # {order_int:02d}
-
-# def parseFiloname(text, root=None, skipWS=False, **kwargs):
-#     g = FilonameGrammar()
-#     v = FiloNameVisitor(g)
-#     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
-#     return v.visit(result)
-
-# Legacy code for ref. Del after 2024
-# def getfilesortorder(fn) -> float:
-#     s = re.search(_reFileNameTitle, fn)
-#     l = s.group('srt') or "1.0" if s else "1.0"
-#     if l[0] == '_': return 888.0
-
-#     # remove trailing decimal point if present
-#     return float(l[:-1]) if l and l.endswith(".") else float(l)
-
 def file_sort_init(sort_var, sort_default=1.0) -> float:
     """While the filename parser is good, the sort variable sometimes contains strange values.
         This function is a helper to ensure that sort is always a float"""
@@ -159,7 +125,7 @@ def file_sort_init(sort_var, sort_default=1.0) -> float:
     elif sort_var[0] in lastchars:  return last
     else:
         try:                        return float(sort_var)
-        except:                     return sort_default
+        except ValueError:          return sort_default
 
 def get_filename_parts(fname_str: str) -> FileParts:
     """Parse a filename string into its component parts if possible.
