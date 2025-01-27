@@ -1,6 +1,3 @@
-#from __future__ import print_function
-#from __future__ import unicode_literals
-
 import sys
 sys.path.insert(0, '..')
 
@@ -9,7 +6,7 @@ from par.semantic_ext import blocks as semantic_blocks
 from par.bootstrap_ext import blocks as bootstrap_blocks
 
 def test_symbol():
-    """
+    r"""
     >>> text = '''
     ... This is **a** symbol **test**.
     ... '''
@@ -20,7 +17,7 @@ def test_symbol():
     """
 
 def test_list_1():
-    """
+    r"""
     >>> text = '''
     ... * a
     ... * b
@@ -35,7 +32,7 @@ def test_list_1():
     """
     
 def test_list_2():
-    """
+    r"""
     >>> text = '''
     ... 1. a
     ... 2. b
@@ -51,7 +48,7 @@ def test_list_2():
     """
     
 def test_list_3():
-    """
+    r"""
     >>> text = '''
     ... * a
     ... * b
@@ -72,7 +69,7 @@ def test_list_3():
     """
     
 def test_list_4():
-    """
+    r"""
     >>> text = '''
     ... * a
     ...     * b
@@ -98,7 +95,7 @@ def test_list_4():
     """
 
 def test_dl_1():
-    """
+    r"""
     >>> text = '''
     ... a --
     ...     abc
@@ -120,7 +117,7 @@ def test_dl_1():
     """
 
 def test_dl_2():
-    """
+    r"""
     >>> text = '''
     ... a\_ --
     ...     abc
@@ -144,7 +141,7 @@ def test_dl_2():
     """
 
 def test_dl_3():
-    """
+    r"""
     >>> text = '''
     ... a
     ... :   abc
@@ -168,7 +165,7 @@ def test_dl_3():
     """
 
 def test_dl_4():
-    """
+    r"""
     >>> text = '''
     ... a --
     ...     abc
@@ -189,7 +186,7 @@ def test_dl_4():
     """
 
 def test_dl_5():
-    """
+    r"""
     >>> text = '''
     ... a
     ... :   abc
@@ -210,7 +207,7 @@ def test_dl_5():
     """
 
 def test_dl_6():
-    """
+    r"""
     >>> text = '''
     ... 1. aaa
     ... 
@@ -236,7 +233,7 @@ def test_dl_6():
     """
 
 def test_dl_7():
-    """
+    r"""
     >>> text = '''
     ... a --
     ...     abc
@@ -277,7 +274,7 @@ def test_dl_7():
     """
 
 def test_hr():
-    """
+    r"""
     >>> text = '''
     ... * * * *
     ... ----
@@ -292,7 +289,7 @@ def test_hr():
     """
 
 def test_url_1():
-    """
+    r"""
     >>> text = '''
     ... This is [Test][foo] .
     ... 
@@ -306,7 +303,7 @@ def test_url_1():
     """
 
 def test_url_2():
-    """
+    r"""
     >>> text = '''
     ... This is [Test][foo] .
     ... 
@@ -320,7 +317,7 @@ def test_url_2():
     """
 
 def test_url_3():
-    """
+    r"""
     >>> text = '''
     ... This is [Test][foo] .
     ... 
@@ -334,7 +331,7 @@ def test_url_3():
     """
 
 def test_url_4():
-    """
+    r"""
     >>> text = '''
     ... This is [foo][] .
     ... 
@@ -348,7 +345,7 @@ def test_url_4():
     """
 
 def test_table():
-    """
+    r"""
     >>> text = '''
     ... || a || b || c ||
     ... || b || c || d ||
@@ -365,7 +362,7 @@ def test_table():
     """
 
 def test_table_0():
-    """
+    r"""
     >>> text = '''
     ... |aa|bb|                                                                                      
     ... |--|--|                                                                                      
@@ -384,7 +381,7 @@ def test_table_0():
     """
     
 def test_block_1():
-    """
+    r"""
     >>> text = '''
     ... {% tabs %}
     ... -- index.html --
@@ -421,7 +418,7 @@ def test_block_1():
     """
     
 def test_block_2():
-    """
+    r"""
     >>> text = '''
     ... {%alert class=info, close%}
     ...     This is an alert.
@@ -437,7 +434,7 @@ def test_block_2():
     """
     
 def test_pre_1():
-    """
+    r"""
     >>> text = '''
     ... ```lang=python,id=test
     ... a
@@ -454,7 +451,7 @@ def test_pre_1():
     """
     
 def test_pre_2():
-    """
+    r"""
     >>> text = '''
     ... ```python
     ... a
@@ -471,7 +468,7 @@ def test_pre_2():
     """
 
 def test_pre_3():
-    """
+    r"""
     >>> text = '''
     ... ```id=test
     ... a
@@ -488,7 +485,7 @@ def test_pre_3():
     """
 
 def test_pre_4():
-    """
+    r"""
     >>> text = '''
     ... ```
     ... a
@@ -505,7 +502,7 @@ def test_pre_4():
     """
 
 def test_pre5():
-    """
+    r"""
     >>> text = '''
     ... ~~~~~~
     ... asfadsf
@@ -518,7 +515,7 @@ def test_pre5():
     """
     
 def test_pre_6():
-    """
+    r"""
     >>> text = '''
     ... ```class=linenums
     ... a
@@ -535,7 +532,7 @@ def test_pre_6():
     """
     
 def test_footnote():
-    """
+    r"""
     >>> text = '''
     ... That's some text with a footnote.[^1]
     ... 
@@ -555,7 +552,7 @@ def test_footnote():
     """
     
 def test_attr_1():
-    """
+    r"""
     >>> text = '''
     ... test  {#test}
     ... ====
@@ -578,7 +575,7 @@ def test_attr_1():
     """
     
 def test_attr_2():
-    """
+    r"""
     >>> text = '''
     ... ## hello ## {#hello}
     ... ## hello ## {.hello}
@@ -597,7 +594,7 @@ def test_attr_2():
     """
 
 def test_link_1():
-    """
+    r"""
     >>> text = '''
     ... [[Page|Hello world]]
     ... [[Page#title|Hello world]]
@@ -620,7 +617,7 @@ def test_link_1():
     """
     
 def test_link_2():
-    """
+    r"""
     >>> text = '''
     ... [](http://aaaa.com)
     ... ![](http://aaaa.com)
@@ -641,7 +638,7 @@ def test_link_2():
     """
     
 def test_table_1():
-    """
+    r"""
     >>> text = '''
     ... First Header  | Second Header
     ... ------------- | -------------
@@ -662,7 +659,7 @@ def test_table_1():
     """
 
 def test_table_2():
-    """
+    r"""
     >>> text = '''
     ... First Header  | Second Header | Third Header
     ... :------------ | ------------: | :----------:
@@ -683,7 +680,7 @@ def test_table_2():
     """
 
 def test_table_3():
-    """
+    r"""
     >>> text = '''
     ... | First Header  | Second Header |
     ... | :------------ | ------------: |
@@ -704,7 +701,7 @@ def test_table_3():
     """
 
 def test_table_4():
-    """
+    r"""
     >>> text = '''
     ... |aa|bb|
     ... |--|--|
@@ -723,7 +720,7 @@ def test_table_4():
     """
 
 def test_list_pre():
-    """
+    r"""
     >>> text = '''
     ... 1. abc
     ... 
@@ -741,7 +738,7 @@ def test_list_pre():
     """
     
 def test_list_pre_1():
-    """
+    r"""
     >>> text = '''
     ... 1. abc
     ... 
@@ -757,7 +754,7 @@ def test_list_pre_1():
     """
     
 def test_list_pre_2():
-    """
+    r"""
     >>> text = '''
     ... 1. abc
     ... 
@@ -778,7 +775,7 @@ def test_list_pre_2():
     """
     
 def test_semantic_alert():
-    """
+    r"""
     >>> text = '''
     ... {% alert %}
     ... This is a test.
@@ -793,7 +790,7 @@ def test_semantic_alert():
     """
     
 def test_semantic_tabs():
-    """
+    r"""
     >>> text = '''
     ... {% tabs %}
     ... -- name --
@@ -832,7 +829,7 @@ def test_semantic_tabs():
     """
 
 def test_list_check_radio():
-    """
+    r"""
     >>> text = '''
     ... * [] a
     ...    * [*] b
@@ -863,7 +860,7 @@ def test_list_check_radio():
     """
 
 def test_toc():
-    """
+    r"""
     >>> text = '''
     ... .. toc::
     ... ## First heading
@@ -885,7 +882,7 @@ def test_toc():
     """
 
 def test_video_direct():
-    """
+    r"""
     >>> text = '''
     ... ![](cool.mp4)
     ... '''
@@ -897,7 +894,7 @@ def test_video_direct():
     """
 
 def test_video_youtube():
-    """
+    r"""
     >>> text = '''
     ... ![](https://www.youtube.com/watch?v=iNiImDNtLpQ)
     ... '''
@@ -908,7 +905,7 @@ def test_video_youtube():
     """
 
 def test_blockquote():
-    """
+    r"""
     >>> text = '''
     ... > "I have been using the AquaBoostAG liquefied polymer" -- Mystery Mountain Grove
     ... '''
