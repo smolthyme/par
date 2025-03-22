@@ -343,8 +343,8 @@ def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments =
 def parse(language, lineSource, skipWS = True, skipComments = None, packrat = False, lineCount = True):
     lines, lineNo = [], 0
 
-    while callable(language):
-        language = language()
+    # while callable(language):    # Fairly sure this is handled in the parser anyway.
+        # language = language()    # Remove: Late 2025
 
     orig, ld = "", 0
     for line in lineSource:
