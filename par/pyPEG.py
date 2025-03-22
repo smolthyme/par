@@ -35,13 +35,13 @@ class Name(str):
         self.file = ""
 
 ParsePattern = Union[
+    Pattern[str],                      # compiled regex
     str,                               # literal text 
     keyword,                           # named word match
     _not,                              # negative lookahead
     _and,                              # positive lookahead
     ignore,                            # ignore specific text via regex
     int,                               # integer repetition count
-    Pattern[str],                      # compiled regex
     Tuple["int | ParsePattern", ...],  # tuple with optional integer repetition counts
     List["ParsePattern"],              # alternatives (OR)
     Callable[[], "ParsePattern"]       # callable returning another pattern
@@ -54,72 +54,52 @@ class Symbol(list):
         self.extend(what)
     def __call__(self):
         return self.what
-    def __str__(self) -> str:
-        return f"Symbol<{self.__name__}>: {self.what}"
     def __repr__(self) -> str:
-        return str(self)
+        return f"Symbol<{self.__name__}>: {self.what}"
     def render(self, index=0) -> str:
+        indent = f"{' ' * 2 * index}"
         if isinstance(self.what, str):
-            return f"{' '*2*index}{self.__name__}:{self.what}\n"
-        else:
-            buf = []
-            buf.append(f"{' '*2*index}{self.__name__}:\n")
-            for x in self.what:
-                if isinstance(x, str):
-                    buf.append(f"{' '*2*(index+1)}:{x}\n")
-                else:
-                    buf.append(x.render(index+1))
+            return f"{indent}{self.__name__}:{self.what}\n"
+        buf = [f"{indent}{self.__name__}:\n"]
+        buf.extend(
+            f"{' ' * 2 * (index + 1)}:{x}\n" if isinstance(x, str) else x.render(index + 1)
+            for x in self.what
+        )
         return ''.join(buf)
     def find(self, name: str):
         for x in self.what:
             if not isinstance(x, str):
                 if x.__name__ == name:
                     return x
-                r = x.find(name)
-                if r:
+                elif (r := x.find(name)):
                     return r
     def find_all(self, name: str):
         for x in self.what:
             if not isinstance(x, str):
                 if x.__name__ == name:
                     yield x
-                for r in x.find_all(name):
-                    if r:
-                        yield r
+                yield from x.find_all(name)
     def find_all_here(self, name: str):
-        for x in self.what:
-            if not isinstance(x, str):
-                if x.__name__ == name:
-                    yield x
+        yield from (x for x in self.what if not isinstance(x, str) and x.__name__ == name)
     
     @property
     def text(self) -> str:
-        buf = []
-        if isinstance(self.what, str):
-            buf.append(self.what)
-        else:
-            for node in self.what:
-                if isinstance(node, str):
-                    buf.append(node)
-                else:
-                    buf.append(node.text)
-        return ''.join(buf)
+        return ''.join(node if isinstance(node, str) else node.text for node in self.what)
 
 word_regex = re.compile(r"\w+")
 rest_regex = re.compile(r".*")
 
 print_trace = False
 
-def skip(skipper, text:str, skipWS:bool, skipComments: Union[Callable, None]) -> str:
+def skip(skipper, text: str, skipWS: bool, skipComments: Union[Callable, None]) -> str:
     t = text.lstrip() if skipWS else text
-
-    if skipComments:
+    while skipComments:
         try:
-            while True:
-                skip, t = skipper.parseLine(t, skipComments, [], skipWS, None)
-                if skipWS:
-                    t = t.lstrip()
-        except: pass
+            skip, t = skipper.parseLine(t, skipComments, [], skipWS, None)
+            if skipWS:
+                t = t.lstrip()
+        except:
+            break
     return t
 
 class parser(object):
@@ -154,7 +134,7 @@ class parser(object):
         def R(result: object, text: str) -> tuple:
             if __debug__ and print_trace:
                 try:
-                    if (pattern_name := getattr(_pattern, "__name__", None)) != "comment":
+                    if (pattern_name := getattr(_pattern, "__name__")) != "comment":
                         sys.stderr.write(f"match: {pattern_name}\n")
                 except: pass
 
@@ -212,7 +192,6 @@ class parser(object):
                 pattern = (pattern,)
 
         text = skip(self.skipper, textline, skipWS, skipComments)
-
         pattern_type = type(pattern)
 
         if type(pattern) is str:
@@ -335,8 +314,7 @@ class parser(object):
 def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments = None, packrat = False):
     p = parser(p=packrat)
     text = skip(p.skipper, textline, skipWS, skipComments)
-    ast, text = p.parseLine(text, pattern, resultSoFar, skipWS, skipComments)
-    return ast, text
+    return p.parseLine(text, pattern, resultSoFar, skipWS, skipComments)
 
 # parse():
 # * language     : pyPEG language description
@@ -356,12 +334,8 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
     # while callable(language):    # Fairly sure this is handled in the parser anyway.
         # language = language()    # Remove: Late 2025
 
-    orig, ld = "", 0
+    orig = ""
     for line in lineSource:
-        if lineSource.isfirstline():
-            ld = 1
-        else:
-            ld += 1
         lines.append((len(orig), lineSource.filename(), lineSource.lineno() - 1))
         orig += line
 
