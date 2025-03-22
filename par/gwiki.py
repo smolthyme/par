@@ -323,14 +323,14 @@ class WikiHtmlVisitor(SimpleVisitor):
                     buf.append(_t)
                     continue
                 if old_indent and indent < old_indent:
-                    buf.append('</' + parent + '>\n')
+                    buf.append(f"</{parent}>\n")
                     return ''.join(buf), i-1
                 if _type == old:
                     buf.append(txt)
                 else:
                     #find another list
                     if parent:
-                        buf.append('</' + parent + '>\n')
+                        buf.append(f"</{parent}>\n")
                     if _type == 'b':
                         parent = 'ul'
                     else:
@@ -340,7 +340,7 @@ class WikiHtmlVisitor(SimpleVisitor):
                     old_indent = indent
                     old = _type
             if buf:
-                buf.append('</' + parent + '>\n')
+                buf.append(f'</{parent}>\n')
             return ''.join(buf), i
     
         return create_list(0, self.lists)[0]
