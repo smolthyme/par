@@ -6,18 +6,28 @@ import re
 import sys
 
 from typing import Union, Pattern, Callable, List, Tuple
+from dataclasses import dataclass
 
 class keyword(str): pass
 
 class _and(object):
-    def __init__(self, something):
-        self.obj = something
-        
+    def __init__(self, something: 'ParsePattern'):
+        self._obj = something
+
+    @property
+    def obj(self) -> 'ParsePattern':
+        return self._obj
+
 class _not(_and): pass
 
 class ignore(object):
-    def __init__(self, regex_text, *args):
-        self.regex = re.compile(regex_text, *args)
+    def __init__(self, regex_text: str, *args):
+        self._regex = re.compile(regex_text, *args)
+
+    @property
+    def regex(self) -> Pattern[str]:
+        return self._regex
+
 
 class Name(str):
     def __init__(self, *args):
@@ -30,6 +40,7 @@ ParsePattern = Union[
     _not,                              # negative lookahead
     _and,                              # positive lookahead
     ignore,                            # ignore specific text via regex
+    int,                               # integer repetition count
     Pattern[str],                      # compiled regex
     Tuple["int | ParsePattern", ...],  # tuple with optional integer repetition counts
     List["ParsePattern"],              # alternatives (OR)
@@ -204,17 +215,17 @@ class parser(object):
 
         pattern_type = type(pattern)
 
-        if isinstance(pattern_type, str):
+        if type(pattern) is str:
             if text[:len(pattern)] == pattern:
                 text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
                 return R(None, text)
             else:
                 syntaxError()
 
-        elif pattern_type is keyword:
+        elif type(pattern) is keyword:
             m = word_regex.match(text)
             if m:
-                if m.group(0) == pattern:
+                if m.group(0) == pattern and isinstance(pattern, str):
                     text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
                     return R(None, text)
                 else:
@@ -222,22 +233,21 @@ class parser(object):
             else:
                 syntaxError(word_regex.pattern)
 
-        elif pattern_type is _not:
+        elif type(pattern) is _not:
             try:
                 r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
             except:
                 return resultSoFar, textline
             syntaxError()
 
-        elif pattern_type is _and:
+        elif type(pattern) is _and:
             r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
             return resultSoFar, textline
 
-        elif pattern_type is type(word_regex) or pattern_type is ignore:
-            if pattern_type is ignore:
-                pattern = pattern.regex
-            m = pattern.match(text)
-            if m:
+        elif type(pattern) in (type(word_regex), ignore):
+            if type(pattern) is ignore and hasattr(pattern, "regex"):
+                    pattern = pattern.regex
+            if isinstance(pattern, Pattern) and (m := pattern.match(text)):
                 text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
                 if pattern_type is ignore:
                     return R(None, text)
@@ -247,13 +257,13 @@ class parser(object):
                 #syntaxError(pattern.pattern+' text='+repr(text))
                 syntaxError()
 
-        elif pattern_type is tuple:
+        elif type(pattern) is tuple:
             result = []
             n = 1
             for p in pattern:
                 if type(p) is type(0):
                     n = p
-                else:
+                elif isinstance(n, int):
                     if n > 0:
                         for i in range(n):
                             result, text = self.parseLine(text, p, result, skipWS, skipComments)
@@ -280,7 +290,7 @@ class parser(object):
                     n = 1
             return R(result, text)
 
-        elif pattern_type is list:
+        elif type(pattern) is list:
             result = []
             found = False
             for p in pattern:
