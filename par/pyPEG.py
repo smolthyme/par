@@ -30,18 +30,18 @@ class Symbol(list):
     def __call__(self):
         return self.what
     def __str__(self):
-        return 'Symbol<' + repr(self.__name__) + '>: ' + repr(self.what)
+        return f"Symbol<{self.__name__}>: {self.what}"
     def __repr__(self):
         return str(self)
     def render(self, index=0):
         if isinstance(self.what, str):
-            return ' '*2*index+'%s:%r\n' % (self.__name__, self.what)
+            return f"{' '*2*index}{self.__name__}:{self.what}\n"
         else:
             buf = []
-            buf.append(' '*2*index+'%s:\n' % self.__name__)
+            buf.append(f"{' '*2*index}{self.__name__}:\n")
             for x in self.what:
                 if isinstance(x, str):
-                    buf.append(' '*4*(index+1)+':%r\n' % x)
+                    buf.append(f"{' '*2*(index+1)}:{x}\n")
                 else:
                     buf.append(x.render(index+1))
         return ''.join(buf)
@@ -133,7 +133,7 @@ class parser(object):
             if __debug__ and print_trace:
                 try:
                     if _pattern.__name__ != "comment":
-                        sys.stderr.write("match: " + _pattern.__name__ + "\n")
+                        sys.stderr.write(f"match: {_pattern.__name__}\n")
                 except: pass
 
             if self.restlen == -1:
@@ -178,7 +178,7 @@ class parser(object):
                 if print_trace:
                     try:
                         if pattern.__name__ != "comment":
-                            sys.stderr.write("testing with " + pattern.__name__ + ": " + textline[:40] + "\n")
+                            sys.stderr.write(f"testing with {pattern.__name__}: {textline[:40]}\n")
                     except: pass
 
             if pattern.__name__[0] != "_":
@@ -263,7 +263,7 @@ class parser(object):
                             except SyntaxError:
                                 break
                         if n == -2 and not(found):
-                            #syntaxError(text+' function=' + repr(p))
+                            #syntaxError(f"{text} function={p}")
                             syntaxError()
                     n = 1
             return R(result, text)
@@ -285,7 +285,7 @@ class parser(object):
                 syntaxError()
 
         else:
-            #raise SyntaxError("illegal type in grammar: " + (pattern_type))
+            #raise SyntaxError(f"illegal type in grammar: {pattern_type}")
             raise SyntaxError()
 
     def lineNo(self) -> int:
