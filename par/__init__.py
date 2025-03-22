@@ -1,14 +1,12 @@
 #! /usr/bin/env python
-#coding=utf-8
-#
+# -*- coding: utf-8 -*-
+
 # Author: limodou@gmail.com
 # This program is based on pyPEG
 #
 # license: BSD
-#
 
 from .pyPEG import *
-import re
 
 __author__ = 'limodou'
 __author_email__ = 'limodou@gmail.com'
@@ -28,34 +26,29 @@ class SimpleVisitor(object):
         if not isinstance(nodes, (list, tuple)):
             nodes = [nodes]
         if root:
-            method = getattr(self, '__begin__', None)
-            if method:
+            if (method := getattr(self, '__begin__', None)):
                 buf.append(method())
         for node in nodes:
             if isinstance(node, str):
                 buf.append(node)
             else:
-                if hasattr(self, 'before_visit'):
-                    buf.append(self.before_visit(node))
-                method = getattr(self, 'visit_' + node.__name__ + '_begin', None)
-                if method:
+                if (method := getattr(self, 'before_visit', None)):
                     buf.append(method(node))
-                method = getattr(self, 'visit_' + node.__name__, None)
-                if method:
+                if (method := getattr(self, f'visit_{node.__name__}_begin', None)):
+                    buf.append(method(node))
+                if (method := getattr(self, f'visit_{node.__name__}', None)):
                     buf.append(method(node))
                 else:
                     if isinstance(node.what, str):
                         buf.append(node.what)
                     else:
                         buf.append(self.visit(node.what))
-                method = getattr(self, 'visit_' + node.__name__ + '_end', None)
-                if method:
+                if (method := getattr(self, f'visit_{node.__name__}_end', None)):
                     buf.append(method(node))
-                if hasattr(self, 'after_visit'):
-                    buf.append(self.after_visit(node))
+                if (method := getattr(self, 'after_visit', None)):
+                    buf.append(method(node))
         
         if root:
-            method = getattr(self, '__end__', None)
-            if method:
+            if (method := getattr(self, '__end__', None)):
                 buf.append(method())
         return ''.join(buf)
