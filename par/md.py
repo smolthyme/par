@@ -22,6 +22,7 @@ class MarkdownGrammar(dict):
         def space()            : return _(r'[ \t]+')
         def separator()        : return _(r'[\.,!?$ \t\^]')
         def blankline()        : return 0, space, eol
+        def blanklines()       : return -2, blankline
 
         def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
         def htmlentity()       : return _(r'&\w+;')
@@ -31,15 +32,14 @@ class MarkdownGrammar(dict):
         def code_string()      : return _(r'``'), _(r'.+(?=``)'), _(r'``')
         def default_string()   : return _(r'\S+')
 
-        ## paragraph
-        #def simple_op()       : return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
-        def op_string()        : return _(r'\*{1,3}|_{1,3}|~~|\^|,,')
+        ## inline
+        def op_string()        : return _(r'\*{1,3}|_{1,3}|~~|,,|[`\^]')
         def op()               : return [(-1, longdash, separator, op_string), (op_string, -1, separator)]
         def longdash()         : return _(r"--\B")
         def hr()               : return _(r'(?:([-_*])[ \t]*\1?){3,}'), -2, blankline
         def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
-        ## html block
+        ## embedded html
         def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL), -2, blankline
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup).*?>.*?<(/\1)>|<(img|br).*?/>', re.I|re.DOTALL)
 
@@ -56,15 +56,16 @@ class MarkdownGrammar(dict):
         def line()             : return 0, space, words, eol
         def common_text()      : return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
         def common_line()      : return common_text, eol
-
-
-        def blanklines()       : return -2, blankline
         def paragraph()        : return line, -1, (0, space, common_line), -1, blanklines
 
         def directive_name()   : return _(r'\w+')
         def directive_title()  : return _(r'[^\n\r]+')
         def directive()        : return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
     
+        def block_kwargs_key() : return _(r'[^=,\)\n]+')
+        def block_kwargs_val() : return _(r'[^\),\n]+')
+        def block_kwargs()     : return block_kwargs_key, 0, (_(r'='), block_kwargs_val)
+        
         ## footnote
         def footnote()         : return _(r'\[\^\w+\]')
         def footnote_text()    : return list_first_para, -1, [list_indent_lines, list_lines]
@@ -128,10 +129,6 @@ class MarkdownGrammar(dict):
         def dl_line_1()        : return dl_dt_1, dl_dd_1
         def dl_line_2()        : return dl_dt_2, -2, dl_dd_2
         def dl()               : return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
-    
-        def block_kwargs_key() : return _(r'[^=,\)\n]+')
-        def block_kwargs_val() : return _(r'[^\),\n]+')
-        def block_kwargs()     : return block_kwargs_key, 0, (_(r'='), block_kwargs_val)
 
         def new_block()        : return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
 
@@ -225,21 +222,21 @@ class MarkdownGrammar(dict):
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):
     op_maps = {
-        '`'  :  ['<code>',        '</code>'],
         '*'  :  ['<em>',          '</em>'],
-        '_'  :  ['<em>',          '</em>'],
         '**' :  ['<strong>',      '</strong>'],
         '***':  ['<strong><em>',  '</em></strong>'],
-        '___':  ['<strong><em>',  '</em></strong>'],
+        '_'  :  ['<em>',          '</em>'],
         '__' :  ['<strong>',      '</strong>'],
+        '___':  ['<strong><em>',  '</em></strong>'],
+        '`'  :  ['<code>',        '</code>'],
         '^'  :  ['<sup>',         '</sup>'],
         ',,' :  ['<sub>',         '</sub>'],
         '~~' :  ['<span style="text-decoration: line-through">', '</span>'],
     }
     tag_class = {}
 
-    def __init__(self, template=None, tag_class=None, grammar=None,
-                    title='Untitled', block_callback=None, init_callback=None, footnote_id=None, filename=None):
+    def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled',
+                    block_callback=None, init_callback=None, footnote_id=None, filename=None):
         super().__init__(grammar, filename)
         
         self.title       = title
