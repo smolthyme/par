@@ -18,17 +18,13 @@ class MarkdownGrammar(dict):
 
         ## basic
         def ws()               : return _(r'\s+')
-        def space()            : return _(r'[ \t]+')
         def eol()              : return _(r'\r\n|\r|\n')
+        def space()            : return _(r'[ \t]+')
         def separator()        : return _(r'[\.,!?$ \t\^]')
         def blankline()        : return 0, space, eol
 
-        def literal()          : return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
-        def literal1()         : return _(r"u?r?'[^'\\]*(?:\\.[^'\\]*)*'", re.I|re.DOTALL)
-
+        def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
         def htmlentity()       : return _(r'&\w+;')
-        def longdash()         : return _(r"--\B")
-
         def escape_string()    : return _(r'\\'), _(r'.')
         def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
         def code_string_short(): return _(r'`'), _(r'[^`]*'), _(r'`')
@@ -39,12 +35,13 @@ class MarkdownGrammar(dict):
         #def simple_op()       : return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
         def op_string()        : return _(r'\*{1,3}|_{1,3}|~~|\^|,,')
         def op()               : return [(-1, longdash, separator, op_string), (op_string, -1, separator)]
+        def longdash()         : return _(r"--\B")
+        def hr()               : return _(r'(?:([-_*])[ \t]*\1?){3,}'), -2, blankline
+        def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
         ## html block
         def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL), -2, blankline
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup).*?>.*?<(/\1)>|<(img|br).*?/>', re.I|re.DOTALL)
-
-        def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
         def word()             : return [ # Tries to show parse-order
                 escape_string, 
@@ -56,7 +53,6 @@ class MarkdownGrammar(dict):
             ]
         
         def words()            : return [op, word], -1, [op, space, word]
-        #def words()           : return -1, [word, space]
         def line()             : return 0, space, words, eol
         def common_text()      : return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
         def common_line()      : return common_text, eol
@@ -64,7 +60,6 @@ class MarkdownGrammar(dict):
 
         def blanklines()       : return -2, blankline
         def paragraph()        : return line, -1, (0, space, common_line), -1, blanklines
-        
 
         def directive_name()   : return _(r'\w+')
         def directive_title()  : return _(r'[^\n\r]+')
@@ -80,12 +75,6 @@ class MarkdownGrammar(dict):
         def inline_tag_index() : return _(r'[^\]]*')
         def inline_tag_class() : return _(r'[^\}:]*')
         def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
-    
-        ## hr  # Note: is something like (?:([-_\*])[ \t]*\1){3,} slower?
-        def hr1()              : return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
-        def hr2()              : return _(r'\-[ \t]*\-[ \t]*\-[ \t]*[\- \t]*'), -2, blankline
-        def hr3()              : return _(r'\_[ \t]*\_[ \t]*\_[ \t]*[\_ \t]*'), -2, blankline
-        def hr()               : return [hr1, hr2, hr3]
 
         ## pre
         def indent_line_text() : return _(r'.+')
@@ -202,7 +191,7 @@ class MarkdownGrammar(dict):
         def link_refer_refer() : return _(r'[^\]]*')
         def link_refer()       : return link_refer_capt, 0, space, _(r'\['), link_refer_refer, _(r'\]')
         def link_refer_link()  : return 0, _(r'(<)?(\S+)(?(1)>)')
-        def link_refer_title() : return [_(r'\([^\)]*\)'), literal, literal1]
+        def link_refer_title() : return [_(r'\([^\)]*\)'), literal]
         def link_refer_note()  : return 0, _(r' {1,3}'), link_inline_capt, _(
             r':'), space, link_refer_link, 0, (ws, link_refer_title), -2, blankline
         
@@ -290,10 +279,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ' '.join(buf)
 
     def visit(self, nodes, root=False):
-        if root:
+        if root:# Collect titles for use in ToC, global things
             [self.visit_link_refer_note(obj) for obj in nodes[0].find_all('link_refer_note')]
-
-            # Collect titles for use in ToC
             [self._alt_title(onk) for onk in nodes[0].find_all('title')]
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
@@ -318,9 +305,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_blankline(self, node):
         return '\n'
-    
-    visit_blanklines = visit_blankline
-    visit_quote_blank_line = visit_blankline
 
     def visit_longdash(self, node):
         return '—' # &mdash;
@@ -339,22 +323,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             case 'title5':  level = 5
             case _:         level = 1
         
-        if node.find('attr_def_id'):
-            _id = node.find('attr_def_id').text[1:]
-        else:
-            _id = self.get_title_id(level)
-        
+        _id = _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
         title = node.find('title_text').text.strip()
         self.tocitems.append((level, _id, title))
 
     def _get_title(self, node, level):
-        if node.find('attr_def_id'):
-            _id = node.find('attr_def_id').text[1:]
-        else:
-            _id = self.get_title_id(level)
-        
-        anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
+        _id = _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
         title = node.find('title_text').text.strip()
+        anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
         _cls = [x.text[1:] for x in node.find_all('attr_def_class')]
 
         return self.tag(f'h{level}', title + anchor, id=_id, _class=' '.join(_cls))
@@ -613,17 +589,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_lists_end(self, node):
         def process_node(n):
-            txt = []
-            for node in n:
-                txt.append(self.visit(node))
-            text = ''.join(txt)
+            text = ''.join(self.visit(node) for node in n)
             t = self.parse_text(text, 'article').rstrip()
-            if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>'):
-                ret = t[3:-4].rstrip()
-            else:
-                ret = t
-            
-            return ret
+            return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
 
         def create_list(lists):
             buf = []
@@ -634,19 +602,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if _type == old:
                     buf.append(self.tag('li', process_node(_node)))
                 else:
-                    # find another list
                     if parent:
-                        buf.append('</' + parent + '>\n')
-                    if _type == 'b':
-                        parent = 'ul'
-                    else:
-                        parent = 'ol'
+                        buf.append(f'</{parent}>\n')
+                    parent = 'ul' if _type == 'b' else 'ol'
                     buf.append(self.tag(parent))
                     buf.append(self.tag('li', process_node(_node)))
                     old = _type
-            if buf and parent:
-                buf.append('</' + parent + '>\n')
-            
+            if len(buf) > 0 and parent:
+                buf.append(f'</{parent}>\n')
             return ''.join(buf)
 
         return create_list(self.lists)
@@ -723,24 +686,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_table2_begin(self, node):
         self.table_align = {}
         separator = node.find('table_separator')
-        for i, x in enumerate(  list(separator.find_all('table_horiz_line')) +
-                                list(separator.find_all('table_other'))):
-            t = x.text
-            if t.endswith('|'):
-                t = t[:-1]
-            t = t.strip()
-            left = t.startswith(':')
-            right = t.endswith(':')
-            if left and right:
-                align = 'center'
-            elif left:
-                align = 'left'
-            elif right:
-                align = 'right'
-            else:
-                align = ''
-            self.table_align[i] = align
-
+        for i, x in enumerate(list(separator.find_all('table_horiz_line')) + list(separator.find_all('table_other'))):
+            t = x.text.rstrip('|').strip()
+            self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
+        
         return self.tag('table', newline=True)
 
     def visit_table2_end(self, node):
@@ -750,10 +699,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         s = ['<thead>\n<tr>']
         for t in ('table_td', 'table_other'):
             for x in node.find_all(t):
-                text = x.text
-                if text.endswith('|'):
-                    text = text[:-1]
-                s.append(f'<th>{self.process_line(text.strip())}</th>')
+                s.append(f'<th>{self.process_line(x.text.rstrip("|").strip())}</th>')
         s.append('</tr>\n</thead>\n')
 
         return ''.join(s)
@@ -762,23 +708,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def visit_table_body(self, node):
-        s = ['<tbody>\n']
-        s.append(self.visit(node))
-        s.append('</tbody>')
-
-        return ''.join(s)
+        return f"<tbody>{self.visit(node)}</tbody>"
 
     def visit_table_body_line(self, node):
         nodes = list(node.find_all('table_td')) + list(node.find_all('table_other'))
         s = ['<tr>']
         for i, x in enumerate(nodes):
-            text = x.text
-            if text.endswith('|'):
-                text = text[:-1]
+            text = x.text.rstrip("|")
             s.append(self.tag('td', self.parse_text(text.strip(), 'words'),
-                                align=self.table_align.get(i, ''),
-                                newline=False,
-                                enclose=2))
+                align=self.table_align.get(i, ''), newline=False, enclose=2))
         s.append('</tr>\n')
 
         return ''.join(s)
@@ -809,20 +747,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return f'<sup id="fnref-{name}"><a href="#fn-{name}" class="footnote-rel inner">{_id}</a></sup>'
 
     def visit_footnote_desc(self, node):
-        name = node.find('footnote').text[2:-1]
-        if name in self.footnodes:
+        if (name := node.find('footnote').text[2:-1]) and name not in self.footnodes:
+            text = self.parse_text(self.visit(node.find('footnote_text')).rstrip(), 'article')
+            n = {'name': name, 'text': text}
+            self.footnodes.append(n)
+            return ''
+        else:
             raise Exception(f"The footnote {name} is already exists")
-        txt = self.visit(node.find('footnote_text')).rstrip()
-        text = self.parse_text(txt, 'article')
-        n = {'name': name, 'text': text}
-        self.footnodes.append(n)
-
-        return ''
 
     def visit_star_rating(self, node):
         r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
         if (m := r.match(node.text)):
             return f"<span>{'⭐' * len(str(m.group("stars")))}</span>"
+    
+    visit_blanklines = visit_blankline
+    visit_quote_blank_line = visit_blankline
 
     def __end__(self):
         s = []
