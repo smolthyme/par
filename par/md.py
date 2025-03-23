@@ -94,19 +94,13 @@ class MarkdownGrammar(dict):
         def attr_def_set()     : return [attr_def_id, attr_def_class], -1, (space, [attr_def_id, attr_def_class])
         def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
         
-        ## subject
-        def setext_title1()    : return title_text, 0, space, 0, attr_def, blankline, _(r'={1,}'), -2, blankline
-        def setext_title2()    : return title_text, 0, space, 0, attr_def, blankline, _(r'-{1,}'), -2, blankline
+        ## titles / subject
         def title_text()       : return _(r'.+?(?= #| \{#| \{\.)|.+', re.U)
-        def atx_title1()       : return _(r'# '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def atx_title2()       : return _(r'## '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title1()           : return [atx_title1, setext_title1]
-        def title2()           : return [atx_title2, setext_title2]
-        def title3()           : return _(r'### '),    title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title4()           : return _(r'#### '),   title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title5()           : return _(r'##### '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title6()           : return _(r'###### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title()            : return [title6, title5, title4, title3, title2, title1]
+        def hashes()           : return _(r'#{1,6}')
+        def atx_title()        : return hashes, title_text, 0, space, 0, attr_def, -2, blankline
+        def setext_underline() : return _(r'[ \t]*[-=]+[ \t]*')
+        def setext_title()     : return title_text, 0, space, 0, attr_def, blankline, setext_underline, -2, blankline
+        def title()            : return [atx_title, setext_title]
     
         ## table
         def table_column()     : return _(r'.+?(?=\|\|)'), _(r'\|\|')
@@ -308,17 +302,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_hr(self, node):
         return self.tag('hr', enclose=1)
-
+    
     def _alt_title(self, node):
         node = node.what[0]
 
         match node.__name__:
-            case 'title1':  level = 1
-            case 'title2':  level = 2
-            case 'title3':  level = 3
-            case 'title4':  level = 4
-            case 'title5':  level = 5
-            case _:         level = 1
+            case 'atx_title':
+                level = len(node.find('hashes').text)
+            case 'setext_title':
+                marker = node.find('setext_underline').text[0]
+                level = 1 if marker == '=' else 2
+            case _:
+                level = 1
         
         _id = _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
         title = node.find('title_text').text.strip()
@@ -332,35 +327,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
         return self.tag(f'h{level}', title + anchor, id=_id, _class=' '.join(_cls))
 
-    def visit_title1(self, node):
-        return self._get_title(node, 1)
+    def visit_atx_title(self, node):
+        level = len(node.find('hashes').text)
+        return self._get_title(node, level)
 
-    def visit_setext_title1(self, node):
-        return node[0]
-
-    def visit_atx_title1(self, node):
-        return node[1].text
-
-    def visit_title2(self, node):
-        return self._get_title(node, 2)
-
-    def visit_setext_title2(self, node):
-        return node[0]
-
-    def visit_atx_title2(self, node):
-        return node[1].text
-
-    def visit_title3(self, node):
-        return self._get_title(node, 3)
-
-    def visit_title4(self, node):
-        return self._get_title(node, 4)
-
-    def visit_title5(self, node):
-        return self._get_title(node, 5)
-
-    def visit_title6(self, node):
-        return self._get_title(node, 6)
+    def visit_setext_title(self, node):
+        marker = node.find('setext_underline').text[0]
+        level = 1 if marker == '=' else 2
+        return self._get_title(node, level)
 
     def visit_indent_block_line(self, node):
         return node[1].text
