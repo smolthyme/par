@@ -84,7 +84,7 @@ class HTMLVisitor(SimpleVisitor):
 
         if tag == 'a':
             href = kw.get('href', '#')
-            _cls = 'outter' if href.startswith(('http:', 'https:', 'ftp:')) else 'inner'
+            _cls = 'outer' if href.startswith(('http:', 'https:', 'ftp:')) else 'inner'
             kw['href'] = href
             kw['class'] = f"{kw.get('class', '')} {_cls}".strip()
 
@@ -93,12 +93,10 @@ class HTMLVisitor(SimpleVisitor):
         enclose = 2 if child else enclose
 
         match enclose:
-            case 1:
-                return f'<{tag}{attrs}/>{nline}'
-            case 2:
-                return f'<{tag}{attrs}>{child}</{tag}>{nline}'
-            case _:
-                return f'<{tag}{attrs}>{nline}'
+            case 1:   return f'<{tag}{attrs}/>{nline}'
+            case 2:   return f'<{tag}{attrs}>{child}</{tag}>{nline}'
+            case 3:   return f'</{tag}>{nline}'
+            case _:   return f'<{tag}{attrs}>{nline}'
     
     def to_html(self, text: str) -> str:
         text = text.replace('&', '&amp;')
