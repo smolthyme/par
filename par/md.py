@@ -1,48 +1,26 @@
-from urllib.parse import urljoin
-
-# Parsing Markdown
 # This version has some differences between Standard Markdown
 # Syntax according from http://daringfireball.net/projects/markdown/syntax
-# 
-# They are:
-#   || `^super^script` || <sup>super</sup>script ||
-#   || `,,sub,,script` || <sub>sub</sub>script ||
-#   || `~~strikeout~~` || <span style="text-decoration: line-through">strikeout</span> ||
-#  
-#   directly url and image support, e.g.:
-#     http://code.google.com/images/code_sm.png
-#     http://www.google.com
-#   Table support
-#   Difinition list support <dl><dt><dd>
-#   github flavored Markdown support:
-#     Multiple underscores in words
-#     Fenced code blocks
-#     Syntax highlighting
 
-
-
-from par.pyPEG import *
-import re
 import types
-from par.gwiki import WikiGrammar, WikiHtmlVisitor, SimpleVisitor
+from par.pyPEG import *
+from .__init__ import SimpleVisitor, MDHTMLVisitor
 
 _ = re.compile
 
-class MarkdownGrammar(WikiGrammar):
+class MarkdownGrammar(dict):
     def __init__(self):
-        super(MarkdownGrammar, self).__init__()
+        peg, self.root = self._get_rules()
+        self.update(peg)
         
     def _get_rules(self):
         ## Cheats for return value repeats
-        #  0 ?
-        # -1 *
-        # -2 +
+        #  0 = ? = Optional ; -1 = * = Zero or more ; -2 = + = One or more ; n = n matches
 
         ## basic
         def ws():       return _(r'\s+')
         def space():    return _(r'[ \t]+')
         def eol():      return _(r'\r\n|\r|\n')
-        def seperator():return _(r'[\.,!?$ \t\^]')
+        def separator():return _(r'[\.,!?$ \t\^]')
     
         def blankline(): return 0, space, eol
 
@@ -61,9 +39,7 @@ class MarkdownGrammar(WikiGrammar):
         ## paragraph
         #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
         def op_string(): return _(r'\*{1,3}|_{1,3}|~~|\^|,,')
-        def op(): return [(-1, longdash, seperator, op_string), (op_string, -1, seperator)]
-        # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
-        # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
+        def op(): return [(-1, longdash, separator, op_string), (op_string, -1, separator)]
 
         def star_rating(): return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
@@ -143,13 +119,11 @@ class MarkdownGrammar(WikiGrammar):
         def title(): return [title6, title5, title4, title3, title2, title1]
     
         ## table
-        # def table_column(): return -2, [space, escape_string, code_string_short, code_string, op, link, _(r'[^\\\*_\^~ \t\r\n`,\|]+', re.U)], _(r'\|\|')
         def table_column(): return _(r'.+?(?=\|\|)'), _(r'\|\|')
         def table_line():   return _(r'\|\|'), -2, table_column, eol
         def table(): return -2, table_line, -1, blankline
         def table_td(): return _(r'[^\|\r\n]*\|')
         def table_separator_line(): return _(r'\s*:?-+:?\s*\|')
-        # def table_separator_char(): return _(r'\|')
         def table_other(): return _(r'[^\r\n]+')
         def table_head(): return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
         def table_separator(): return 0, _(r'\|'), -2, table_separator_line, -1, table_other, blankline
@@ -166,34 +140,11 @@ class MarkdownGrammar(WikiGrammar):
         def dl_line_2(): return dl_dt_2, -2, dl_dd_2
         def dl(): return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
     
-        ## block
-        #   [[tabs(filename=hello.html)]]:
-        #       content
-        #
-        # def block_name(): return _(r'[a-zA-Z_\-][a-zA-Z_\-0-9]*')
         def block_kwargs_key():     return _(r'[^=,\)\n]+')
         def block_kwargs_value():   return _(r'[^\),\n]+')
         def block_kwargs(): return block_kwargs_key, 0, (_(r'='), block_kwargs_value)
-        # def block_args(): return _(r'\('), 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space, _(r'\)')
-        # def block_head(): return _(r'\[\['), 0, space, block_name, 0, space, 0, block_args, 0, space, _(r'\]\]:'), eol
-        # def block_body(): return list_content_indent_lines
-        # def block_item(): return block_head, block_body
-        # def block(): return -2, block_item
-    
-        ## new block NB
-        #  {% blockname para_name=para_value[, para_name, para_name=para_value] %}
-        #  content
-        #  {% endblockname %}
-        #
 
-        # def new_block_args(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space
-        # def new_block_name(): return _(r'([a-zA-Z_\-][a-zA-Z_\-0-9]*)')
-        # def new_block_head(): return _(r'\{%'), 0, space, new_block_name, new_block_args, _(r'%\}'), eol
-        # def new_block_end(): return _(r'\{%'), 0, space, _(r'end\1'), 0, space, _(r'%\}'), eol
-        # def new_block_item(): return new_block_head, new_block_body, new_block_end
-        # def new_block(): return -2, new_block_item
         def new_block(): return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
-
 
         def side_block_head(): return _(r'\|\|\|'), eol
         def side_block_content(): return -2, [common_line, space]
@@ -269,16 +220,23 @@ class MarkdownGrammar(WikiGrammar):
                                     blockquote, footnote_desc,
                                     paragraph
                                 ]
-        #def metacontent(): return -2, [ content ]
+
         def article(): return content
 
+        # Finish up _get_rules() by returning the peg_rules and the 'root'
         peg_rules = {}
         for k, v in ((x, y) for (x, y) in list(locals().items()) if isinstance(y, types.FunctionType)):
             peg_rules[k] = v
         return peg_rules, article
+    
+    def parse(self, text="\n", root=None, skipWS=False, **kwargs):
+        if text[-1] not in ('\r', '\n'):
+            text = text + '\n'
+        text = re.sub('\r\n|\r', '\n', text)
+        return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
 
-class MarkdownHtmlVisitor(WikiHtmlVisitor):
+class MarkdownHtmlVisitor(MDHTMLVisitor):
     op_maps = {
         '`'  :  ['<code>',          '</code>'],
         '*'  :  ['<em>',            '</em>'],
@@ -296,9 +254,12 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     def __init__(self, template=None, tag_class=None, grammar=None,
                     title='Untitled', block_callback=None, init_callback=None,
                     wiki_prefix='./', footnote_id=None, filename=None):
-        super(MarkdownHtmlVisitor, self).__init__(template, tag_class,
-                                                    grammar, title, block_callback, init_callback, filename=filename)
-
+        # super(MarkdownHtmlVisitor, self).__init__(template, tag_class,
+        #                                             grammar, title, block_callback, init_callback)
+        super().__init__(grammar, filename)
+        
+        self.title = title
+        self.tag_class = tag_class or self.__class__.tag_class
         self.refer_links = {}
         self.chars = list(self.op_maps.keys())
         self.chars.sort(key=lambda x: len(x), reverse=True)
@@ -306,6 +267,8 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         self.footnote_id = footnote_id or 1
         self.footnodes = []
         self.tocitems = []
+        self.block_callback = block_callback or {}
+        self.init_callback = init_callback
 
     def visit(self, nodes, root=False):
         if root:
@@ -591,10 +554,6 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         
         return ''
 
-    def template(self, node):
-        body = self.visit(node, True)
-        return self._template % {'title': self.title, 'body': body}
-
     def visit_direct_link(self, node):
         t = node.text
 
@@ -649,19 +608,19 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             cls = ''
             if width:
                 if width.isdigit():
-                    cls += ' width="%spx"' % width
+                    cls += f' width="{width}px"'
                 else:
-                    cls += ' width="%s"' % width
+                    cls += f' width="{width}"'
             if height:
                 if height.isdigit():
-                    cls += ' height="%spx"' % height
+                    cls += f' height="{height}px"'
                 else:
-                    cls += ' height="%s"' % height
+                    cls += f' height="{height}"'
 
             # TODO: Move to .tag
-            s = '<img src="images/%s" %s/>' % (filename, cls)
+            s = f'<img src="images/{filename}" {cls}/>'
             if align:
-                s = '<div class="float%s">%s</div>' % (align, s)
+                s = f'<div class="float{align}">{s}</div>'
             
             return s
 
@@ -688,7 +647,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             t = []
             for x in text:
                 if random.choice('01') == '1':
-                    t.append('&#x%X;' % ord(x))
+                    t.append(f'&#x{ord(x):X};')
                 else:
                     t.append(x)
             return ''.join(t)
@@ -818,7 +777,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         rel = rel or name
         cls = ' ' + _c.text.strip() if _c is not None else ''
 
-        return ('<span class="inline-tag%s" data-rel="' % cls) + rel + '">' + name + '</span>'
+        return f'<span class="inline-tag{cls}" data-rel="{rel}">{name}</span>'
 
     def visit_new_block(self, node):
         block = { 'new': True }
@@ -861,8 +820,8 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
     def visit_table2_begin(self, node):
         self.table_align = {}
         separator = node.find('table_separator')
-        for i, x in enumerate(list(separator.find_all('table_separator_line')) +
-                              list(separator.find_all('table_other'))):
+        for i, x in enumerate(  list(separator.find_all('table_separator_line')) +
+                                list(separator.find_all('table_other'))):
             t = x.text
             if t.endswith('|'):
                 t = t[:-1]
@@ -891,7 +850,7 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
                 text = x.text
                 if text.endswith('|'):
                     text = text[:-1]
-                s.append('<th>%s</th>' % self.process_line(text.strip()))
+                s.append(f'<th>{self.process_line(text.strip())}</th>')
         s.append('</tr>\n</thead>\n')
 
         return ''.join(s)
@@ -957,16 +916,16 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
         _id = self.footnote_id
         self.footnote_id += 1
 
-        return '<sup id="fnref-%s"><a href="#fn-%s" class="footnote-rel inner">%d</a></sup>' % (name, name, _id)
+        return f'<sup id="fnref-{name}"><a href="#fn-{name}" class="footnote-rel inner">{_id}</a></sup>'
 
     def visit_footnote_desc(self, node):
         name = node.find('footnote').text[2:-1]
         if name in self.footnodes:
-            raise Exception("The footnote %s is already existed" % name)
+            raise Exception(f"The footnote {name} is already existed")
 
         txt = self.visit(node.find('footnote_text')).rstrip()
         text = self.parse_text(txt, 'article')
-        n = {'name': '%s' % name, 'text': text}
+        n = {'name': name, 'text': text}
         self.footnodes.append(n)
 
         return ''
@@ -986,14 +945,24 @@ class MarkdownHtmlVisitor(WikiHtmlVisitor):
             s.append('<div class="footnotes"><ol>')
             for n in self.footnodes:
                 name = n['name']
-                s.append('<li id="fn-%s">' % (name, ))
+                s.append(f'<li id="fn-{name}">')
                 s.append(n['text'])
-                s.append(self.tag('a', '↩', href='#fnref-%s' %
-                                    name, _class='footnote-backref'))
+                s.append(self.tag('a', '↩', href=f'#fnref-{name}', _class='footnote-backref'))
                 s.append('</li>')
             s.append('</ol></div>')
         
         return '\n'.join(s)
+
+    def template(self, node):
+        if self.grammar is None:
+            raise ValueError("Grammar is not defined.")
+        body = self.visit(node, self.grammar.root)
+        if self.init_callback:
+            self.init_callback(self)
+        if self._template:
+            return self._template.format_map({'title':self.title, 'body':body})
+        else:
+            return body
 
 
 def parseHtml(text, template=None, tag_class=None, block_callback=None,
