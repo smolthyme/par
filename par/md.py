@@ -314,12 +314,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             case _:
                 level = 1
         
-        _id = _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
+        _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
         title = node.find('title_text').text.strip()
         self.tocitems.append((level, _id, title))
 
     def _get_title(self, node, level):
-        _id = _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
+        _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
         title = node.find('title_text').text.strip()
         anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
         _cls = [x.text[1:] for x in node.find_all('attr_def_class')]
