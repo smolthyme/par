@@ -162,7 +162,6 @@ class MarkdownGrammar(dict):
         def link_mailto()      : return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
         def link_wiki()        : return _(r'(\[\[)(.*?)((1)?\]\])')
 
-
         def inline_text()      : return _(r'[^\]\^]*')
         def inline_href()      : return _(r'[^\s\)]+')
         def inline_image_alt() : return _(r'!\['), inline_text, _(r'\]')
@@ -672,7 +671,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             for x in node.find_all(t):
                 s.append(f'<th>{self.process_line(x.text.rstrip("|").strip())}</th>')
         s.append('</tr>\n</thead>\n')
-
         return ''.join(s)
 
     def visit_table_separator(self, node):
@@ -689,7 +687,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             s.append(self.tag('td', self.parse_text(text.strip(), 'words'),
                 align=self.table_align.get(i, ''), newline=False, enclose=2))
         s.append('</tr>\n')
-
         return ''.join(s)
     
     def visit_directive(self, node):
@@ -714,7 +711,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         name = node.text[2:-1]
         _id = self.footnote_id
         self.footnote_id += 1
-
         return f'<sup id="fnref-{name}"><a href="#fn-{name}" class="footnote-rel inner">{_id}</a></sup>'
 
     def visit_footnote_desc(self, node):
@@ -738,14 +734,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         s = []
         if len(self.footnodes) > 0:
             s.append('<div class="footnotes"><ol>')
-            for n in self.footnodes:
-                name = n['name']
+            for note in self.footnodes:
+                name = note['name']
                 s.append(f'<li id="fn-{name}">')
-                s.append(n['text'])
+                s.append(note['text'])
                 s.append(self.tag('a', '↩', href=f'#fnref-{name}', _class='footnote-backref'))
                 s.append('</li>')
             s.append('</ol></div>')
-        
         return '\n'.join(s)
 
     def template(self, node):
