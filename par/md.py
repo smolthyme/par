@@ -17,36 +17,36 @@ class MarkdownGrammar(dict):
         #  0 = ? = Optional ; -1 = * = Zero or more ; -2 = + = One or more ; n = n matches
 
         ## basic
-        def ws():       return _(r'\s+')
-        def space():    return _(r'[ \t]+')
-        def eol():      return _(r'\r\n|\r|\n')
-        def separator():return _(r'[\.,!?$ \t\^]')
-        def blankline():return 0, space, eol
+        def ws()               : return _(r'\s+')
+        def space()            : return _(r'[ \t]+')
+        def eol()              : return _(r'\r\n|\r|\n')
+        def separator()        : return _(r'[\.,!?$ \t\^]')
+        def blankline()        : return 0, space, eol
 
-        def literal():  return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
-        def literal1(): return _(r"u?r?'[^'\\]*(?:\\.[^'\\]*)*'", re.I|re.DOTALL)
+        def literal()          : return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
+        def literal1()         : return _(r"u?r?'[^'\\]*(?:\\.[^'\\]*)*'", re.I|re.DOTALL)
 
-        def htmlentity(): return _(r'&\w+;')
-        def longdash():   return _(r"--\B")
+        def htmlentity()       : return _(r'&\w+;')
+        def longdash()         : return _(r"--\B")
 
-        def escape_string():    return _(r'\\'), _(r'.')
-        def string():           return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
-        def code_string_short():return _(r'`'), _(r'[^`]*'), _(r'`')
-        def code_string():      return _(r'``'), _(r'.+(?=``)'), _(r'``')
-        def default_string():   return _(r'\S+')
+        def escape_string()    : return _(r'\\'), _(r'.')
+        def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
+        def code_string_short(): return _(r'`'), _(r'[^`]*'), _(r'`')
+        def code_string()      : return _(r'``'), _(r'.+(?=``)'), _(r'``')
+        def default_string()   : return _(r'\S+')
 
         ## paragraph
-        #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
-        def op_string(): return _(r'\*{1,3}|_{1,3}|~~|\^|,,')
-        def op(): return [(-1, longdash, separator, op_string), (op_string, -1, separator)]
+        #def simple_op()       : return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
+        def op_string()        : return _(r'\*{1,3}|_{1,3}|~~|\^|,,')
+        def op()               : return [(-1, longdash, separator, op_string), (op_string, -1, separator)]
 
         ## html block
-        def html_block(): return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL), -2, blankline
+        def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL), -2, blankline
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup).*?>.*?<(/\1)>|<(img|br).*?/>', re.I|re.DOTALL)
 
-        def star_rating(): return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
+        def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
-        def word(): return [ # Tries to show parse-order
+        def word()             : return [ # Tries to show parse-order
                 escape_string, 
                 code_string, code_string_short,
                 html_inline_block, inline_tag,
@@ -55,166 +55,162 @@ class MarkdownGrammar(dict):
                 string, default_string
             ]
         
-        def words(): return [op, word], -1, [op, space, word]
-        #def words(): return -1, [word, space]
-        def line(): return 0, space, words, eol
-        def common_text(): return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
-        def common_line(): return common_text, eol 
+        def words()            : return [op, word], -1, [op, space, word]
+        #def words()           : return -1, [word, space]
+        def line()             : return 0, space, words, eol
+        def common_text()      : return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
+        def common_line()      : return common_text, eol
 
 
-        def blanklines(): return -2, blankline
-        def paragraph(): return line, -1, (0, space, common_line), -1, blanklines
+        def blanklines()       : return -2, blankline
+        def paragraph()        : return line, -1, (0, space, common_line), -1, blanklines
         
 
-        def directive_name(): return _(r'\w+')
-        def directive_title(): return _(r'[^\n\r]+')
-        def directive(): return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
+        def directive_name()   : return _(r'\w+')
+        def directive_title()  : return _(r'[^\n\r]+')
+        def directive()        : return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
     
         ## footnote
-        def footnote(): return _(r'\[\^\w+\]')
-        def footnote_text(): return list_first_para, -1, [list_content_indent_lines, list_content_lines]
-        def footnote_desc(): return footnote, _(r':'), footnote_text
+        def footnote()         : return _(r'\[\^\w+\]')
+        def footnote_text()    : return list_first_para, -1, [list_indent_lines, list_lines]
+        def footnote_desc()    : return footnote, _(r':'), footnote_text
     
         ## custom inline tag
-        def inline_tag_name():  return _(r'[^\}:]*')
-        def inline_tag_index(): return _(r'[^\]]*')
-        def inline_tag_class(): return _(r'[^\}:]*')
-        def inline_tag(): return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
+        def inline_tag_name()  : return _(r'[^\}:]*')
+        def inline_tag_index() : return _(r'[^\]]*')
+        def inline_tag_class() : return _(r'[^\}:]*')
+        def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
     
-        ## hr
-        # Note: is something like (?:([-_\*])[ \t]*\1){3,} slower?
-        def hr1(): return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
-        def hr2(): return _(r'\-[ \t]*\-[ \t]*\-[ \t]*[\- \t]*'), -2, blankline
-        def hr3(): return _(r'\_[ \t]*\_[ \t]*\_[ \t]*[\_ \t]*'), -2, blankline
-        def hr(): return [hr1, hr2, hr3]
+        ## hr  # Note: is something like (?:([-_\*])[ \t]*\1){3,} slower?
+        def hr1()              : return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
+        def hr2()              : return _(r'\-[ \t]*\-[ \t]*\-[ \t]*[\- \t]*'), -2, blankline
+        def hr3()              : return _(r'\_[ \t]*\_[ \t]*\_[ \t]*[\_ \t]*'), -2, blankline
+        def hr()               : return [hr1, hr2, hr3]
 
         ## pre
-        def indent_line_text(): return _(r'.+')
-        def indent_line(): return _(r'[ ]{4}|\t'), indent_line_text, eol
-        def indent_block(): return -2, [indent_line, blankline]
-        def pre_lang(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
-        def pre_text1():    return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
-        def pre_text2():    return _(r'.+?(?=</code>)', re.M|re.DOTALL)
-        def pre_extra1():   return _(r'```|~{3,}'), 0, pre_lang, 0, space, eol, pre_text1, _(r'```|~{3,}'), -2, blankline
-        def pre_extra2():   return _(r'<code>'), 0, pre_lang, 0, space, eol, pre_text2, _(r'</code>'), -2, blankline
-        def pre(): return [indent_block, pre_extra1, pre_extra2]
+        def indent_line_text() : return _(r'.+')
+        def indent_line()      : return _(r'[ ]{4}|\t'), indent_line_text, eol
+        def indent_block()     : return -2, [indent_line, blankline]
+        def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
+        def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
+        def pre_text2()        : return _(r'.+?(?=</code>)', re.M|re.DOTALL)
+        def pre_extra1()       : return _(r'```|~{3,}'), 0, pre_lang, 0, space, eol, pre_text1, _(r'```|~{3,}'), -2, blankline
+        def pre_extra2()       : return _(r'<code>'), 0, pre_lang, 0, space, eol, pre_text2, _(r'</code>'), -2, blankline
+        def pre()              : return [indent_block, pre_extra1, pre_extra2]
     
         ## class and id definition
-        def attr_def_id(): return _(r'#[^\s\}]+')
-        def attr_def_class(): return _(r'\.[^\s\}]+')
-        def attr_def_set(): return [attr_def_id, attr_def_class], -1, (space, [attr_def_id, attr_def_class])
-        def attr_def(): return _(r'\{'), attr_def_set, _(r'\}')
+        def attr_def_id()      : return _(r'#[^\s\}]+')
+        def attr_def_class()   : return _(r'\.[^\s\}]+')
+        def attr_def_set()     : return [attr_def_id, attr_def_class], -1, (space, [attr_def_id, attr_def_class])
+        def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
         
         ## subject
-        def setext_title1(): return title_text, 0, space, 0, attr_def, blankline, _(r'={1,}'), -2, blankline
-        def setext_title2(): return title_text, 0, space, 0, attr_def, blankline, _(r'-{1,}'), -2, blankline
-        def title_text(): return _(r'.+?(?= #| \{#| \{\.)|.+', re.U)
-        def atx_title1(): return _(r'# '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def atx_title2(): return _(r'## '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title1(): return [atx_title1, setext_title1]
-        def title2(): return [atx_title2, setext_title2]
-        def title3(): return _(r'### '),    title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title4(): return _(r'#### '),   title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title5(): return _(r'##### '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title6(): return _(r'###### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title(): return [title6, title5, title4, title3, title2, title1]
+        def setext_title1()    : return title_text, 0, space, 0, attr_def, blankline, _(r'={1,}'), -2, blankline
+        def setext_title2()    : return title_text, 0, space, 0, attr_def, blankline, _(r'-{1,}'), -2, blankline
+        def title_text()       : return _(r'.+?(?= #| \{#| \{\.)|.+', re.U)
+        def atx_title1()       : return _(r'# '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def atx_title2()       : return _(r'## '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title1()           : return [atx_title1, setext_title1]
+        def title2()           : return [atx_title2, setext_title2]
+        def title3()           : return _(r'### '),    title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title4()           : return _(r'#### '),   title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title5()           : return _(r'##### '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title6()           : return _(r'###### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
+        def title()            : return [title6, title5, title4, title3, title2, title1]
     
         ## table
-        def table_column(): return _(r'.+?(?=\|\|)'), _(r'\|\|')
-        def table_line():   return _(r'\|\|'), -2, table_column, eol
-        def table(): return -2, table_line, -1, blankline
-        def table_td(): return _(r'[^\|\r\n]*\|')
-        def table_separator_line(): return _(r'\s*:?-+:?\s*\|')
-        def table_other(): return _(r'[^\r\n]+')
-        def table_head(): return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
-        def table_separator(): return 0, _(r'\|'), -2, table_separator_line, -1, table_other, blankline
-        def table_body_line(): return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
-        def table_body(): return -2, table_body_line
-        def table2(): return table_head, table_separator, table_body
+        def table_column()     : return _(r'.+?(?=\|\|)'), _(r'\|\|')
+        def table_line()       : return _(r'\|\|'), -2, table_column, eol
+        def table()            : return -2, table_line, -1, blankline
+        def table_td()         : return _(r'[^\|\r\n]*\|')
+        def table_horiz_line() : return _(r'\s*:?-+:?\s*\|')
+        def table_other()      : return _(r'[^\r\n]+')
+        def table_head()       : return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
+        def table_separator()  : return 0, _(r'\|'), -2, table_horiz_line, -1, table_other, blankline
+        def table_body_line()  : return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
+        def table_body()       : return -2, table_body_line
+        def table2()           : return table_head, table_separator, table_body
         
         ## definition lists
-        def dl_dt_1(): return _(r'[^ \t\r\n]+.*--'), -2, blankline
-        def dl_dd_1(): return -1, [list_content_indent_lines, blankline]
-        def dl_dt_2(): return _(r'[^ \t\r\n]+.*'), -1, blankline
-        def dl_dd_2(): return _(r':'), _(r' {1,3}'), list_rest_of_line, -1, [list_content_indent_lines, blankline]
-        def dl_line_1(): return dl_dt_1, dl_dd_1
-        def dl_line_2(): return dl_dt_2, -2, dl_dd_2
-        def dl(): return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
+        def dl_dt_1()          : return _(r'[^ \t\r\n]+.*--'), -2, blankline
+        def dl_dd_1()          : return -1, [list_indent_lines, blankline]
+        def dl_dt_2()          : return _(r'[^ \t\r\n]+.*'), -1, blankline
+        def dl_dd_2()          : return _(r':'), _(r' {1,3}'), list_rest_of_line, -1, [list_indent_lines, blankline]
+        def dl_line_1()        : return dl_dt_1, dl_dd_1
+        def dl_line_2()        : return dl_dt_2, -2, dl_dd_2
+        def dl()               : return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
     
-        def block_kwargs_key():     return _(r'[^=,\)\n]+')
-        def block_kwargs_value():   return _(r'[^\),\n]+')
-        def block_kwargs(): return block_kwargs_key, 0, (_(r'='), block_kwargs_value)
+        def block_kwargs_key() : return _(r'[^=,\)\n]+')
+        def block_kwargs_val() : return _(r'[^\),\n]+')
+        def block_kwargs()     : return block_kwargs_key, 0, (_(r'='), block_kwargs_val)
 
-        def new_block(): return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
+        def new_block()        : return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
 
-        def side_block_head(): return _(r'\|\|\|'), eol
-        def side_block_content(): return -2, [common_line, space]
-        def side_block_item():  return side_block_head, -2, side_block_content
-        def side_block(): return -2, side_block_item
+        def side_block_head()  : return _(r'\|\|\|'), eol
+        def side_block_cont()  : return -2, [common_line, space]
+        def side_block_item()  : return side_block_head, -2, side_block_cont
+        def side_block()       : return -2, side_block_item
 
         ## lists
-        def check_radio(): return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
+        def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
         def list_rest_of_line(): return _(r'.+'), eol
-        def list_first_para(): return 0, check_radio, list_rest_of_line, -1, (0, space, common_line), -1, blanklines
-        # def list_content_text(): return list_rest_of_line, -1, [list_content_norm_line, blankline]
-        def list_content_line(): return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
-        def list_content_lines(): return list_content_norm_line, -1, [list_content_indent_lines, blankline]
-        def list_content_indent_line(): return _(r' {4}|\t'), list_rest_of_line
-        def list_content_norm_line(): return _(r' {1,3}'), common_line, -1, (0, space, common_line), -1, blanklines
-        def list_content_indent_lines(): return list_content_indent_line, -1, [list_content_indent_line, list_content_line], -1, blanklines
-        def list_content(): return list_first_para, -1, [list_content_indent_lines, list_content_lines]
-        def bullet_list_item(): return 0, _(r' {1,3}'), _(r'\*|\+|-'), space, list_content
-        def number_list_item(): return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
-        def list_item(): return -2, [bullet_list_item, number_list_item]
-        def lists(): return -2, list_item, -1, blankline
+        def list_first_para()  : return 0, check_radio, list_rest_of_line, -1, (0, space, common_line), -1, blanklines
+        def list_line()        : return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
+        def list_lines()       : return list_norm_line, -1, [list_indent_lines, blankline]
+        def list_indent_line() : return _(r' {4}|\t'), list_rest_of_line
+        def list_norm_line()   : return _(r' {1,3}'), common_line, -1, (0, space, common_line), -1, blanklines
+        def list_indent_lines(): return list_indent_line, -1, [list_indent_line, list_line], -1, blanklines
+        def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines]
+        def bullet_list_item() : return 0, _(r' {1,3}'), _(r'\*|\+|-'), space, list_content
+        def number_list_item() : return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
+        def list_item()        : return -2, [bullet_list_item, number_list_item]
+        def lists()            : return -2, list_item, -1, blankline
 
         ## quote
-        def quote_text():       return _(r'[^\r\n]*'), eol
-        def quote_blank_line(): return _(r'>[ \t]*'), eol
-        def quote_line():       return _(r'> (?!- )'), quote_text
-        def quote_name():       return _(r'[^\r\n\(\)\d]*')
-        def quote_date():       return _(r'[^\r\n\)]+')
-        def quote_attr():       return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), eol 
-        def quote_lines(): return [quote_blank_line, quote_line]
-        def blockquote(): return -2, quote_lines, 0, quote_attr, -1, blankline
+        def quote_text()       : return _(r'[^\r\n]*'), eol
+        def quote_blank_line() : return _(r'>[ \t]*'), eol
+        def quote_line()       : return _(r'> (?!- )'), quote_text
+        def quote_name()       : return _(r'[^\r\n\(\)\d]*')
+        def quote_date()       : return _(r'[^\r\n\)]+')
+        def quote_attr()       : return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), eol
+        def quote_lines()      : return [quote_blank_line, quote_line]
+        def blockquote()       : return -2, quote_lines, 0, quote_attr, -1, blankline
 
         ## links
-        # def protocal(): return [_(r'http://'), _(r'https://'), _(r'ftp://')]
-        def direct_link():  return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
-        def image_link():   return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)', re.I)
-        def mailto():       return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
-        def wiki_link():    return _(r'(\[\[)(.*?)((1)?\]\])')
+        def link_raw()         : return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
+        def link_image_raw()   : return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)', re.I)
+        def link_mailto()      : return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
+        def link_wiki()        : return _(r'(\[\[)(.*?)((1)?\]\])')
 
-        # def inline_image_title(): return literal
-        def inline_text():      return _(r'[^\]\^]*')
-        def inline_image_alt(): return _(r'!\['), inline_text, _(r'\]')
-        def inline_href():      return _(r'[^\s\)]+')
-        def inline_image_link():return _(r'\('), inline_href, 0, space, 0, inline_link_title, 0, space, _(r'\)')
-        def inline_image(): return inline_image_alt, inline_image_link
 
-        def refer_image_alt():  return _(r'!\['), inline_text, _(r'\]')
-        def refer_image_refer():return _(r'[^\]]*')
-        def refer_image():      return refer_image_alt, 0, space, _(r'\['), refer_image_refer, _(r'\]')
-        # def refer_image_title(): return [literal, literal1, r'\(.*?\)']
+        def inline_text()      : return _(r'[^\]\^]*')
+        def inline_href()      : return _(r'[^\s\)]+')
+        def inline_image_alt() : return _(r'!\['), inline_text, _(r'\]')
+        def inline_image_link(): return _(r'\('), inline_href, 0, space, 0, link_inline_title, 0, space, _(r'\)')
+        def inline_image()     : return inline_image_alt, inline_image_link
 
-        def inline_link_caption(): return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
-        def inline_link_title(): return literal
-        def inline_link_link(): return _(r'\('), _(r'[^\s\)]+'), 0, space, 0, inline_link_title, 0, space, _(r'\)')
-        def inline_link(): return inline_link_caption, inline_link_link
+        def image_refer_alt()  : return _(r'!\['), inline_text, _(r'\]')
+        def image_refer_refer(): return _(r'[^\]]*')
+        def image_refer()      : return image_refer_alt, 0, space, _(r'\['), image_refer_refer, _(r'\]')
 
-        def refer_link_caption(): return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
-        def refer_link_refer(): return _(r'[^\]]*')
-        def refer_link(): return refer_link_caption, 0, space, _(r'\['), refer_link_refer, _(r'\]')
-        def refer_link_link(): return 0, _(r'(<)?(\S+)(?(1)>)')
-        def refer_link_title(): return [_(r'\([^\)]*\)'), literal, literal1]
-        def refer_link_note(): return 0, _(r' {1,3}'), inline_link_caption, _(
-            r':'), space, refer_link_link, 0, (ws, refer_link_title), -2, blankline
+        def link_inline_capt() : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
+        def link_inline_title(): return literal
+        def link_inline_link() : return _(r'\('), _(r'[^\s\)]+'), 0, space, 0, link_inline_title, 0, space, _(r'\)')
+        def link_inline()      : return link_inline_capt, link_inline_link
+
+        def link_refer_capt()  : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
+        def link_refer_refer() : return _(r'[^\]]*')
+        def link_refer()       : return link_refer_capt, 0, space, _(r'\['), link_refer_refer, _(r'\]')
+        def link_refer_link()  : return 0, _(r'(<)?(\S+)(?(1)>)')
+        def link_refer_title() : return [_(r'\([^\)]*\)'), literal, literal1]
+        def link_refer_note()  : return 0, _(r' {1,3}'), link_inline_capt, _(
+            r':'), space, link_refer_link, 0, (ws, link_refer_title), -2, blankline
         
-        def link(): return [inline_image, refer_image, inline_link, refer_link, image_link, direct_link, wiki_link, mailto], -1, space
+        def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto], -1, space
 
         ## article
         def content(): return \
-            -2, [   blanklines, hr, title, refer_link_note, directive,
+            -2, [   blanklines, hr, title, link_refer_note, directive,
                     pre, html_block,
                     side_block, new_block,
                     table, table2,
@@ -257,15 +253,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     title='Untitled', block_callback=None, init_callback=None, footnote_id=None, filename=None):
         super().__init__(grammar, filename)
         
-        self.title = title
-        self.tag_class = tag_class or self.__class__.tag_class
-        self.chars = sorted(self.op_maps.keys(), key=lambda x: len(x), reverse=True)
+        self.title       = title
+        self.tag_class   = tag_class or self.__class__.tag_class
+        self.chars       = sorted(self.op_maps.keys(), key      =lambda x: len(x), reverse=True)
         self.footnote_id = footnote_id or 1
-        self.footnodes = []
-        self.tocitems = []
-        self.refer_links = {}
+        self.footnodes   = []
+        self.tocitems    = []
+        self.link_refers = {}
         self.block_callback = block_callback or {}
-        self.init_callback = init_callback
+        self.init_callback  = init_callback
 
     def process_line(self, line):
         pos = []; buf = []
@@ -295,10 +291,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit(self, nodes, root=False):
         if root:
-            (self.visit_refer_link_note(obj) for obj in nodes[0].find_all('refer_link_note'))
+            [self.visit_link_refer_note(obj) for obj in nodes[0].find_all('link_refer_note')]
 
             # Collect titles for use in ToC
-            (self._alt_title(onk) for onk in nodes[0].find_all('title'))
+            [self._alt_title(onk) for onk in nodes[0].find_all('title')]
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
 
@@ -311,7 +307,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         v = self.__class__('', self.tag_class, g, block_callback=self.block_callback,
                         init_callback=self.init_callback, filename=self.filename,
                         footnote_id=self.footnote_id)
-        v.refer_links = self.refer_links
+        v.link_refers = self.link_refers
         r = v.visit(result)
         self.footnote_id = v.footnote_id
         
@@ -408,7 +404,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if (lang := node.find('pre_lang')):
             for n in lang.find_all('block_kwargs'):
                 key = n.find('block_kwargs_key').text.strip()
-                v_node = n.find('block_kwargs_value')
+                v_node = n.find('block_kwargs_val')
                 val = v_node.text.strip() if v_node else None
 
                 if key == 'lang':
@@ -425,7 +421,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_pre_extra2(self, node):
         return node.find('pre_text2').text.rstrip()
 
-    def visit_inline_link(self, node):
+    def visit_link_inline(self, node):
         kwargs = {'href': node[1][1]}
         if len(node[1]) > 3:
             kwargs['title'] = node[1][3].text[1:-1]
@@ -445,7 +441,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
         src = "images/" + location  # later may need to split media so bbl
         kwargs['src'] = src
-        if ( title := node.find('inline_link_title') ):
+        if ( title := node.find('link_inline_title') ):
             kwargs['title'] = title.text[1:-1]
         if ( alt := node.find('inline_text') ):
             kwargs['alt'] = alt.text
@@ -461,39 +457,39 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
         return self.tag('img', enclose=1, **kwargs)
 
-    def visit_refer_link(self, node):
-        caption = node.find('refer_link_caption')[1]
-        key = node.find('refer_link_refer')
+    def visit_link_refer(self, node):
+        caption = node.find('link_refer_capt')[1]
+        key = node.find('link_refer_refer')
         key = key.text if key else caption
         
-        return self.tag('a', caption, **self.refer_links.get(key.upper(), {}))
+        return self.tag('a', caption, **self.link_refers.get(key.upper(), {}))
 
-    def visit_refer_image(self, node):
-        alt = node.find('refer_image_alt')
+    def visit_image_refer(self, node):
+        alt = node.find('image_refer_alt')
         alt_text = alt.find('inline_text').text if alt else ''
 
-        key = node.find('refer_image_refer')
+        key = node.find('image_refer_refer')
         key_text = key.text if key else alt_text
 
-        d = self.refer_links.get(key_text.upper(), {})
+        d = self.link_refers.get(key_text.upper(), {})
         kwargs = {'src': d.get('href', ''), 'title': d.get('title', '')}
 
         return self.tag('img', enclose=1, **kwargs)
 
-    def visit_refer_link_note(self, node):
-        key = node.find('inline_link_caption').text[1:-1].upper()
-        self.refer_links[key] = {'href': node.find('refer_link_link').text}
+    def visit_link_refer_note(self, node):
+        key = node.find('link_inline_capt').text[1:-1].upper()
+        self.link_refers[key] = {'href': node.find('link_refer_link').text}
 
-        if (r := node.find('refer_link_title')):
-            self.refer_links[key]['title'] = r.text[1:-1]
+        if (r := node.find('link_refer_title')):
+            self.link_refers[key]['title'] = r.text[1:-1]
         
         return ''
 
-    def visit_direct_link(self, node):
+    def visit_link_raw(self, node):
         href = node.text.strip('<>')
         return self.tag('a', href, newline=False, href=href)
 
-    def visit_wiki_link(self, node):
+    def visit_link_wiki(self, node):
         """
         [[(type:)name(#anchor)(|alter name)]]
         type = 'wiki', or 'image'
@@ -558,7 +554,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         href = node.text.strip('<>')
         return self.tag('img', src=f"images/{href}", enclose=1)
 
-    def visit_mailto(self, node):
+    def visit_link_mailto(self, node):
         import random
         href = node.text[1:-1]
         if href.startswith('mailto:'):
@@ -589,10 +585,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.lists = []
         return ''
 
-    def visit_list_content_line(self, node):
+    def visit_list_line(self, node):
         return node.text.strip()
 
-    def visit_list_content_indent_line(self, node):
+    def visit_list_indent_line(self, node):
         return node.find('list_rest_of_line').text
 
     def visit_bullet_list_item(self, node):
@@ -701,7 +697,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             kwargs = {}
             for node in result[0].find_all('block_kwargs'):
                 k = node.find('block_kwargs_key').text.strip()
-                v = node.find('block_kwargs_value')
+                v = node.find('block_kwargs_val')
                 if v:
                     v = v.text.strip()
                 kwargs[k] = v
@@ -716,7 +712,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_side_block_item(self, node):
         content = [self.parse_text(thing.text, 'content') 
-                for thing in node.find('side_block_content')]
+                for thing in node.find('side_block_cont')]
         return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz") # node[kwargs]
 
 
@@ -727,7 +723,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_table2_begin(self, node):
         self.table_align = {}
         separator = node.find('table_separator')
-        for i, x in enumerate(  list(separator.find_all('table_separator_line')) +
+        for i, x in enumerate(  list(separator.find_all('table_horiz_line')) +
                                 list(separator.find_all('table_other'))):
             t = x.text
             if t.endswith('|'):
