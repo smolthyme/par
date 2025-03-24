@@ -5,7 +5,7 @@
 import re
 import sys
 
-from typing import Union, Pattern, Callable, List, Tuple
+from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional
 from dataclasses import dataclass
 
 class keyword(str): pass
@@ -48,15 +48,18 @@ ParsePattern = Union[
 ]
 
 class Symbol(list):
-    def __init__(self, name: str, what):
+    def __init__(self, name: str, what: Any):
         self.__name__ = name
         self.what = what
         self.extend(what)
-    def __call__(self):
+    
+    def __call__(self) -> Any:
         return self.what
+    
     def __repr__(self) -> str:
         return f"Symbol<{self.__name__}>: {self.what}"
-    def render(self, index=0) -> str:
+    
+    def render(self, index: int = 0) -> str:
         indent = f"{' ' * 2 * index}"
         if isinstance(self.what, str):
             return f"{indent}{self.__name__}:{self.what}\n"
@@ -66,25 +69,30 @@ class Symbol(list):
             for x in self.what
         )
         return ''.join(buf)
-    def find(self, name: str):
+    
+    def find(self, name: str) -> Optional['Symbol']:
         for x in self.what:
             if not isinstance(x, str):
                 if x.__name__ == name:
                     return x
                 elif (r := x.find(name)):
                     return r
-    def find_all(self, name: str):
+        return None
+    
+    def find_all(self, name: str) -> Generator['Symbol', None, None]:
         for x in self.what:
             if not isinstance(x, str):
                 if x.__name__ == name:
                     yield x
                 yield from x.find_all(name)
-    def find_all_here(self, name: str):
+    
+    def find_all_here(self, name: str) -> Generator['Symbol', None, None]:
         yield from (x for x in self.what if not isinstance(x, str) and x.__name__ == name)
     
     @property
     def text(self) -> str:
         return ''.join(node if isinstance(node, str) else node.text for node in self.what)
+
 
 word_regex = re.compile(r"\w+")
 rest_regex = re.compile(r".*")
