@@ -320,7 +320,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         title = (title_node := node.find('title_text')) and title_node.text.strip()
         self.tocitems.append((level, _id, title))
 
-    def _get_title(self, node: Symbol, level):
+    def _get_title(self, node: Symbol, level: int):
         _id_node = node.find('attr_def_id')
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
         title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
@@ -352,11 +352,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         cwargs = {}; kwargs = {}
         if (lang := node.find('pre_lang')):
             for n in lang.find_all('block_kwargs'):
-                if (n := n.find('block_kwargs_key')):
-                    key = n.text.strip()
+                if (k := n.find('block_kwargs_key')):
+                    key = k.text.strip()
                     val = v_node.text.strip() if (v_node := n.find('block_kwargs_val')) else None
 
-                    if key == 'lang':
+                    if key == 'lang' or val is None:
                         cwargs['class'] = 'language-' + (val or key)
                     else:
                         kwargs[key] = val or 'language-' + key
@@ -427,11 +427,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('img', enclose=1, **kwargs)
 
     def visit_link_refer_note(self, node: Symbol):
-        key = noder.text.strip("][").upper() if (noder :=node.find('link_inline_capt')) else ''
+        key = noder.text.strip("][").upper() if (noder := node.find('link_inline_capt')) else ''
         self.link_refers[key] = {'href': noder.text if (noder := node.find('link_refer_link')) else ''}
 
         if (r := node.find('link_refer_title')):
-            self.link_refers[key]['title'] = r.text.strip(")(")
+            self.link_refers[key]['title'] = r.text.strip(r")(\"'")
         
         return ''
 
@@ -706,18 +706,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         _id = self.footnote_id
         self.footnote_id += 1
         return f'<sup id="fnref-{name}"><a href="#fn-{name}" class="footnote-rel inner">{_id}</a></sup>'
-
-    def _get_title(self, node: Symbol, level):
-        _id_node = node.find('attr_def_id')
-        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
-        
-        title_node = node.find('title_text')
-        title = title_node.text.strip() if title_node else "!Bad title!"
-        
-        anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
-        _cls = [x.text[1:] for x in node.find_all('attr_def_class') if x.text]
-
-        return self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=' '.join(_cls))
 
     def visit_star_rating(self, node: Symbol):
         r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
