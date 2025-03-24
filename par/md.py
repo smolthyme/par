@@ -95,9 +95,9 @@ class MarkdownGrammar(dict):
         def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
         
         ## titles / subject
-        def title_text()       : return _(r'.+?(?= #| \{#| \{\.)|.+', re.U)
+        def title_text()       : return _(r'[^\]\[\n#\{\}]+', re.U)
         def hashes()           : return _(r'#{1,6}')
-        def atx_title()        : return hashes, title_text, 0, space, 0, hashes, 0, attr_def, -2, blankline
+        def atx_title()        : return hashes, 0, space, title_text, 0, space, 0, hashes, 0, space, 0, attr_def, -2, blankline
         def setext_underline() : return _(r'[ \t]*[-=]+[ \t]*')
         def setext_title()     : return title_text, 0, space, 0, attr_def, blankline, setext_underline, -2, blankline
         def title()            : return [atx_title, setext_title]
@@ -324,7 +324,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         _id_node = node.find('attr_def_id')
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
         title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
-        anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
+        anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
         _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
 
         return self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
@@ -438,7 +438,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_link_raw(self, node: Symbol):
         href = node.text.strip('<>')
-        return self.tag('a', href, newline=False, href=href)
+        return self.tag('a', href, href=href)
 
     def visit_link_wiki(self, node: Symbol):
         """ # TODO: Needs a resource store to validate, path etc.
@@ -447,18 +447,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         type, begin = ('image', 6) if t[:6].lower() == 'image:'\
                 else (  'wiki', 5) if t[:5].lower() == 'wiki:' else ('wiki', 0)
         t = t[begin:]
+        filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
         
         if type == 'wiki':
             _v,  caption = ( t.split('|', 1) + [''])[:2]
             name, anchor = (_v.split('#', 1) + [''])[:2]
             return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html") if name else self.tag('a', caption, href=anchor)
         
-        filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
+        cls = []
+        if width:
+            cls.append( f'width="{width}px"'  if width.isdigit()  else f'width="{width}"')
+        if height:
+            cls.append(f'height="{height}px"' if height.isdigit() else f'height="{height}"')
         
-        cls  = f' width="{width}px"'   if  width.isdigit() else f' width="{width}"'   if width  else ''
-        cls += f' height="{height}px"' if height.isdigit() else f' height="{height}"' if height else ''
-        _str = f'<img src="images/{filename}" {cls}/>'
-        return f'<div class="float{align}">{_str}</div>' if align else _str
+        img_tag = self.tag('img', '', attrs=' '.join(cls), src=f"images/{filename}", enclose=1)
+        return    self.tag('div', img_tag, _class=f"float{align}", enclose=1) if align else img_tag
 
     def visit_image_link(self, node: Symbol):
         href = node.text.strip('<>')
@@ -486,9 +489,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         attrib = node.find("quote_name")
         atrdat = node.find("quote_date")
         if attrib:
-            result = result + f"&mdash; <i class='quote-attrib'>{attrib.text}</i>"
+            result = f"{result} &mdash; {self.tag('i', attrib.text, _class='quote-attrib')}"
         if atrdat:
-            result = result + f"<span class='quote-timeplace'>(<span class='text-date'>{atrdat.text}</span>)</span>"
+            result = result + self.tag('span', self.tag("span", atrdat.text, _class='text-date'), _class='quote-timeplace')
         return self.tag('blockquote', result)
 
     def visit_lists_begin(self, node: Symbol):
@@ -529,15 +532,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     buf.append(self.tag('li', process_node(_node)))
                 else:
                     if parent:
-                        buf.append(f'</{parent}>\n')
+                        buf.append(self.tag(parent, enclose=3))
                     parent = 'ul' if _type == 'b' else 'ol'
                     buf.append(self.tag(parent))
                     buf.append(self.tag('li', process_node(_node)))
                     old = _type
             if len(buf) > 0 and parent:
-                buf.append(f'</{parent}>\n')
+                buf.append(self.tag(parent, enclose=3))
+            
             return ''.join(buf)
-
         return create_list(self.lists)
 
     def visit_dl_begin(self, node: Symbol):
@@ -612,7 +615,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             for i, x in enumerate(list(separator.find_all('table_horiz_line')) + list(separator.find_all('table_other'))):
                 t = x.text.rstrip('|').strip()
                 self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
-        return self.tag('table', newline=True)
+        return self.tag('table')
 
     def visit_table2_end(self, node: Symbol):
         return '</table>\n'
@@ -633,27 +636,29 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_table_body_line(self, node: Symbol):
         nodes = list(node.find_all('table_td')) + list(node.find_all('table_other'))
-        s = ['<tr>']
+        s = [self.tag('tr', newline=False)]
         for i, x in enumerate(nodes):
             text = x.text.strip("| ")
             s.append(self.tag('td', self.parse_text(text, 'words'),
                 align=self.table_align.get(i, ''), newline=False, enclose=2))
-        s.append('</tr>\n')
+        s.append(self.tag('tr', enclose=3))
         return ''.join(s)
     
     def visit_directive(self, node: Symbol):
         if (name := node.find('directive_name')) and name in ['toc', 'contents'] and self.tocitems:
-            toc = ['<section class="toc">\n']
-            hi = 0; count = 1
+            toc = [self.tag('section', _class='toc')]
+            count = 1; hi = 0
+
             for lvl, anchor, title in self.tocitems:
                 if lvl > hi:
-                    toc.append("<ul>\n")
+                    toc.append(self.tag('ul'))
                 elif lvl < hi:
-                    toc.append("</ul>\n")
+                    toc.append(self.tag('ul', enclose=3))
                 hi = lvl
-                toc.append(f'<li><a href="#toc_{count}">{title}</a></li>\n')
+                toc.append(self.tag('li', self.tag('a', title, href=f"#toc_{count}")))
                 count += 1
-            toc.append("</ul>\n</section>")
+            toc.append(self.tag('ul', enclose=3))
+            toc.append(self.tag('section', enclose=3))
             # Since we visited these before generating, reset the dict to make sure headings get correct id's
             self.titles_ids = {}
             return ''.join(toc)
@@ -675,14 +680,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def __end__(self):
         s = []
         if len(self.footnodes) > 0:
-            s.append('<div class="footnotes"><ol>')
+            s.append(self.tag('div', _class='footnotes'))
+            s.append(self.tag('ol'))
             for note in self.footnodes:
                 name = note['name']
-                s.append(f'<li id="fn-{name}">')
+                s.append(self.tag('li', id=f"fn-{name}"))
                 s.append(note['text'])
                 s.append(self.tag('a', '↩', href=f'#fnref-{name}', _class='footnote-backref'))
-                s.append('</li>')
-            s.append('</ol></div>')
+                s.append(self.tag('li', enclose=3))
+            s.append(self.tag('ol', enclose=3))
+            s.append(self.tag('div', enclose=3))
         return '\n'.join(s)
 
     def template(self, node: Symbol):
