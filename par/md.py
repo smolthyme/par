@@ -269,7 +269,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 buf.append(left)
         return ' '.join(buf)
 
-    def visit(self, nodes: Symbol, root=False):
+    def visit(self, nodes: Symbol, root=False) -> str:
         if root:# Collect titles for use in ToC, global things
             [self.visit_link_refer_note(obj) for obj in nodes[0].find_all('link_refer_note')]
             [self._alt_title(onk) for onk in nodes[0].find_all('title')]
@@ -286,7 +286,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                         init_callback=self.init_callback, filename=self.filename,
                         footnote_id=self.footnote_id)
         v.link_refers = self.link_refers
-        r = v.visit(result)
+        r = v.visit(result[0])
         self.footnote_id = v.footnote_id
         
         return r
@@ -304,13 +304,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('hr', enclose=1)
     
     def _alt_title(self, node: Symbol):
-        node = node.what[0]
+        node  = node.what[0]
         level = 1
         match node.__name__:
             case 'atx_title':
                 if (level := node.find('hashes')) and level.text:
                     level = len(level.text)
-                else: level = 1
+                else:level = 1
             case 'setext_title':
                 if (marker := node.find('setext_underline')) and marker.text:
                     level = 1 if marker.text[0] == '=' else 2
@@ -325,9 +325,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
         title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
-        _cls = [x.text[1:] for x in node.find_all('attr_def_class')]
+        _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
 
-        return self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=' '.join(_cls))
+        return self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
 
     def visit_atx_title(self, node: Symbol):
         level = len(level.text) if (level := node.find('hashes')) and level.text else 1
@@ -371,6 +371,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return (text_node := node.find('pre_text2')) and text_node.text.rstrip()
 
     def visit_link_inline(self, node: Symbol):
+        # FIXME: What is opaque? oh, this code
         kwargs = {'href': node[1][1]}
         if len(node[1]) > 3:
             kwargs['title'] = node[1][3].text[1:-1]
@@ -440,65 +441,24 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('a', href, newline=False, href=href)
 
     def visit_link_wiki(self, node: Symbol):
-        """
-        [[(type:)name(#anchor)(|alter name)]]
-        type = 'wiki', or 'image'
-        if type == 'wiki':
-            [[(wiki:)name(#anchor)(|alter name)]]
-        if type == 'image':
-            [[(image:)filelink(|align|width|height)]]
-            float = 'left', 'right'
-            width or height = '' will not set
-        """
-
-        t = node.text[2:-2].strip()
-        type = 'wiki'
-        begin = 0
-        if t[:6].lower() == 'image:':
-            type = 'image'
-            begin = 6
-        elif t[:5].lower() == 'wiki:':
-            type = 'wiki'
-            begin = 5
-
+        """ # TODO: Needs a resource store to validate, path etc.
+        [[(type:)name(#anchor)(|alter name)]] / [[(image:)filelink(|align|width|height)]]"""
+        t = node.text.strip(r" \]\[")
+        type, begin = ('image', 6) if t[:6].lower() == 'image:'\
+                else (  'wiki', 5) if t[:5].lower() == 'wiki:' else ('wiki', 0)
         t = t[begin:]
+        
         if type == 'wiki':
-            #_prefix = self.wiki_prefix # FIXME: Should go back to using this
-            _v,   caption = (t.split('|', 1) + [''])[:2]
+            _v,  caption = ( t.split('|', 1) + [''])[:2]
             name, anchor = (_v.split('#', 1) + [''])[:2]
-            if anchor:
-                anchor = "#" + anchor
-
-            if not caption:
-                caption = name
-            
-            if not name:
-                return self.tag('a', caption, href=anchor)
-
-            # FIXME: file path should be verified since 'wiki' is local. //central store??
-            return self.tag('a', caption, href=f"{name}.html{anchor}")
-
-        elif type == 'image':
-            _v = (t.split('|') + ['', '', ''])[:4]
-            filename, align, width, height = _v
-            cls = ''
-            if width:
-                if width.isdigit():
-                    cls += f' width="{width}px"'
-                else:
-                    cls += f' width="{width}"'
-            if height:
-                if height.isdigit():
-                    cls += f' height="{height}px"'
-                else:
-                    cls += f' height="{height}"'
-
-            # TODO: Move to .tag
-            s = f'<img src="images/{filename}" {cls}/>'
-            if align:
-                s = f'<div class="float{align}">{s}</div>'
-            
-            return s
+            return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html") if name else self.tag('a', caption, href=anchor)
+        
+        filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
+        
+        cls  = f' width="{width}px"'   if  width.isdigit() else f' width="{width}"'   if width  else ''
+        cls += f' height="{height}px"' if height.isdigit() else f' height="{height}"' if height else ''
+        _str = f'<img src="images/{filename}" {cls}/>'
+        return f'<div class="float{align}">{_str}</div>' if align else _str
 
     def visit_image_link(self, node: Symbol):
         href = node.text.strip('<>')
@@ -584,7 +544,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('dl')
 
     def visit_dl_end(self, node: Symbol):
-        return '</dl>'
+        return self.tag('dl', enclose=3, newline=False)
 
     def visit_dl_dt_1(self, node: Symbol):
         txt = node.text.rstrip()[:-3]
@@ -625,9 +585,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             for node in result[0].find_all('block_kwargs'):
                 if (k := node.find('block_kwargs_key')):
                     k = k.text.strip()
-                    v = node.find('block_kwargs_val')
-                    if v:
-                        v = v.text.strip()
+                    v = v.text.strip() if (v := node.find('block_kwargs_val')) else None
                     kwargs[k] = v
             
             block = {'name': m.group(1), 'body': m.group(3).strip(), 'kwargs': kwargs}
@@ -654,7 +612,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             for i, x in enumerate(list(separator.find_all('table_horiz_line')) + list(separator.find_all('table_other'))):
                 t = x.text.rstrip('|').strip()
                 self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
-            
         return self.tag('table', newline=True)
 
     def visit_table2_end(self, node: Symbol):
@@ -751,7 +708,7 @@ def parseHtml(text, template=None, tag_class=None, block_callback=None,
                                             block_callback=block_callback,
                                             init_callback=init_callback,
                                             filename=filename)
-    return v.template(result)
+    return v.template(result[0])
 
 
 def parseEmbeddedHtml(text, template=None, tag_class=None, block_callback=None,
@@ -764,7 +721,7 @@ def parseEmbeddedHtml(text, template=None, tag_class=None, block_callback=None,
                                             block_callback=block_callback,
                                             init_callback=init_callback,
                                             filename=filename)
-    parsed = v.template(result)
+    parsed = v.template(result[0])
 
     reobj = re.compile("<p>")
     clean = re.compile(r"</?p\b[^>]*>", re.I | re.MULTILINE)

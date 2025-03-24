@@ -548,7 +548,7 @@ def test_footnote():
     </li>
     </ol></div>
     """
-    
+
 def test_attr_1():
     r"""
     >>> text = '''
@@ -571,7 +571,7 @@ def test_attr_1():
     <p><a class="inner" href="#anchor">link to anchor</a></p>
     <BLANKLINE>
     """
-    
+
 def test_attr_2():
     r"""
     >>> text = '''
@@ -913,6 +913,40 @@ def test_blockquote():
     <BLANKLINE>
     """
 
+def test_heading_1():
+    r"""
+    >>> text = '''
+    ... # Heading 1
+    ... ## Heading 2
+    ... ### Heading 3
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <h1 id="title_2">Heading 1<a class="anchor" href="#title_2"></a></h1>
+    <h2 id="title_2-2">Heading 2<a class="anchor" href="#title_2-2"></a></h2>
+    <h3 id="title_2-2-2">Heading 3<a class="anchor" href="#title_2-2-2"></a></h3>
+    <BLANKLINE>
+    """
+
+def test_heading_2():
+    r"""
+    >>> text = '''
+    ... Heading 1
+    ... =========
+    ... 
+    ... Heading 2
+    ... ---------
+    ... 
+    ... ### Heading 3
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <h1 id="title_2">Heading 1<a class="anchor" href="#title_2"></a></h1>
+    <h2 id="title_2-2">Heading 2<a class="anchor" href="#title_2-2"></a></h2>
+    <h3 id="title_2-2-2">Heading 3<a class="anchor" href="#title_2-2-2"></a></h3>
+    <BLANKLINE>
+    """
+
 
 class termfont:
     # foreground              # background              # end/reset
@@ -927,7 +961,9 @@ class termfont:
 
     fg_default  = '\033[39m'; bg_default  = '\033[49m'; ef_default   = '\033[22m'  # test?
 
-sections_headers = { 'Expected:': termfont.fg_green, 'Got:': termfont.fg_red, 'Trying:': termfont.fg_orange, }
+sections_headers = {'Expected:': termfont.fg_green, 'Got:': termfont.fg_red, 'Trying:': termfont.fg_orange,
+                    'Expecting:': "hide", "Failed example:": "hide",
+                    }
     
 def color_output(output: str):
     """Highlights sections of the output with various colors representing the section"""
@@ -939,11 +975,16 @@ def color_output(output: str):
             heading_clr = sections_headers[line]
             print(termfont.fg_white + line + termfont.endc)
         elif len(line) > 0 and line[0] in ('\t', ' '):
-            print(heading_clr + line + termfont.endc)
+            if heading_clr == "hide":
+                continue
+            else:
+                print(heading_clr + line + termfont.endc)
         elif line == 'ok':
             print(termfont.fg_green + line + termfont.endc)
-        else:
+        elif len(line) > 0:
             heading_clr = termfont.fg_default
+            print(line)
+        else:
             print(line)
 
 
@@ -957,9 +998,8 @@ def run_tests():
     old_stdout = sys.stdout
     sys.stdout = mystdout = StringIO()
     # options so that we have: 
-    optionflags= \
-        doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS | doctest.REPORT_NDIFF
-    doctest.testmod(optionflags=optionflags)
+    optionflags= doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS | doctest.REPORT_NDIFF
+    doctest.testmod(verbose=True)#, optionflags=doctest.REPORT_ONLY_FIRST_FAILURE)
     sys.stdout = old_stdout
 
     output = mystdout.getvalue()
