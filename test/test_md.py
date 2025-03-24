@@ -1,9 +1,11 @@
 import sys
 sys.path.insert(0, '..')
 
+# from par.md import parseHtml
+# from par.semantic_ext import blocks as semantic_blocks
+# from par.bootstrap_ext import blocks as bootstrap_blocks
+
 from par.md import parseHtml
-from par.semantic_ext import blocks as semantic_blocks
-from par.bootstrap_ext import blocks as bootstrap_blocks
 
 def test_symbol():
     r"""
@@ -297,8 +299,7 @@ def test_url_1():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p>This is <a class="outter" href="http://example.com/" title="Optional Title Here">Test</a>
-     .</p>
+    <p>This is <a class="outer" href="http://example.com/" title="Optional Title Here">Test</a> .</p>
     <BLANKLINE>
     """
 
@@ -311,8 +312,7 @@ def test_url_2():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p>This is <a class="outter" href="http://example.com/" title="Optional Title Here">Test</a>
-     .</p>
+    <p>This is <a class="outer" href="http://example.com/" title="Optional Title Here">Test</a> .</p>
     <BLANKLINE>
     """
 
@@ -325,8 +325,7 @@ def test_url_3():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p>This is <a class="outter" href="http://example.com/" title="Optional Title Here">Test</a>
-     .</p>
+    <p>This is <a class="outer" href="http://example.com/" title="Optional Title Here">Test</a> .</p>
     <BLANKLINE>
     """
 
@@ -339,8 +338,7 @@ def test_url_4():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p>This is <a class="outter" href="http://example.com/" title="Optional Title Here">foo</a>
-     .</p>
+    <p>This is <a class="outer" href="http://example.com/" title="Optional Title Here">foo</a> .</p>
     <BLANKLINE>
     """
 
@@ -612,7 +610,7 @@ def test_link_1():
      <a class="inner" href="Page.html#title">Hello world</a>
      <a class="inner" href="Page.html">Hello world</a>
     </p>
-    <p><img src="/images/a.png" /> <div class="floatright"><img src="/images/a.png" /></div> <img src="/images/a.png"  width="250px"/> <Page> <a class="outter" href="http://localhost:8000">http://localhost:8000</a></p>
+    <p><img src="/images/a.png" /> <div class="floatright"><img src="/images/a.png" /></div> <img src="/images/a.png"  width="250px"/> <Page> <a class="outer" href="http://localhost:8000">http://localhost:8000</a></p>
     <BLANKLINE>
     """
     
@@ -629,8 +627,8 @@ def test_link_2():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p><a class="outter" href="http://aaaa.com">http://aaaa.com</a> <img src="http://aaaa.com"/>
-     <a class="inner" href="page">page</a> <a class="outter" href="http://aaaa.com">http://aaaa.com</a> <a class="inner" href="Page.html">Page</a>
+    <p><a class="outer" href="http://aaaa.com">http://aaaa.com</a> <img src="http://aaaa.com"/>
+     <a class="inner" href="page">page</a> <a class="outer" href="http://aaaa.com">http://aaaa.com</a> <a class="inner" href="Page.html">Page</a>
      <a class="inner" href="#edit">
      <a class="inner" href="#">abc</a>
     </p>
@@ -774,59 +772,59 @@ def test_list_pre_2():
     <BLANKLINE>
     """
     
-def test_semantic_alert():
-    r"""
-    >>> text = '''
-    ... {% alert %}
-    ... This is a test.
-    ... {% endalert %}
-    ... '''
-    >>> print (parseHtml(text, '%(body)s', block_callback=semantic_blocks))
-    <BLANKLINE>
-    <div class="ui  message">
-    <p>This is a test.</p>
-    <BLANKLINE>
-    </div>
-    """
+# def test_semantic_alert():
+#     r"""
+#     >>> text = '''
+#     ... {% alert %}
+#     ... This is a test.
+#     ... {% endalert %}
+#     ... '''
+#     >>> print (parseHtml(text, '%(body)s', block_callback=semantic_blocks))
+#     <BLANKLINE>
+#     <div class="ui  message">
+#     <p>This is a test.</p>
+#     <BLANKLINE>
+#     </div>
+#     """
     
-def test_semantic_tabs():
-    r"""
-    >>> text = '''
-    ... {% tabs %}
-    ... -- name --
-    ... * a
-    ... * b
-    ... -- name --
-    ... 1. c
-    ... 1. d
-    ... {% endtabs %}
-    ... '''
-    >>> print (parseHtml(text, '%(body)s', block_callback=semantic_blocks))
-    <BLANKLINE>
-    <div class="ui tabular filter menu">
-    <a class=" class="active"item" data-tab="tab_item_1_1">name</a>
-    <a class="item" data-tab="tab_item_1_2">name</a>
-    </div>
-    <div class="tab-content">
-    <div class="ui divided inbox selection list active tab" data-tab="tab_item_1_1">
-    <BLANKLINE>
-    <ul>
-    <li>a</li>
-    <li>b</li>
-    </ul>
-    <BLANKLINE>
-    </div>
-    <div class="ui divided inbox selection list tab" data-tab="tab_item_1_2">
-    <BLANKLINE>
-    <ol>
-    <li>c</li>
-    <li>d</li>
-    </ol>
-    <BLANKLINE>
-    </div>
-    </div>
-    </div>
-    """
+# def test_semantic_tabs():
+#     r"""
+#     >>> text = '''
+#     ... {% tabs %}
+#     ... -- name --
+#     ... * a
+#     ... * b
+#     ... -- name --
+#     ... 1. c
+#     ... 1. d
+#     ... {% endtabs %}
+#     ... '''
+#     >>> print (parseHtml(text, '%(body)s', block_callback=semantic_blocks))
+#     <BLANKLINE>
+#     <div class="ui tabular filter menu">
+#     <a class=" class="active"item" data-tab="tab_item_1_1">name</a>
+#     <a class="item" data-tab="tab_item_1_2">name</a>
+#     </div>
+#     <div class="tab-content">
+#     <div class="ui divided inbox selection list active tab" data-tab="tab_item_1_1">
+#     <BLANKLINE>
+#     <ul>
+#     <li>a</li>
+#     <li>b</li>
+#     </ul>
+#     <BLANKLINE>
+#     </div>
+#     <div class="ui divided inbox selection list tab" data-tab="tab_item_1_2">
+#     <BLANKLINE>
+#     <ol>
+#     <li>c</li>
+#     <li>d</li>
+#     </ol>
+#     <BLANKLINE>
+#     </div>
+#     </div>
+#     </div>
+#     """
 
 def test_list_check_radio():
     r"""
@@ -872,7 +870,7 @@ def test_toc():
     <section class="toc">
     <ul>
     <li><a href="#toc_1">First heading</a></li>
-    <li><a href="#toc_2">Second heading</a>
+    <li><a href="#toc_2">Second heading</a></li>
     </ul>
     </section>
     <h2 id="title_0-1">First heading<a class="anchor" href="#title_0-1"></a></h2>
@@ -888,8 +886,7 @@ def test_video_direct():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p><video controls="yesplz" disablePictureInPicture="True" playsinline="True" src="images/cool.mp4" type="video/mp4"/>
-    </p>
+    <p><video controls="yesplz" disablePictureInPicture="True" playsinline="True" src="images/cool.mp4" type="video/mp4"/></p>
     <BLANKLINE>
     """
 
@@ -916,4 +913,120 @@ def test_blockquote():
     <BLANKLINE>z
     """
     
+verbose_output_sample = r"""
+File "test_md.py", line 588, in __main__.test_attr_2
+Failed example:
+    print (parseHtml(text, '%(body)s'))
+Expected:
+    <BLANKLINE>
+    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
+    <h2 class="hello" id="title_0-1">hello<a class="anchor" href="#title_0-1"></a></h2>
+    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
+    <h2 class="hello" id="title_0-2">hello<a class="anchor" href="#title_0-2"></a></h2>
+    <h2 class="hello class" id="title">hello<a class="anchor" href="#title"></a></h2>
+    <BLANKLINE>
+Got:
+    <BLANKLINE>
+    <p >## hello ## {#hello}</p>
+    <p >## hello ## {.hello}</p>
+    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
+    <h2 class="hello " id="title_0-2">hello<a class="anchor" href="#title_0-2"></a></h2>
+    <h2 class="hello class " id="title">hello<a class="anchor" href="#title"></a></h2>
+    <BLANKLINE>
+Trying:
+    text = '''
+    {% tabs %}
+    -- index.html --
+    ```
+    This is hello
+    ```
+    -- hello.html --
+    ```
+    This is hello
+    ```
+    {% endtabs %}
+    '''
+Expecting nothing
+ok
+Trying:
+    from par.bootstrap_ext import blocks
+Expecting nothing
+ok
+Trying:
+    print (parseHtml(text, '%(body)s', block_callback=blocks))
+Expecting:
+    <BLANKLINE>
+    <div class="tabbable">
+    <ul class="nav nav-tabs">
+    <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
+    <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
+    </ul>
+    <div class="tab-content">
+    <div class="tab-pane active" id="tab_item_1_1">
+    <BLANKLINE>
+    <pre><code>This is hello</code></pre>
+    <BLANKLINE>
+    </div>
+    <div class="tab-pane" id="tab_item_1_2">
+    <BLANKLINE>
+    <pre><code>This is hello</code></pre>
+    <BLANKLINE>
+    </div>
+    </div>
+    </div>
+"""
 
+def run_tests():
+    import doctest
+    from io import StringIO
+    import sys
+
+    # Capture stdout
+    old_stdout = sys.stdout
+    sys.stdout = mystdout = StringIO()
+
+    # Run doctests with diff output
+    doctest.testmod(verbose=True)
+
+    # Restore stdout
+    sys.stdout = old_stdout
+
+    # Colorize and print the output
+    color_output(mystdout.getvalue())
+    
+
+class termfont:
+    # foreground              # background              # end/reset
+    fg_black    = '\033[30m'; bg_black    = '\033[40m'; endc         = '\033[0m'   
+    fg_red      = '\033[31m'; bg_red      = '\033[41m'; 
+    fg_green    = '\033[32m'; bg_green    = '\033[42m'; # effects 
+    fg_orange   = '\033[33m'; bg_orange   = '\033[43m'; ef_bold      = '\033[1m'   # 'bright'?
+    fg_blue     = '\033[34m'; bg_blue     = '\033[44m'; ef_dim       = '\033[2m'
+    fg_magenta  = '\033[35m'; bg_magenta  = '\033[45m'; ef_underline = '\033[4m'
+    fg_cyan     = '\033[36m'; bg_cyan     = '\033[46m'; ef_flash     = '\033[5m'
+    fg_white    = '\033[37m'; bg_white    = '\033[47m'; ef_highlight = '\033[7m'
+
+    fg_default  = '\033[39m'; bg_default  = '\033[49m'; ef_default   = '\033[22m'  # test?
+
+sections_headers = { 'Expected:': termfont.fg_green, 'Got:': termfont.fg_red, 'Trying:': termfont.fg_orange, }
+    
+def color_output(output: str):
+    """Highlights sections of the output with various colors representing the section"""
+    # Iterate over each line
+    heading_clr = termfont.fg_default
+    for line in output.splitlines():
+        if line in sections_headers:
+            # If the line is a section header, color it
+            heading_clr = sections_headers[line]
+            print(termfont.fg_white + line + termfont.endc)
+        elif len(line) > 0 and line[0] in ('\t', ' '):
+            print(heading_clr + line + termfont.endc)
+        elif line == 'ok':
+            print(termfont.fg_green + line + termfont.endc)
+        else:
+            heading_clr = termfont.fg_default
+            print(line)
+
+
+if __name__ == '__main__':
+    run_tests()

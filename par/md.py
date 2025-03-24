@@ -97,7 +97,7 @@ class MarkdownGrammar(dict):
         ## titles / subject
         def title_text()       : return _(r'.+?(?= #| \{#| \{\.)|.+', re.U)
         def hashes()           : return _(r'#{1,6}')
-        def atx_title()        : return hashes, title_text, 0, space, 0, attr_def, -2, blankline
+        def atx_title()        : return hashes, title_text, 0, space, 0, hashes, 0, attr_def, -2, blankline
         def setext_underline() : return _(r'[ \t]*[-=]+[ \t]*')
         def setext_title()     : return title_text, 0, space, 0, attr_def, blankline, setext_underline, -2, blankline
         def title()            : return [atx_title, setext_title]
@@ -213,6 +213,7 @@ class MarkdownGrammar(dict):
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
 
+
 class MarkdownHtmlVisitor(MDHTMLVisitor):
     op_maps = {
         '*'  :  ['<em>',          '</em>'],
@@ -242,7 +243,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.block_callback = block_callback or {}
         self.init_callback  = init_callback
 
-    def process_line(self, line):
+    def process_line(self, line: str) -> str:
         pos = []; buf = []
         codes = re.split(r"\s+", line)
         
@@ -268,7 +269,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 buf.append(left)
         return ' '.join(buf)
 
-    def visit(self, nodes, root=False):
+    def visit(self, nodes: Symbol, root=False):
         if root:# Collect titles for use in ToC, global things
             [self.visit_link_refer_note(obj) for obj in nodes[0].find_all('link_refer_note')]
             [self._alt_title(onk) for onk in nodes[0].find_all('title')]
@@ -290,84 +291,86 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return r
     
-    def visit_string(self, node):
+    def visit_string(self, node: Symbol):
         return self.to_html(node.text)
 
-    def visit_blankline(self, node):
+    def visit_blankline(self, node: Symbol):
         return '\n'
 
-    def visit_longdash(self, node):
+    def visit_longdash(self, node: Symbol):
         return '—' # &mdash;
 
-    def visit_hr(self, node):
+    def visit_hr(self, node: Symbol):
         return self.tag('hr', enclose=1)
     
-    def _alt_title(self, node):
+    def _alt_title(self, node: Symbol):
         node = node.what[0]
-
+        level = 1
         match node.__name__:
             case 'atx_title':
-                level = len(node.find('hashes').text)
+                if (level := node.find('hashes')) and level.text:
+                    level = len(level.text)
+                else: level = 1
             case 'setext_title':
-                marker = node.find('setext_underline').text[0]
-                level = 1 if marker == '=' else 2
-            case _:
-                level = 1
+                if (marker := node.find('setext_underline')) and marker.text:
+                    level = 1 if marker.text[0] == '=' else 2
         
-        _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
-        title = node.find('title_text').text.strip()
+        _id_node = node.find('attr_def_id')
+        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        title = (title_node := node.find('title_text')) and title_node.text.strip()
         self.tocitems.append((level, _id, title))
 
-    def _get_title(self, node, level):
-        _id = self.get_title_id(level) if not node.find('attr_def_id') else node.find('attr_def_id').text[1:]
-        title = node.find('title_text').text.strip()
+    def _get_title(self, node: Symbol, level):
+        _id_node = node.find('attr_def_id')
+        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
         _cls = [x.text[1:] for x in node.find_all('attr_def_class')]
 
-        return self.tag(f'h{level}', title + anchor, id=_id, _class=' '.join(_cls))
+        return self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=' '.join(_cls))
 
-    def visit_atx_title(self, node):
-        level = len(node.find('hashes').text)
+    def visit_atx_title(self, node: Symbol):
+        level = len(level.text) if (level := node.find('hashes')) and level.text else 1
         return self._get_title(node, level)
 
-    def visit_setext_title(self, node):
-        marker = node.find('setext_underline').text[0]
+    def visit_setext_title(self, node: Symbol):
+        marker = noder.text[0] if (noder := node.find('setext_underline')) else '='
         level = 1 if marker == '=' else 2
         return self._get_title(node, level)
 
-    def visit_indent_block_line(self, node):
+    def visit_indent_block_line(self, node: Symbol):
         return node[1].text
 
-    def visit_indent_line(self, node):
-        return node.find('indent_line_text').text + '\n'
+    def visit_indent_line(self, node: Symbol):
+        return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
 
-    def visit_paragraph(self, node):
+    def visit_paragraph(self, node: Symbol):
         txt = node.text.rstrip().replace('\n', ' ')
         return self.tag('p', self.process_line(self.parse_text(txt, 'words')))
 
-    def visit_pre(self, node):
+    def visit_pre(self, node: Symbol):
         cwargs = {}; kwargs = {}
         if (lang := node.find('pre_lang')):
             for n in lang.find_all('block_kwargs'):
-                key = n.find('block_kwargs_key').text.strip()
-                v_node = n.find('block_kwargs_val')
-                val = v_node.text.strip() if v_node else None
+                if (n := n.find('block_kwargs_key')):
+                    key = n.text.strip()
+                    val = v_node.text.strip() if (v_node := n.find('block_kwargs_val')) else None
 
-                if key == 'lang':
-                    cwargs['class'] = 'language-' + (val or key)
-                else:
-                    kwargs[key] = val or 'language-' + key
+                    if key == 'lang':
+                        cwargs['class'] = 'language-' + (val or key)
+                    else:
+                        kwargs[key] = val or 'language-' + key
         code_content = self.to_html(self.visit(node).rstrip())
         
         return self.tag('pre', self.tag('code', code_content, newline=False, **cwargs), **kwargs)
 
-    def visit_pre_extra1(self, node):
-        return node.find('pre_text1').text.rstrip()
+    def visit_pre_extra1(self, node: Symbol):
+        return (text_node := node.find('pre_text1')) and text_node.text.rstrip()
 
-    def visit_pre_extra2(self, node):
-        return node.find('pre_text2').text.rstrip()
+    def visit_pre_extra2(self, node: Symbol):
+        return (text_node := node.find('pre_text2')) and text_node.text.rstrip()
 
-    def visit_link_inline(self, node):
+    def visit_link_inline(self, node: Symbol):
         kwargs = {'href': node[1][1]}
         if len(node[1]) > 3:
             kwargs['title'] = node[1][3].text[1:-1]
@@ -375,44 +378,45 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return self.tag('a', caption, newline=False, **kwargs)
 
-    def visit_inline_image(self, node):
+    def visit_inline_image(self, node: Symbol):
         kwargs = {}
-        location = node.find('inline_href').text
+        if (location := node.find('inline_href')):
+            location = location.text
 
-        if (scheme := re.search(r'^(\w{3,5})://.+', location)):
-            if scheme.group(1).lower() in ['javascript', 'vbscript', 'data']: #Just be safe
-                return ""
-            if ( yt_id := re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)):
-                return f"<object class='yt-embed' data='https://www.youtube.com/embed/{yt_id.group(1)}'></object>"
+            if (scheme := re.search(r'^(\w{3,5})://.+', location)):
+                if scheme.group(1).lower() in ['javascript', 'vbscript', 'data']: #Just be safe
+                    return ""
+                if ( yt_id := re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)):
+                    return f"<object class='yt-embed' data='https://www.youtube.com/embed/{yt_id.group(1)}'></object>"
 
-        src = "images/" + location  # later may need to split media so bbl
-        kwargs['src'] = src
-        if ( title := node.find('link_inline_title') ):
-            kwargs['title'] = title.text[1:-1]
-        if ( alt := node.find('inline_text') ):
-            kwargs['alt'] = alt.text
+            src = "images/" + location  # later may need to split media so bbl
+            kwargs['src'] = src
+            if (title := node.find('link_inline_title')):
+                kwargs['title'] = title.text[1:-1]
+            if (alt := node.find('inline_text')):
+                kwargs['alt'] = alt.text
 
-        # controls disablePictureInPicture playsinline
-        if src.endswith(".mp4") or src.endswith(".m4v") or src.endswith(".mkv") or src.endswith(".webm"):
-            return self.tag('video', enclose=1, type="video/mp4", controls="yesplz", disablePictureInPicture=True,
-                            playsinline="True", **kwargs)
-        elif src.endswith(".m4a") or src.endswith(".aac") or src.endswith(".ogg") or src.endswith(".oga") or src.endswith(".opus"):
-            return self.tag('audio', enclose=1, type="video/mp4", controls="yesplz", **kwargs)
-        elif src.endswith(".mp3"):
-            return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
+            # controls disablePictureInPicture playsinline
+            if src.endswith(".mp4") or src.endswith(".m4v") or src.endswith(".mkv") or src.endswith(".webm"):
+                return self.tag('video', enclose=1, type="video/mp4", controls="yesplz", disablePictureInPicture=True,
+                                playsinline="True", **kwargs)
+            elif src.endswith(".m4a") or src.endswith(".aac") or src.endswith(".ogg") or src.endswith(".oga") or src.endswith(".opus"):
+                return self.tag('audio', enclose=1, type="video/mp4", controls="yesplz", **kwargs)
+            elif src.endswith(".mp3"):
+                return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
 
-        return self.tag('img', enclose=1, **kwargs)
+            return self.tag('img', enclose=1, **kwargs)
 
-    def visit_link_refer(self, node):
-        caption = node.find('link_refer_capt')[1]
+    def visit_link_refer(self, node: Symbol):
+        caption = noder[1] if (noder := node.find('link_refer_capt')) else ''
         key = node.find('link_refer_refer')
         key = key.text if key else caption
         
         return self.tag('a', caption, **self.link_refers.get(key.upper(), {}))
 
-    def visit_image_refer(self, node):
+    def visit_image_refer(self, node: Symbol):
         alt = node.find('image_refer_alt')
-        alt_text = alt.find('inline_text').text if alt else ''
+        alt_text = noder.text if alt and (noder := alt.find('inline_text')) else ''
 
         key = node.find('image_refer_refer')
         key_text = key.text if key else alt_text
@@ -422,20 +426,20 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
         return self.tag('img', enclose=1, **kwargs)
 
-    def visit_link_refer_note(self, node):
-        key = node.find('link_inline_capt').text[1:-1].upper()
-        self.link_refers[key] = {'href': node.find('link_refer_link').text}
+    def visit_link_refer_note(self, node: Symbol):
+        key = noder.text.strip("][").upper() if (noder :=node.find('link_inline_capt')) else ''
+        self.link_refers[key] = {'href': noder.text if (noder := node.find('link_refer_link')) else ''}
 
         if (r := node.find('link_refer_title')):
-            self.link_refers[key]['title'] = r.text[1:-1]
+            self.link_refers[key]['title'] = r.text.strip(")(")
         
         return ''
 
-    def visit_link_raw(self, node):
+    def visit_link_raw(self, node: Symbol):
         href = node.text.strip('<>')
         return self.tag('a', href, newline=False, href=href)
 
-    def visit_link_wiki(self, node):
+    def visit_link_wiki(self, node: Symbol):
         """
         [[(type:)name(#anchor)(|alter name)]]
         type = 'wiki', or 'image'
@@ -496,11 +500,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             
             return s
 
-    def visit_image_link(self, node):
+    def visit_image_link(self, node: Symbol):
         href = node.text.strip('<>')
         return self.tag('img', src=f"images/{href}", enclose=1)
 
-    def visit_link_mailto(self, node):
+    def visit_link_mailto(self, node: Symbol):
         import random
         href = node.text[1:-1]
         if href.startswith('mailto:'):
@@ -510,10 +514,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
         return self.tag('a', shuffle(href), href=shuffle("mailto:" + href), newline=False)
 
-    def visit_quote_line(self, node):
+    def visit_quote_line(self, node: Symbol):
         return node.text[2:]
 
-    def visit_blockquote(self, node):
+    def visit_blockquote(self, node: Symbol):
         text = []
         for line in node.find_all('quote_lines'):
             text.append(self.visit(line))
@@ -527,37 +531,29 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             result = result + f"<span class='quote-timeplace'>(<span class='text-date'>{atrdat.text}</span>)</span>"
         return self.tag('blockquote', result)
 
-    def visit_lists_begin(self, node):
+    def visit_lists_begin(self, node: Symbol):
         self.lists = []
         return ''
 
-    def visit_list_line(self, node):
+    def visit_list_line(self, node: Symbol):
         return node.text.strip()
 
-    def visit_list_indent_line(self, node):
-        return node.find('list_rest_of_line').text
+    def visit_list_indent_line(self, node: Symbol):
+        return (text_node := node.find('list_rest_of_line')) and text_node.text
 
-    def visit_bullet_list_item(self, node):
+    def visit_bullet_list_item(self, node: Symbol):
         self.lists.append(('b', node.find('list_content')))
         return ''
 
-    def visit_number_list_item(self, node):
+    def visit_number_list_item(self, node: Symbol):
         self.lists.append(('n', node.find('list_content')))
         return ''
 
-    def visit_check_radio(self, node):
-        tag = []
-        if node.text[0] == '[':
-            tag.append('<input type="checkbox"')
-        else:
-            tag.append('<input type="radio"')
-        if node.text[1] == '*' or node.text[1].upper() == 'X':
-            tag.append(' checked')
-        tag.append('></input> ')
+    def visit_check_radio(self, node: Symbol):
+        return self.tag('input', '', newline=False, attrs='checked',
+                type='checkbox' if node.text[1] == '*' or node.text[1].upper() == 'X' else 'radio')
 
-        return ''.join(tag)
-
-    def visit_lists_end(self, node):
+    def visit_lists_end(self, node: Symbol):
         def process_node(n):
             text = ''.join(self.visit(node) for node in n)
             t = self.parse_text(text, 'article').rstrip()
@@ -584,42 +580,40 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
         return create_list(self.lists)
 
-    def visit_dl_begin(self, node):
+    def visit_dl_begin(self, node: Symbol):
         return self.tag('dl')
 
-    def visit_dl_end(self, node):
+    def visit_dl_end(self, node: Symbol):
         return '</dl>'
 
-    def visit_dl_dt_1(self, node):
+    def visit_dl_dt_1(self, node: Symbol):
         txt = node.text.rstrip()[:-3]
         text = self.parse_text(txt, 'words')
         return self.tag('dt', self.process_line(text), enclose=1)
 
-    def visit_dl_dd_1(self, node):
+    def visit_dl_dd_1(self, node: Symbol):
         txt = self.visit(node).rstrip()
         text = self.parse_text(txt, 'article')
         return self.tag('dd', text, enclose=1)
 
-    def visit_dl_dt_2(self, node):
+    def visit_dl_dt_2(self, node: Symbol):
         txt = node.text.rstrip()
         text = self.parse_text(txt, 'words')
         return self.tag('dt', self.process_line(text), enclose=1)
 
-    def visit_dl_dd_2(self, node):
+    def visit_dl_dd_2(self, node: Symbol):
         txt = self.visit(node).rstrip()
         text = self.parse_text(txt[1:].lstrip(), 'article')
         return self.tag('dd', text, enclose=1)
 
-    def visit_inline_tag(self, node):
-        rel = node.find('inline_tag_index').text.strip()
-        name = node.find('inline_tag_name').text.strip()
-        _c = node.find('inline_tag_class')
-        rel = rel or name
-        cls = ' ' + _c.text.strip() if _c is not None else ''
+    def visit_inline_tag(self, node: Symbol):
+        if ( rel := node.find('inline_tag_index')):
+            if (name := node.find('inline_tag_name')):
+                _c = node.find('inline_tag_class')
+                cls = ' ' + _c.text.strip() if _c is not None else ''
+                return f'<span class="inline-tag{cls}" data-rel="{rel.text.strip()}">{name.text.strip()}</span>'
 
-        return f'<span class="inline-tag{cls}" data-rel="{rel}">{name}</span>'
-
-    def visit_new_block(self, node):
+    def visit_new_block(self, node: Symbol):
         block = { 'new': True }
         r = re.compile(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)\s*(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL)
         m = r.match(node.text)
@@ -629,11 +623,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             result, rest = self.grammar.parse(block_args, root=self.grammar['new_block_args'], resultSoFar=resultSoFar, skipWS=False)
             kwargs = {}
             for node in result[0].find_all('block_kwargs'):
-                k = node.find('block_kwargs_key').text.strip()
-                v = node.find('block_kwargs_val')
-                if v:
-                    v = v.text.strip()
-                kwargs[k] = v
+                if (k := node.find('block_kwargs_key')):
+                    k = k.text.strip()
+                    v = node.find('block_kwargs_val')
+                    if v:
+                        v = v.text.strip()
+                    kwargs[k] = v
             
             block = {'name': m.group(1), 'body': m.group(3).strip(), 'kwargs': kwargs}
             
@@ -643,29 +638,29 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         else:
             return '' # return node.text
 
-    def visit_side_block_item(self, node):
+    def visit_side_block_item(self, node: Symbol):
         content = [self.parse_text(thing.text, 'content') 
-                for thing in node.find('side_block_cont')]
+                for thing in node.find_all('side_block_cont')]
         return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz") # node[kwargs]
 
 
-    def visit_table_column(self, node):
+    def visit_table_column(self, node: Symbol):
         text = self.parse_text(node.text[:-2].strip(), 'words')
         return self.tag('td', self.process_line(text), newline=False)
 
-    def visit_table2_begin(self, node):
+    def visit_table2_begin(self, node: Symbol):
         self.table_align = {}
-        separator = node.find('table_separator')
-        for i, x in enumerate(list(separator.find_all('table_horiz_line')) + list(separator.find_all('table_other'))):
-            t = x.text.rstrip('|').strip()
-            self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
-        
+        if separator := node.find('table_separator'):
+            for i, x in enumerate(list(separator.find_all('table_horiz_line')) + list(separator.find_all('table_other'))):
+                t = x.text.rstrip('|').strip()
+                self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
+            
         return self.tag('table', newline=True)
 
-    def visit_table2_end(self, node):
+    def visit_table2_end(self, node: Symbol):
         return '</table>\n'
 
-    def visit_table_head(self, node):
+    def visit_table_head(self, node: Symbol):
         s = ['<thead>\n<tr>']
         for t in ('table_td', 'table_other'):
             for x in node.find_all(t):
@@ -673,56 +668,58 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         s.append('</tr>\n</thead>\n')
         return ''.join(s)
 
-    def visit_table_separator(self, node):
+    def visit_table_separator(self, node: Symbol):
         return ''
 
-    def visit_table_body(self, node):
-        return f"<tbody>{self.visit(node)}</tbody>"
+    def visit_table_body(self, node: Symbol):
+        return f"<tbody>\n{self.visit(node)}</tbody>"
 
-    def visit_table_body_line(self, node):
+    def visit_table_body_line(self, node: Symbol):
         nodes = list(node.find_all('table_td')) + list(node.find_all('table_other'))
         s = ['<tr>']
         for i, x in enumerate(nodes):
-            text = x.text.rstrip("|")
-            s.append(self.tag('td', self.parse_text(text.strip(), 'words'),
+            text = x.text.strip("| ")
+            s.append(self.tag('td', self.parse_text(text, 'words'),
                 align=self.table_align.get(i, ''), newline=False, enclose=2))
         s.append('</tr>\n')
         return ''.join(s)
     
-    def visit_directive(self, node):
-        name = node.find('directive_name').text
-        if name in ['toc', 'contents'] and self.tocitems:
-            toc = []
-            toc.append("<section class='toc'><ul>")
-            hi = 0
+    def visit_directive(self, node: Symbol):
+        if (name := node.find('directive_name')) and name in ['toc', 'contents'] and self.tocitems:
+            toc = ['<section class="toc">\n']
+            hi = 0; count = 1
             for lvl, anchor, title in self.tocitems:
                 if lvl > hi:
-                    toc.append("<ul>")
+                    toc.append("<ul>\n")
                 elif lvl < hi:
-                    toc.append("</ul>")
+                    toc.append("</ul>\n")
                 hi = lvl
-                toc.append(f"<li><a href='#{anchor}'>{title}</a></li>")
-            toc.append("</ul></section>")
+                toc.append(f'<li><a href="#toc_{count}">{title}</a></li>\n')
+                count += 1
+            toc.append("</ul>\n</section>")
             # Since we visited these before generating, reset the dict to make sure headings get correct id's
             self.titles_ids = {}
             return ''.join(toc)
 
-    def visit_footnote(self, node):
+    def visit_footnote(self, node: Symbol):
         name = node.text[2:-1]
         _id = self.footnote_id
         self.footnote_id += 1
         return f'<sup id="fnref-{name}"><a href="#fn-{name}" class="footnote-rel inner">{_id}</a></sup>'
 
-    def visit_footnote_desc(self, node):
-        if (name := node.find('footnote').text[2:-1]) and name not in self.footnodes:
-            text = self.parse_text(self.visit(node.find('footnote_text')).rstrip(), 'article')
-            n = {'name': name, 'text': text}
-            self.footnodes.append(n)
-            return ''
-        else:
-            raise Exception(f"The footnote {name} is already exists")
+    def _get_title(self, node: Symbol, level):
+        _id_node = node.find('attr_def_id')
+        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        
+        title_node = node.find('title_text')
+        title = title_node.text.strip() if title_node else "!Bad title!"
+        
+        anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
+        _cls = [x.text[1:] for x in node.find_all('attr_def_class') if x.text]
 
-    def visit_star_rating(self, node):
+        return self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=' '.join(_cls))
+
+    def visit_star_rating(self, node: Symbol):
         r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
         if (m := r.match(node.text)):
             return f"<span>{'⭐' * len(str(m.group("stars")))}</span>"
@@ -743,7 +740,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             s.append('</ol></div>')
         return '\n'.join(s)
 
-    def template(self, node):
+    def template(self, node: Symbol):
         if self.grammar is None:
             raise ValueError("Grammar is not defined.")
         body = self.visit(node, self.grammar.root)
