@@ -910,90 +910,9 @@ def test_blockquote():
     <BLANKLINE>
     <blockquote><p>"I have been using the AquaBoostAG liquefied polymer" — Mystery Mountain Grove</p>
     </blockquote>
-    <BLANKLINE>z
+    <BLANKLINE>
     """
-    
-verbose_output_sample = r"""
-File "test_md.py", line 588, in __main__.test_attr_2
-Failed example:
-    print (parseHtml(text, '%(body)s'))
-Expected:
-    <BLANKLINE>
-    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
-    <h2 class="hello" id="title_0-1">hello<a class="anchor" href="#title_0-1"></a></h2>
-    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
-    <h2 class="hello" id="title_0-2">hello<a class="anchor" href="#title_0-2"></a></h2>
-    <h2 class="hello class" id="title">hello<a class="anchor" href="#title"></a></h2>
-    <BLANKLINE>
-Got:
-    <BLANKLINE>
-    <p >## hello ## {#hello}</p>
-    <p >## hello ## {.hello}</p>
-    <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
-    <h2 class="hello " id="title_0-2">hello<a class="anchor" href="#title_0-2"></a></h2>
-    <h2 class="hello class " id="title">hello<a class="anchor" href="#title"></a></h2>
-    <BLANKLINE>
-Trying:
-    text = '''
-    {% tabs %}
-    -- index.html --
-    ```
-    This is hello
-    ```
-    -- hello.html --
-    ```
-    This is hello
-    ```
-    {% endtabs %}
-    '''
-Expecting nothing
-ok
-Trying:
-    from par.bootstrap_ext import blocks
-Expecting nothing
-ok
-Trying:
-    print (parseHtml(text, '%(body)s', block_callback=blocks))
-Expecting:
-    <BLANKLINE>
-    <div class="tabbable">
-    <ul class="nav nav-tabs">
-    <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
-    <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
-    </ul>
-    <div class="tab-content">
-    <div class="tab-pane active" id="tab_item_1_1">
-    <BLANKLINE>
-    <pre><code>This is hello</code></pre>
-    <BLANKLINE>
-    </div>
-    <div class="tab-pane" id="tab_item_1_2">
-    <BLANKLINE>
-    <pre><code>This is hello</code></pre>
-    <BLANKLINE>
-    </div>
-    </div>
-    </div>
-"""
 
-def run_tests():
-    import doctest
-    from io import StringIO
-    import sys
-
-    # Capture stdout
-    old_stdout = sys.stdout
-    sys.stdout = mystdout = StringIO()
-
-    # Run doctests with diff output
-    doctest.testmod(verbose=True)
-
-    # Restore stdout
-    sys.stdout = old_stdout
-
-    # Colorize and print the output
-    color_output(mystdout.getvalue())
-    
 
 class termfont:
     # foreground              # background              # end/reset
@@ -1026,6 +945,26 @@ def color_output(output: str):
         else:
             heading_clr = termfont.fg_default
             print(line)
+
+
+def run_tests():
+    import doctest
+    from io import StringIO
+    import sys
+    import difflib
+
+    # Capture stdout
+    old_stdout = sys.stdout
+    sys.stdout = mystdout = StringIO()
+    # options so that we have: 
+    optionflags= \
+        doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS | doctest.REPORT_NDIFF
+    doctest.testmod(optionflags=optionflags)
+    sys.stdout = old_stdout
+
+    output = mystdout.getvalue()
+    color_output(output)
+
 
 
 if __name__ == '__main__':
