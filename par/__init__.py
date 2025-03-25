@@ -21,7 +21,8 @@ class SimpleVisitor(object):
         self.grammar = grammar
         self.filename = filename
 
-    def visit(self, nodes, root=False):
+    #def visit(self, nodes, root=False) -> str:
+    def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
         buf = []
         if not isinstance(nodes, (list, tuple)):
             nodes = [nodes]
@@ -47,18 +48,10 @@ class SimpleVisitor(object):
                     buf.append(method(node))
                 if (method := getattr(self, 'after_visit', None)):
                     buf.append(method(node))
-        
         if root:
             if (method := getattr(self, '__end__', None)):
                 buf.append(method())
         return ''.join(buf)
-
-# from enum import Enum
-# class TagClose(Enum):
-#     open       = 0 # <tag>
-#     self_close = 1 # <tag/>
-#     wrap       = 2 # <tag></tag>
-#     close      = 3 # </tag>
 
 class HTMLVisitor(SimpleVisitor):
     tag_class = {}
@@ -69,34 +62,27 @@ class HTMLVisitor(SimpleVisitor):
         #self.tag_class = tag_class or self.__class__.tag_class
         self._template = '<html><head><title>{title}</title></head><body>{body}</body></html>'
     
-    def tag(self, tag:str, child='', enclose=0, newline=True, **kwargs):
-        """An HTML tag with optional child(ren) and attributes."""
+    def tag(self, tag: str, child='', attrs='', enclose=0, newline=True, **kwargs) -> str:
         kw = kwargs.copy()
         _class = kw.pop('_class', '')
         _class += ' ' + kw.pop('class', '')
-        tag_class = self.tag_class.get(tag, '')
-        
-        # Add classes to the tag
+        tag_class = ''#self.tag_class.get(tag, '')
+
         if tag_class:
-            kw['class'] = f"{tag_class[1:]} {_class.lstrip()}" if tag_class.startswith('+') else tag_class.lstrip()
+            kw['class'] = f"{tag_class[1:]} {_class.lstrip()}" if tag_class.startswith('+') else tag_class
         else:
-            kw['class'] = _class.lstrip()
+            kw['class'] = _class.strip()
 
-        if tag == 'a':
-            href = kw.get('href', '#')
-            _cls = 'outer' if href.startswith(('http:', 'https:', 'ftp:')) else 'inner'
-            kw['href'] = href
-            kw['class'] = f"{kw.get('class', '')} {_cls}".strip()
-
-        attrs = f" {' '.join(f'{x}="{y}"' for x, y in sorted(kw.items()) if y)}"
+        kwattrs = ' '.join(f'{x}="{y}"' for x, y in sorted(kw.items()) if y)
+        kwattrs = f' {kwattrs}{f" {attrs}" if attrs != '' else ""}' if kwattrs else attrs
         nline = '\n' if newline else ''
         enclose = 2 if child else enclose
 
-        match enclose:
-            case 1:   return f'<{tag}{attrs}/>{nline}'
-            case 2:   return f'<{tag}{attrs}>{child}</{tag}>{nline}'
+        match enclose: # The spacing makes it more obvious... I tell myself
+            case 1:   return f'<{ tag}{kwattrs}/>{nline}'
+            case 2:   return f'<{ tag}{kwattrs}>{ child}</{tag}>{nline}'
             case 3:   return f'</{tag}>{nline}'
-            case _:   return f'<{tag}{attrs}>{nline}'
+            case _:   return f'<{ tag}{kwattrs}>{ nline}'
     
     def to_html(self, text: str) -> str:
         text = text.replace('&', '&amp;')
