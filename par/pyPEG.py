@@ -319,7 +319,7 @@ class parser(object):
 
 # plain module API
 
-def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments = None, packrat = False):
+def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments = None, packrat = False) -> Tuple[List[Any], str]:
     p = parser(p=packrat)
     text = skip(p.skipper, textline, skipWS, skipComments)
     return p.parseLine(text, pattern, resultSoFar, skipWS, skipComments)
