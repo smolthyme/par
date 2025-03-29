@@ -103,9 +103,9 @@ class MarkdownGrammar(dict):
         def title()            : return [atx_title, setext_title]
     
         ## table
-        def table_column()     : return _(r'[^\|\r\n]+')
-        def table_line()       : return _(r'\|\|'), -2, table_column, _(r'\|\|'), eol
-        def table()            : return -2, table_line, -1, blankline
+        # def table_column()     : return _(r'[^\|\r\n]+')
+        # def table_line()       : return _(r'\|\|'), -2, table_column, _(r'\|\|'), eol
+        # def table()            : return -2, table_line, -1, blankline
         def table_td()         : return _(r'[^\|\r\n]*\|')
         def table_horiz_line() : return _(r'\s*:?-+:?\s*\|')
         def table_other()      : return _(r'[^\r\n]+')
@@ -113,7 +113,7 @@ class MarkdownGrammar(dict):
         def table_separator()  : return 0, _(r'\|'), -2, table_horiz_line, -1, table_other, blankline
         def table_body_line()  : return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
         def table_body()       : return -2, table_body_line
-        def table2()           : return table_head, table_separator, table_body
+        def table()           : return table_head, table_separator, table_body
         
         ## definition lists
         def dl_dt_1()          : return _(r'[^ \t\r\n]+.*--'), -2, blankline
@@ -124,8 +124,7 @@ class MarkdownGrammar(dict):
         def dl_line_2()        : return dl_dt_2, -2, dl_dd_2
         def dl()               : return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
 
-        def new_block()        : return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
-
+        # Horizontal items
         def side_block_head()  : return _(r'\|\|\|'), eol
         def side_block_cont()  : return -2, [common_line, space]
         def side_block_item()  : return side_block_head, -2, side_block_cont
@@ -188,15 +187,11 @@ class MarkdownGrammar(dict):
         def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto], -1, space
 
         ## article
-        def content(): return \
-            -2, [   blanklines, hr, title, link_refer_note, directive,
-                    pre, html_block,
-                    side_block, new_block,
-                    table, table2,
-                    lists, dl,
-                    blockquote, footnote_desc,
-                    paragraph 
-                ]
+        def content(): return -2, [blanklines, \
+                hr, title, link_refer_note, directive,
+                pre, html_block,
+                side_block, table, lists, dl, blockquote, footnote_desc,
+                paragraph ]
 
         def article(): return content
 
@@ -206,12 +201,10 @@ class MarkdownGrammar(dict):
             peg_rules[k] = v
         return peg_rules, article
     
-    def parse(self, text="\n", root=None, skipWS=False, **kwargs):
-        text = re.sub('\r\n|\r', '\n', text) # Normalise on unix-style line ending
-        if not text.endswith("\n"):
-            text += "\n" # Make sure we end with a newline
+    def parse(self, text:str, root=None, skipWS=False, **kwargs):
+        # Normalise on unix-style line ending and we end with a newline
+        text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
-
 
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):
@@ -227,6 +220,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         ',,' :  ['<sub>',         '</sub>'],
         '~~' :  ['<span style="text-decoration: line-through">', '</span>'],
     }
+    # Sort ops_maps by key length to parse correctly (long match first, not 3 * 1 '*')
+    op_maps = {k: v for k, v in sorted(op_maps.items(), key=lambda item: len(item[0]), reverse=True)}
     tag_class = {}
 
     def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled',
@@ -346,7 +341,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_paragraph(self, node: Symbol) -> str:
         txt = node.text.rstrip().replace('\n', ' ')
-        return self.tag('p', self.process_line(self.parse_text(txt, 'words')))
+        return self.tag('p', self.process_line(self.parse_text(txt, 'paragraph')))
 
     def visit_pre(self, node: Symbol) -> str:
         cwargs = {}; kwargs = {}
@@ -377,7 +372,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             kwargs['title'] = node[1][3].text[1:-1]
         caption = node[0].text[1:-1].strip() or kwargs['href']
         
-        return self.tag('a', caption, **kwargs)
+        return self.tag('a', caption, **kwargs, newline=False)
 
     def visit_inline_image(self, node: Symbol) -> str:
         kwargs = {}
@@ -413,7 +408,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         key = node.find('link_refer_refer')
         key = key.text if key else caption
         
-        return self.tag('a', caption, **self.link_refers.get(key.upper(), {}))
+        return self.tag('a', caption, **self.link_refers.get(key.upper(), {}), newline=False)
 
     def visit_image_refer(self, node: Symbol) -> str:
         alt = node.find('image_refer_alt')
@@ -485,7 +480,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         text = []
         for line in node.find_all('quote_lines'):
             text.append(self.visit(line))
-        result = self.parse_text(''.join(text), 'article')
+        result = self.parse_text(''.join(text), 'content')
         
         attrib = node.find("quote_name")
         atrdat = node.find("quote_date")
@@ -550,23 +545,30 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_dl_dt_1(self, node: Symbol) -> str:
         txt = node.text.rstrip()[:-3]
-        text = self.parse_text(txt, 'words')
+        text = self.parse_text(txt, 'line')
         return self.tag('dt', self.process_line(text), enclose=1)
 
     def visit_dl_dd_1(self, node: Symbol) -> str:
         txt = self.visit(node).rstrip()
-        text = self.parse_text(txt, 'article')
+        text = self.parse_text(txt, 'content')
         return self.tag('dd', text, enclose=1)
 
     def visit_dl_dt_2(self, node: Symbol) -> str:
         txt = node.text.rstrip()
-        text = self.parse_text(txt, 'words')
+        text = self.parse_text(txt, 'line')
         return self.tag('dt', self.process_line(text), enclose=1)
 
     def visit_dl_dd_2(self, node: Symbol) -> str:
         txt = self.visit(node).rstrip()
-        text = self.parse_text(txt[1:].lstrip(), 'article')
+        text = self.parse_text(txt[1:].lstrip(), 'content')
         return self.tag('dd', text, enclose=1)
+
+    def visit_star_rating(self, node: Symbol) -> str:
+        r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
+        if (m := r.match(node.text)):
+            return self.tag('span', '⭐'*len(m.group('stars')), _class='star-rating', title=f"{len(m.group('stars'))} stars out of {m.group('outta')}")
+        else:
+            return self.tag('span', '⭐'*5, _class='star-rating')
 
     def visit_inline_tag(self, node: Symbol) -> str:
         if ( rel := node.find('inline_tag_index')):
@@ -576,40 +578,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 return self.tag('span', name.text.strip(), _class=f"inline-tag{cls}", data_rel=rel.text.strip())
         return self.tag('span', node.text, _class='inline-tag')
 
-    def visit_new_block(self, node: Symbol) -> str:
-        block = { 'new': True }
-        r = re.compile(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)\s*(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL)
-        m = r.match(node.text)
-        if m and self.grammar:
-            block_args = m.group(2).strip()
-            resultSoFar = []
-            result, rest = self.grammar.parse(block_args, root=self.grammar['new_block_args'], resultSoFar=resultSoFar, skipWS=False)
-            kwargs = {}
-            for node in result[0].find_all('block_kwargs'):
-                if (k := node.find('block_kwargs_key')):
-                    k = k.text.strip()
-                    v = v.text.strip() if (v := node.find('block_kwargs_val')) else None
-                    kwargs[k] = v
-            
-            block = {'name': m.group(1), 'body': m.group(3).strip(), 'kwargs': kwargs}
-            
-        func = self.block_callback.get(block['name'])
-        if func:
-            return func(self, block)
-        else:
-            return '' # return node.text
-
     def visit_side_block_item(self, node: Symbol) -> str:
         content = [self.parse_text(thing.text, 'content') 
                 for thing in node.find_all('side_block_cont')]
         return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz") # node[kwargs]
 
-
-    def visit_table_column(self, node: Symbol) -> str:
-        text = self.parse_text(node.text[:-2].strip(), 'words')
-        return self.tag('td', self.process_line(text), newline=False)
-
-    def visit_table2_begin(self, node: Symbol) -> str:
+    def visit_table_begin(self, node: Symbol) -> str:
         self.table_align = {}
         if separator := node.find('table_separator'):
             for i, x in enumerate(list(separator.find_all('table_horiz_line')) + list(separator.find_all('table_other'))):
@@ -617,7 +591,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
         return self.tag('table')
 
-    def visit_table2_end(self, node: Symbol) -> str:
+    def visit_table_end(self, node: Symbol) -> str:
         return '</table>\n'
 
     def visit_table_head(self, node: Symbol) -> str:
@@ -640,7 +614,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         for i, x in enumerate(nodes):
             text = x.text.strip("| ")
             if text != "":
-                s.append(self.tag('td', self.parse_text(text, 'words'),
+                s.append(self.tag('td', self.parse_text(text, 'line').strip(),
                     align=self.table_align.get(i, ''), newline=False, enclose=2))
             else:
                 s.append(self.tag("td", "", newline=False, enclose=2))
@@ -670,33 +644,39 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         name = node.text[2:-1]
         _id = self.footnote_id
         self.footnote_id += 1
+        # self.footnodes.append({'name': name, 'text': node.text[2:-1]})
         #return f'<sup id="fnref-{name}"><a href="#fn-{name}" class="footnote-rel inner">{_id}</a></sup>'
         return self.tag('sup', self.tag('a', f"{_id}", href=f"#fn-{name}", _class='footnote-rel inner'), id=f"fnref-{name}")
 
-    def visit_star_rating(self, node: Symbol) -> str:
-        r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
-        if (m := r.match(node.text)):
-            return self.tag('span', '⭐'*len(m.group('stars')), _class='star-rating', title=f"{len(m.group('stars'))} stars out of {m.group('outta')}")
-        else:
-            return self.tag('span', '⭐'*5, _class='star-rating')
-    
+    def visit_footnote_desc(self, node):
+        name = node.find('footnote').text[2:-1]
+        if name in self.footnodes:
+            raise Exception("The footnote %s is already existed" % name)
+
+        txt = self.visit(node.find('footnote_text')).rstrip()
+        text = self.parse_text(txt, 'article')
+        n = {'name': '%s' % name, 'text': text}
+        self.footnodes.append(n)
+        return ''
+
     visit_blanklines = visit_blankline
     visit_quote_blank_line = visit_blankline
 
     def __end__(self):
-        s = []
         if len(self.footnodes) > 0:
-            s.append(self.tag('div', _class='footnotes'))
-            s.append(self.tag('ol'))
+            s = []
+            s.append(self.tag('div', _class='footnotes', newline=False))
+            s.append(self.tag('ol', newline=False))
             for note in self.footnodes:
                 name = note['name']
                 s.append(self.tag('li', id=f"fn-{name}"))
-                s.append(note['text'])
-                s.append(self.tag('a', '↩', href=f'#fnref-{name}', _class='footnote-backref'))
+                s.append(self.tag('p', note['text'], newline=False))
+                s.append(self.tag('a', '↩', href=f'#fnref-{name}', _class='footnote-backref inner'))
                 s.append(self.tag('li', enclose=3))
-            s.append(self.tag('ol', enclose=3))
-            s.append(self.tag('div', enclose=3))
-        return '\n'.join(s)
+            s.append(self.tag('ol', enclose=3, newline=False))
+            s.append(self.tag('div', enclose=3, newline=False))
+            return '\n'.join(s)
+        return ''
 
     def template(self, node: Symbol):
         if self.grammar is None:
