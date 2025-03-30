@@ -230,6 +230,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.link_refers = {}
         self.block_callback = block_callback or {}
         self.init_callback  = init_callback
+        self._current_section_level = None
 
     def process_line(self, line: str) -> str:
         buf = []
@@ -316,8 +317,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
         _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
+        section_s = self._open_section(f"{title}".lower().replace(' ', '-'))
 
-        return self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
+        # Combine section opening with title tag
+        return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
 
     def visit_atx_title(self, node: Symbol) -> str:
         level = len(level.text) if (level := node.find('hashes')) and level.text else 1
@@ -643,9 +646,24 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     visit_blanklines = visit_blankline
     visit_quote_blank_line = visit_blankline
 
+
+    def _open_section(self, id):
+        stry = ""
+        if self._current_section_level is not None:
+            stry += self._close_section()
+
+        self._current_section_level = id
+        return stry+self.tag('section', '', secid=f'{id}')#, newline=False)
+
+    def _close_section(self):
+        if hasattr(self, '_current_section_level') and self._current_section_level is not None:
+            self._current_section_level = None
+            return self.tag('section', enclose=3)#, newline=False)
+        return ''
+
     def __end__(self):
+        s = []
         if len(self.footnodes) > 0:
-            s = []
             s.append(self.tag('div', _class='footnotes', newline=False))
             s.append(self.tag('ol', newline=False))
             for note in self.footnodes:
@@ -654,8 +672,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 s.append(self.tag('li', enclose=3))
             s.append(self.tag('ol', enclose=3, newline=False))
             s.append(self.tag('div', enclose=3, newline=False))
-            return '\n'.join(s)
-        return ''
+
+        if hasattr(self, '_current_section_level'):
+            s.append(self._close_section())
+            self._current_section_level = None
+        return '\n'.join(s)
+
 
     def template(self, node: Symbol):
         if self.grammar is None:
