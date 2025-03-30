@@ -651,14 +651,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         stry = ""
         if self._current_section_level is not None:
             stry += self._close_section()
-
         self._current_section_level = id
-        return stry+self.tag('section', '', secid=f'{id}')#, newline=False)
+        return stry+self.tag('section', '', secid=f'{id}')
 
     def _close_section(self):
         if hasattr(self, '_current_section_level') and self._current_section_level is not None:
             self._current_section_level = None
-            return self.tag('section', enclose=3)#, newline=False)
+            return self.tag('section', enclose=3)
         return ''
 
     def __end__(self):
