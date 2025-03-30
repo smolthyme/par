@@ -272,8 +272,8 @@ class parser(object):
                             except SyntaxError:
                                 break
                         if n == -2 and not(found):
-                            #syntaxError(f"{text} function={p}")
-                            syntaxError()
+                            syntaxError(f"{text} function={p}")
+                            #syntaxError()
                     n = 1
             return R(result, text)
 
