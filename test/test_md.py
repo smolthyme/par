@@ -275,6 +275,7 @@ def test_dl_7():
     </dl>
     """
 
+
 def test_hr():
     r"""
     >>> text = '''
@@ -528,7 +529,7 @@ def test_pre_6():
     c</code></pre>
     <BLANKLINE>
     """
-    
+
 def test_footnote():
     r"""
     >>> text = '''
@@ -959,8 +960,14 @@ class termfont:
 
     fg_default  = '\033[39m'; bg_default  = '\033[49m'; ef_default   = '\033[22m'  # test?
 
+    @staticmethod # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    def windows_enable_term_features():
+        import sys
+        if sys.platform=='win32': from ctypes import windll as Wd;Wd.kernel32.SetConsoleMode(Wd.kernel32.GetStdHandle(-11), 7)
+    
+
 sections_headers = {'Expected:': termfont.fg_green, 'Got:': termfont.fg_red, 'Trying:': termfont.fg_orange,
-                    'Expecting:': "hide", "Failed example:": "hide",
+                    'Expecting:': "hide", "Failed example:": "hide", "ms had failures:": "hide", "assed all tests:": "hide", "ms had no tests:": "hide",
                     }
     
 def color_output(output: str):
@@ -968,9 +975,10 @@ def color_output(output: str):
     # Iterate over each line
     heading_clr = termfont.fg_default
     for line in output.splitlines():
-        if line in sections_headers:
+        # last 16 chars of the line is a valid section header
+        if line[-16:] in sections_headers:
             # If the line is a section header, color it
-            heading_clr = sections_headers[line]
+            heading_clr = sections_headers[line[-16:]]
             print(termfont.fg_white + line + termfont.endc)
         elif len(line) > 0 and line[0] in ('\t', ' '):
             if heading_clr == "hide":
@@ -990,16 +998,17 @@ def run_tests():
     import doctest
     from io import StringIO
     import sys
-    import difflib
+
+    termfont.windows_enable_term_features()
 
     # Capture stdout
     old_stdout = sys.stdout
     sys.stdout = mystdout = StringIO()
     # options so that we have: 
     optionflags= doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS | doctest.REPORT_NDIFF
-    doctest.testmod(optionflags=optionflags)
+    doctest.testmod(verbose=True, exclude_empty=True)#, report=False)
+    #doctest.testmod(optionflags=optionflags)
     sys.stdout = old_stdout
-
     output = mystdout.getvalue()
     color_output(output)
 
