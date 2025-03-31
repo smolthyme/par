@@ -2,8 +2,30 @@
 # Syntax according from http://daringfireball.net/projects/markdown/syntax
 
 import types
+from collections import defaultdict
 from par.pyPEG import *
 from .__init__ import SimpleVisitor, MDHTMLVisitor
+
+class ResourceStore:
+    def __init__(self, initial_data:dict|None=None):
+        self.store = initial_data or {'link_refers': {}, 'tocitems': [], 'footnotes': {}}
+
+    def add(self, key, value):
+        if key not in self.store:
+            self.store[key] = []
+        if isinstance(self.store[key], list):
+            self.store[key].append(value)
+        else:
+            raise TypeError(f"Cannot add to key '{key}' as it is not a list.")
+    
+    def get(self, key):
+        return self.store[key]
+    
+    def set(self, key, subkey, value):
+        if isinstance(self.store[key], dict):
+            self.store[key][subkey] = value
+        else:
+            raise TypeError(f"Cannot set subkey '{subkey}' for key '{key}' as it is not a dict.")
 
 _ = re.compile
 
@@ -223,11 +245,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         self.title       = title
         self.tag_class   = tag_class or self.__class__.tag_class
-        self.chars       = sorted(self.op_maps.keys(), key      =lambda x: len(x), reverse=True)
+        self.chars       = sorted(self.op_maps.keys(), key=lambda x: len(x), reverse=True)
         self.footnote_id = footnote_id or 1
-        self.footnodes   = []
-        self.tocitems    = []
-        self.link_refers = {}
+        self.data_store  = ResourceStore()
         self.block_callback = block_callback or {}
         self.init_callback  = init_callback
         self._current_section_level = None
@@ -273,7 +293,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         v = self.__class__('', self.tag_class, g, block_callback=self.block_callback,
                         init_callback=self.init_callback, filename=self.filename,
                         footnote_id=self.footnote_id)
-        v.link_refers = self.link_refers
+        v.data_store = self.data_store
         r = v.visit(result[0])
         self.footnote_id = v.footnote_id
         
@@ -309,7 +329,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         _id_node = node.find('attr_def_id')
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
         title = (title_node := node.find('title_text')) and title_node.text.strip()
-        self.tocitems.append((level, _id, title))
+        self.data_store.add('tocitems', (level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
         _id_node = node.find('attr_def_id')
@@ -406,7 +426,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         key = node.find('link_refer_refer')
         key = key.text if key else caption
         
-        return self.tag('a', caption, **self.link_refers.get(key.upper(), {}), newline=False)
+        return self.tag('a', caption, **self.data_store.get('link_refers').get(key.upper(), {}), newline=False)
 
     def visit_image_refer(self, node: Symbol) -> str:
         alt = node.find('image_refer_alt')
@@ -415,17 +435,17 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         key = node.find('image_refer_refer')
         key_text = key.text if key else alt_text
 
-        d = self.link_refers.get(key_text.upper(), {})
+        d = self.data_store.get('link_refers').get(key_text.upper(), {})
         kwargs = {'src': d.get('href', ''), 'title': d.get('title', '')}
 
         return self.tag('img', enclose=1, **kwargs)
 
     def visit_link_refer_note(self, node: Symbol) -> str:
         key = noder.text.strip("][").upper() if (noder := node.find('link_inline_capt')) else ''
-        self.link_refers[key] = {'href': noder.text if (noder := node.find('link_refer_link')) else ''}
+        self.data_store.set('link_refers', key, {'href': noder.text if (noder := node.find('link_refer_link')) else ''})
 
         if (r := node.find('link_refer_title')):
-            self.link_refers[key]['title'] = r.text.strip(r")(\"'")
+            self.data_store.get('link_refers')[key]['title'] = r.text.strip(r")(\"'")
         
         return ''
 
@@ -610,10 +630,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''.join(s)
     
     def visit_directive(self, node: Symbol):
-        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.tocitems:
+        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.data_store.get('tocitems'):
             toc = [self.tag('section', _class='toc')]
             count = 1; hi = 0
-            for lvl, anchor, title in self.tocitems:
+            for lvl, anchor, title in self.data_store.get('tocitems'):
                 if lvl > hi:
                     toc.append(self.tag('ul'))
                 elif lvl < hi:
@@ -635,12 +655,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_footnote_desc(self, node):
         name = node.find('footnote').text.strip('[^]')
-        if name in self.footnodes:
+        if name in [fn['name'] for fn in self.data_store.get('footnotes')]:
             raise Exception("The footnote %s is already existed" % name)
 
         txt = self.visit(node.find('footnote_text')).rstrip()
         text = self.parse_text(txt, 'content').rstrip()
-        self.footnodes.append({'name': name, 'text': text})
+        self.data_store.add('footnotes', {'name': name, 'text': text})
         return ''
 
     visit_blanklines = visit_blankline
@@ -661,11 +681,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def __end__(self):
-        s = []
-        if len(self.footnodes) > 0:
+        s = []; footnotes = self.data_store.get('footnotes')
+        if len(footnotes) > 0:
             s.append(self.tag('div', _class='footnotes', newline=False))
             s.append(self.tag('ol', newline=False))
-            for note in self.footnodes:
+            for note in footnotes:
                 s.append(self.tag('li', note['text'], id=f"fn-{note['name']}", newline=False))
                 s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner'))
                 s.append(self.tag('li', enclose=3))
@@ -692,17 +712,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
 def parseHtml(text, template=None, tag_class=None, block_callback=None,
                 init_callback=None, filename=None, grammer=None, visitor=None):
-    template = template or ''
-    tag_class = tag_class or {}
     g = (grammer or MarkdownGrammar)()
     resultSoFar = []
     result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
-    v = (visitor or MarkdownHtmlVisitor)(template, tag_class, g,
-                                            block_callback=block_callback,
-                                            init_callback=init_callback,
-                                            filename=filename)
+    v = (visitor or MarkdownHtmlVisitor)( # args below
+            template or '{body}', tag_class or {}, g,
+            block_callback=block_callback,
+            init_callback=init_callback,
+            filename=filename)
     return v.template(result[0])
-
 
 def parseEmbeddedHtml(text):
     parsed = parseHtml(text)
@@ -710,7 +728,6 @@ def parseEmbeddedHtml(text):
     if len(_("<p>").findall(parsed)) == 1:
         parsed = re.sub(clean, "", parsed)
     return parsed
-
 
 def parseText(text, filename=None, grammer=None, visitor=None):
     g = (grammer or MarkdownGrammar)()
