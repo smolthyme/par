@@ -8,7 +8,7 @@ from .__init__ import SimpleVisitor, MDHTMLVisitor
 
 class ResourceStore:
     def __init__(self, initial_data:dict|None=None):
-        self.store = initial_data or {'link_refers': {}, 'tocitems': [], 'footnotes': {}}
+        self.store = initial_data or {'link_refers': {}, 'tocitems': [], 'footnotes': {}, 'images': []}
 
     def add(self, key, value):
         if key not in self.store:
@@ -247,17 +247,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.tag_class   = tag_class or self.__class__.tag_class
         self.chars       = sorted(self.op_maps.keys(), key=lambda x: len(x), reverse=True)
         self.footnote_id = footnote_id or 1
-        self.data_store  = ResourceStore()
+        self.resources   = ResourceStore()
         self.block_callback = block_callback or {}
         self.init_callback  = init_callback
         self._current_section_level = None
 
     def process_line(self, line: str) -> str:
-        buf = []
-        stack = []  # To track open tags
-        i = 0
+        buf = []; stack = []  # To track open tags
         line = line.strip()
 
+        i = 0
         while i < len(line):
             matched = False
             for c in self.chars:
@@ -274,7 +273,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             if not matched:  # No formatting symbol matched
                 buf.append(line[i])
                 i += 1
-
         return ''.join(buf)
 
     def visit(self, nodes: Symbol, root=False) -> str:
@@ -293,7 +291,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         v = self.__class__('', self.tag_class, g, block_callback=self.block_callback,
                         init_callback=self.init_callback, filename=self.filename,
                         footnote_id=self.footnote_id)
-        v.data_store = self.data_store
+        v.resources = self.resources
         r = v.visit(result[0])
         self.footnote_id = v.footnote_id
         
@@ -329,7 +327,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         _id_node = node.find('attr_def_id')
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
         title = (title_node := node.find('title_text')) and title_node.text.strip()
-        self.data_store.add('tocitems', (level, _id, title))
+        self.resources.add('tocitems', (level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
         _id_node = node.find('attr_def_id')
@@ -419,6 +417,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             elif src.endswith(".mp3"):
                 return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
 
+        self.resources.add('images', src)
         return self.tag('img', enclose=1, **kwargs)
 
     def visit_link_refer(self, node: Symbol) -> str:
@@ -426,7 +425,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         key = node.find('link_refer_refer')
         key = key.text if key else caption
         
-        return self.tag('a', caption, **self.data_store.get('link_refers').get(key.upper(), {}), newline=False)
+        return self.tag('a', caption, **self.resources.get('link_refers').get(key.upper(), {}), newline=False)
 
     def visit_image_refer(self, node: Symbol) -> str:
         alt = node.find('image_refer_alt')
@@ -435,18 +434,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         key = node.find('image_refer_refer')
         key_text = key.text if key else alt_text
 
-        d = self.data_store.get('link_refers').get(key_text.upper(), {})
+        d = self.resources.get('link_refers').get(key_text.upper(), {})
         kwargs = {'src': d.get('href', ''), 'title': d.get('title', '')}
 
+        self.resources.add('images', kwargs['src'])
         return self.tag('img', enclose=1, **kwargs)
 
     def visit_link_refer_note(self, node: Symbol) -> str:
         key = noder.text.strip("][").upper() if (noder := node.find('link_inline_capt')) else ''
-        self.data_store.set('link_refers', key, {'href': noder.text if (noder := node.find('link_refer_link')) else ''})
+        self.resources.set('link_refers', key, {'href': noder.text if (noder := node.find('link_refer_link')) else ''})
 
         if (r := node.find('link_refer_title')):
-            self.data_store.get('link_refers')[key]['title'] = r.text.strip(r")(\"'")
-        
+            self.resources.get('link_refers')[key]['title'] = r.text.strip(r")(\"'")
         return ''
 
     def visit_link_raw(self, node: Symbol) -> str:
@@ -460,7 +459,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         type, begin = ('image', 6) if t[:6].lower() == 'image:'\
                 else (  'wiki', 5) if t[:5].lower() == 'wiki:' else ('wiki', 0)
         t = t[begin:]
-        filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
         
         if type == 'wiki':
             _v,  caption = ( t.split('|', 1) + [''])[:2]
@@ -468,27 +466,30 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html") \
                 if name else self.tag('a', caption, href=anchor, newline=False)
         
+        filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
+        href = f"images/{filename}"
         cls = []
         if width:
             cls.append( f'width="{width}px"'  if width.isdigit()  else f'width="{width}"')
         if height:
             cls.append(f'height="{height}px"' if height.isdigit() else f'height="{height}"')
         
-        img_tag = self.tag('img', '', attrs=' '.join(cls), src=f"images/{filename}", enclose=1)
+        self.resources.add('images', href)
+        img_tag = self.tag('img', '', attrs=' '.join(cls), src=href, enclose=1)
         return    self.tag('div', img_tag, _class=f"float{align}", enclose=1) if align else img_tag
 
     def visit_image_link(self, node: Symbol) -> str:
-        href = node.text.strip('<>')
-        return self.tag('img', src=f"images/{href}", enclose=1)
+        href = f"images/{node.text.strip('<>')}"
+        self.resources.add('images', href)
+        return self.tag('img', src=href, enclose=1)
 
     def visit_link_mailto(self, node: Symbol) -> str:
         import random
+        shuffle = lambda text: ''.join(f'&#x{ord(x):X};' if random.choice('01') == '1' else x for x in text)
+        
         href = node.text[1:-1]
         if href.startswith('mailto:'):
             href = href[7:]
-
-        shuffle = lambda text: ''.join(f'&#x{ord(x):X};' if random.choice('01') == '1' else x for x in text)
-
         return self.tag('a', shuffle(href), href=shuffle("mailto:" + href), newline=False)
 
     def visit_quote_line(self, node: Symbol) -> str:
@@ -630,10 +631,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''.join(s)
     
     def visit_directive(self, node: Symbol):
-        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.data_store.get('tocitems'):
+        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.get('tocitems'):
             toc = [self.tag('section', _class='toc')]
             count = 1; hi = 0
-            for lvl, anchor, title in self.data_store.get('tocitems'):
+            for lvl, anchor, title in self.resources.get('tocitems'):
                 if lvl > hi:
                     toc.append(self.tag('ul'))
                 elif lvl < hi:
@@ -655,12 +656,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_footnote_desc(self, node):
         name = node.find('footnote').text.strip('[^]')
-        if name in [fn['name'] for fn in self.data_store.get('footnotes')]:
+        if name in [fn['name'] for fn in self.resources.get('footnotes')]:
             raise Exception("The footnote %s is already existed" % name)
 
         txt = self.visit(node.find('footnote_text')).rstrip()
         text = self.parse_text(txt, 'content').rstrip()
-        self.data_store.add('footnotes', {'name': name, 'text': text})
+        self.resources.add('footnotes', {'name': name, 'text': text})
         return ''
 
     visit_blanklines = visit_blankline
@@ -681,7 +682,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def __end__(self):
-        s = []; footnotes = self.data_store.get('footnotes')
+        s = []; footnotes = self.resources.get('footnotes')
         if len(footnotes) > 0:
             s.append(self.tag('div', _class='footnotes', newline=False))
             s.append(self.tag('ol', newline=False))
@@ -720,7 +721,8 @@ def parseHtml(text, template=None, tag_class=None, block_callback=None,
             block_callback=block_callback,
             init_callback=init_callback,
             filename=filename)
-    return v.template(result[0])
+    out = v.template(result[0])
+    return out
 
 def parseEmbeddedHtml(text):
     parsed = parseHtml(text)
