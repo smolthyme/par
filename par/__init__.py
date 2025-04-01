@@ -92,16 +92,12 @@ class HTMLVisitor(SimpleVisitor):
 
 class MDHTMLVisitor(HTMLVisitor):
     # Pretty sure filename can be removed
-    def __init__(self, grammar=None, filename=None, title="", tag_class=None, block_callback=None, init_callback=None):
+    def __init__(self, grammar=None, filename=None, title="", tag_class=None):
         super(MDHTMLVisitor, self).__init__(grammar, filename)
-        # self.indent = 0
         self.title = title
         self.titles_ids = {}
         self.tag_class = tag_class or self.__class__.tag_class
 
-        self.block_callback = block_callback or {}
-        self.init_callback = init_callback
-        
         self._template = '{body}'
     
 
