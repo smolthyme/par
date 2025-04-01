@@ -8,7 +8,9 @@ from .__init__ import SimpleVisitor, MDHTMLVisitor
 
 class ResourceStore:
     def __init__(self, initial_data:dict|None=None):
-        self.store = initial_data or {'link_refers': {}, 'tocitems': [], 'footnotes': {}, 'images': []}
+        self.store = {'link_refers': {}, 'tocitems': [], 'footnotes': {}, 'images': []}
+        if initial_data:
+            self.store = {**self.store, **initial_data}
 
     def add(self, key, value):
         if key not in self.store:
@@ -239,17 +241,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     op_maps = {k: v for k, v in sorted(op_maps.items(), key=lambda item: len(item[0]), reverse=True)}
     tag_class = {}
 
-    def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled',
-                    block_callback=None, init_callback=None, footnote_id=None, filename=None):
+    def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled', footnote_id=None, filename=None, resources=None):
         super().__init__(grammar, filename)
         
         self.title       = title
         self.tag_class   = tag_class or self.__class__.tag_class
         self.chars       = sorted(self.op_maps.keys(), key=lambda x: len(x), reverse=True)
         self.footnote_id = footnote_id or 1
-        self.resources   = ResourceStore()
-        self.block_callback = block_callback or {}
-        self.init_callback  = init_callback
+        self.resources   = ResourceStore(resources)
         self._current_section_level = None
 
     def process_line(self, line: str) -> str:
@@ -288,9 +287,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
-        v = self.__class__('', self.tag_class, g, block_callback=self.block_callback,
-                        init_callback=self.init_callback, filename=self.filename,
-                        footnote_id=self.footnote_id)
+        v = self.__class__('', self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id)
         v.resources = self.resources
         r = v.visit(result[0])
         self.footnote_id = v.footnote_id
@@ -703,23 +700,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if self.grammar is None:
             raise ValueError("Grammar is not defined.")
         body = self.visit(node, self.grammar.root)
-        if self.init_callback:
-            self.init_callback(self)
         if self._template:
             return self._template.format_map({'title':self.title, 'body':body})
         else:
             return body
 
 
-def parseHtml(text, template=None, tag_class=None, block_callback=None,
-                init_callback=None, filename=None, grammer=None, visitor=None):
+def parseHtml(text, template=None, tag_class=None, filename=None, grammer=None, visitor=None):
     g = (grammer or MarkdownGrammar)()
     resultSoFar = []
     result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
     v = (visitor or MarkdownHtmlVisitor)( # args below
             template or '{body}', tag_class or {}, g,
-            block_callback=block_callback,
-            init_callback=init_callback,
             filename=filename)
     out = v.template(result[0])
     return out

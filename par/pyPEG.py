@@ -5,8 +5,8 @@
 import re
 import sys
 
-from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional
-from dataclasses import dataclass
+from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional, Dict, Iterator
+from collections import defaultdict
 
 class keyword(str): pass
 
