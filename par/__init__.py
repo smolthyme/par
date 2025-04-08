@@ -20,8 +20,7 @@ class SimpleVisitor(object):
     def __init__(self, grammar=None, filename=None):
         self.grammar = grammar
         self.filename = filename
-
-    #def visit(self, nodes, root=False) -> str:
+    
     def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
         buf = []
         if not isinstance(nodes, (list, tuple)):
@@ -63,6 +62,13 @@ class HTMLVisitor(SimpleVisitor):
         self._template = '<html><head><title>{title}</title></head><body>{body}</body></html>'
     
     def tag(self, tag: str, child='', attrs='', enclose=0, newline=True, **kwargs) -> str:
+        """HTML tag generator
+        Args:
+          * child -- complete tag content
+          * attrs -- additional attributes
+          * enclose -- 1: self-closing tag, 2: open+close tag, 3: close tag
+        """
+        
         kw = kwargs.copy()
         _class = kw.pop('_class', '')
         _class += ' ' + kw.pop('class', '')
@@ -97,12 +103,8 @@ class MDHTMLVisitor(HTMLVisitor):
         self.title = title
         self.titles_ids = {}
         self.tag_class = tag_class or self.__class__.tag_class
-
         self._template = '{body}'
     
 
-    def get_title_id(self, level:int, begin=1) -> str:
-        self.titles_ids[level] = self.titles_ids.get(level, 0) + 1
-        _ids = [self.titles_ids.get(x, 0) for x in range(begin, level + 1)]
-        return f'title_{'-'.join(map(str, _ids))}'
+
 

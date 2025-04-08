@@ -8,7 +8,7 @@ from .__init__ import SimpleVisitor, MDHTMLVisitor
 
 class ResourceStore:
     def __init__(self, initial_data:dict|None=None):
-        self.store = {'link_refers': {}, 'tocitems': [], 'footnotes': {}, 'images': []}
+        self.store = {'link_refers': {}, 'tocitems': [], 'footnotes': [], 'images': []}
         if initial_data:
             self.store = {**self.store, **initial_data}
 
@@ -44,16 +44,21 @@ class MarkdownGrammar(dict):
         def ws()               : return _(r'\s+')
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'\S+')
+        def wordlike()         : return _(r'\S+?')
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
 
         def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
         def htmlentity()       : return _(r'&\w+;')
         def escape_string()    : return _(r'\\'), _(r'.')
-        def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
-        def code_string_short(): return _(r'`'), _(r'[^`]*'), _(r'`')
-        def code_string()      : return _(r'``'), _(r'.+(?=``)'), _(r'``')
+        def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[]+')
+
+        def format_bold()         : return _(r'\*\*'), words , _(r'\*\*')
+        def format_italic()       : return _(r'\*'),   words , _(r'\*')
+        def format_code()         : return _(r'`'),    words , _(r'`')
+        def format_subscript()    : return _(r',,'),   words , _(r',,')
+        def format_superscript()  : return _(r'\^'),   words , _(r'\^\^')
+        def format_strikethrough(): return _(r'~~'),   words , _(r'~~')
 
         ## inline
         def longdash()         : return _(r"--\B")
@@ -65,16 +70,17 @@ class MarkdownGrammar(dict):
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
 
         def word()             : return [ # Tries to show parse-order
-                escape_string, 
-                code_string, code_string_short,
+                format_bold, format_italic, format_code,
+                format_subscript, format_superscript, format_strikethrough,
+                
+                escape_string,
                 html_inline_block, inline_tag,
                 footnote, link, 
-                htmlentity, longdash, star_rating,
-                string, wordlike
+                htmlentity, longdash, star_rating, string
             ]
         
         def words()            : return word, -1, [space, word]
-        def line()             : return 0, space, -2, words, eol
+        def line()             : return 0, space, -2, [words, wordlike], eol
         def common_text()      : return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
         def common_line()      : return common_text, eol
         def paragraph()        : return line, -1, (0, space, common_line), -1, blanklines
@@ -225,20 +231,6 @@ class MarkdownGrammar(dict):
 
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):
-    op_maps = {
-        '*'  :  ['<em>',          '</em>'],
-        '**' :  ['<strong>',      '</strong>'],
-        '***':  ['<strong><em>',  '</em></strong>'],
-        '_'  :  ['<em>',          '</em>'],
-        '__' :  ['<strong>',      '</strong>'],
-        '___':  ['<strong><em>',  '</em></strong>'],
-        '`'  :  ['<code>',        '</code>'],
-        '^'  :  ['<sup>',         '</sup>'],
-        ',,' :  ['<sub>',         '</sub>'],
-        '~~' :  ['<span style="text-decoration: line-through">', '</span>'],
-    }
-    # Sort ops_maps by key length to parse correctly (long match first, not 3 * 1 '*')
-    op_maps = {k: v for k, v in sorted(op_maps.items(), key=lambda item: len(item[0]), reverse=True)}
     tag_class = {}
 
     def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled', footnote_id=None, filename=None, resources=None):
@@ -246,33 +238,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         self.title       = title
         self.tag_class   = tag_class or self.__class__.tag_class
-        self.chars       = sorted(self.op_maps.keys(), key=lambda x: len(x), reverse=True)
         self.footnote_id = footnote_id or 1
         self.resources   = ResourceStore(resources)
         self._current_section_level = None
-
-    def process_line(self, line: str) -> str:
-        buf = []; stack = []  # To track open tags
-        line = line.strip()
-
-        i = 0
-        while i < len(line):
-            matched = False
-            for c in self.chars:
-                if line[i:i + len(c)] == c:  # Match a formatting symbol
-                    if stack and stack[-1] == c:  # Closing tag
-                        buf.append(self.op_maps[c][1])
-                        stack.pop()
-                    else:  # Opening tag
-                        buf.append(self.op_maps[c][0])
-                        stack.append(c)
-                    i += len(c)
-                    matched = True
-                    break
-            if not matched:  # No formatting symbol matched
-                buf.append(line[i])
-                i += 1
-        return ''.join(buf)
 
     def visit(self, nodes: Symbol, root=False) -> str:
         if root:# Collect titles for use in ToC, global things
@@ -281,7 +249,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
 
-    def parse_text(self, text, peg=None):
+    def parse_markdown(self, text, peg=None):
         g = self.grammar or MarkdownGrammar()
         if isinstance(peg, str):
             peg = g[peg]
@@ -289,10 +257,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
         v = self.__class__('', self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id)
         v.resources = self.resources
-        r = v.visit(result[0])
+        parsed_output = v.visit(result[0])
         self.footnote_id = v.footnote_id
         
-        return r
+        return parsed_output
     
     def visit_string(self, node: Symbol) -> str:
         return self.to_html(node.text)
@@ -301,13 +269,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return '\n'
 
     def visit_longdash(self, node: Symbol) -> str:
-        return '—' # &mdash;
+        return '—'
 
     def visit_hr(self, node: Symbol) -> str:
         return self.tag('hr', enclose=1)
     
     def visit_table_sep(self, node: Symbol) -> str:
         return ''
+
+    def get_title_id(self, level:int, begin=1) -> str:
+        self.titles_ids[level] = self.titles_ids.get(level, 0) + 1
+        _ids = [self.titles_ids.get(x, 0) for x in range(begin, level + 1)]
+        return f'title_{'-'.join(map(str, _ids))}'
 
     def _alt_title(self, node: Symbol):
         node  = node.what[0]
@@ -351,10 +324,66 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_indent_line(self, node: Symbol):
         return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
+    
+    def visit_format_bold_begin(self, node: Symbol) -> str:
+        return self.tag('strong', newline=False)
+    
+    def visit_format_bold(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("*")
+
+    def visit_format_bold_end(self, node: Symbol) -> str:
+        return self.tag('strong', enclose=3, newline=False)
+
+    def visit_format_italic_begin(self, node: Symbol) -> str:
+        return self.tag('em', newline=False)
+
+    def visit_format_italic(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("_")
+
+    def visit_format_italic_end(self, node: Symbol) -> str:
+        return self.tag('em', enclose=3, newline=False)
+
+    def visit_format_code_begin(self, node: Symbol) -> str:
+        return self.tag('code', newline=False)
+    
+    def visit_format_code(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("`")
+
+    def visit_format_code_end(self, node: Symbol) -> str:
+        return self.tag('code', enclose=3, newline=False)
+
+    def visit_format_subscript_begin(self, node: Symbol) -> str:
+        return self.tag('sub', newline=False)
+    
+    def visit_format_subscript(self, node: Symbol) -> str:
+        return node.text.strip(",")
+
+    def visit_format_subscript_end(self, node: Symbol) -> str:
+        return self.tag('sub', enclose=3, newline=False)
+
+    def visit_format_superscript_begin(self, node: Symbol) -> str:
+        return self.tag('sup', newline=False)
+    
+    def visit_format_superscript(self, node: Symbol) -> str:
+        return node.text.strip("^")
+
+    def visit_format_superscript_end(self, node: Symbol) -> str:
+        return self.tag('sup', enclose=3, newline=False)
+
+    def visit_format_strikethrough_begin(self, node: Symbol) -> str:
+        return self.tag('span', style="text-decoration: line-through", newline=False)
+
+    def visit_format_strikethrough(self, node: Symbol) -> str:
+        return node.text.strip("~")
+
+    def visit_format_strikethrough_end(self, node: Symbol) -> str:
+        return self.tag('span', enclose=3, newline=False)
 
     def visit_paragraph(self, node: Symbol) -> str:
-        txt = node.text.rstrip().replace('\n', ' ')
-        return self.tag('p', self.process_line(self.parse_text(txt, 'paragraph')))
+        return self.tag('p', self.visit(node).strip(), enclose=2)
 
     def visit_pre(self, node: Symbol) -> str:
         cwargs = {}; kwargs = {}
@@ -460,7 +489,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if type == 'wiki':
             _v,  caption = ( t.split('|', 1) + [''])[:2]
             name, anchor = (_v.split('#', 1) + [''])[:2]
-            return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html") \
+            return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html", newline=False) \
                 if name else self.tag('a', caption, href=anchor, newline=False)
         
         filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
@@ -496,7 +525,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         text = []
         for line in node.find_all('quote_lines'):
             text.append(self.visit(line))
-        result = self.parse_text(''.join(text), 'content')
+        result = self.parse_markdown(''.join(text), 'content')
         
         attrib = node.find("quote_name")
         atrdat = node.find("quote_date")
@@ -531,7 +560,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_lists_end(self, node: Symbol) -> str:
         def process_node(n):
             text = ''.join(self.visit(node) for node in n)
-            t = self.parse_text(text, 'content').rstrip()
+            t = self.parse_markdown(text, 'content').rstrip()
             return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
 
         def create_list(lists):
@@ -560,13 +589,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('dl', enclose=3, newline=False)
 
     def visit_dl_dt(self, node: Symbol) -> str:
-        txt = node.text.rstrip().rstrip(':').rstrip('-')
-        text = self.parse_text(txt, 'line')
-        return self.tag('dt', self.process_line(text), enclose=1)
-
+        #txt = node.text.rstrip().rstrip(':').rstrip(' -')
+        #text = self.parse_text(txt, 'line')
+        txt = self.visit(node).rstrip(' -\n')
+        text = self.parse_markdown(txt, 'line').strip()
+        return self.tag('dt', text, enclose=1)
+    
     def visit_dl_dd(self, node: Symbol) -> str:
         txt = self.visit(node).rstrip()
-        text = self.parse_text(txt.lstrip(':').lstrip(), 'content')
+        text = self.parse_markdown(txt.lstrip(':').lstrip(), 'content')
         return self.tag('dd', text, enclose=1)
 
     def visit_star_rating(self, node: Symbol) -> str:
@@ -585,7 +616,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('span', node.text, _class='inline-tag')
 
     def visit_side_block_item(self, node: Symbol) -> str:
-        content = [self.parse_text(thing.text, 'content') 
+        content = [self.parse_markdown(thing.text, 'content') 
                 for thing in node.find_all('side_block_cont')]
         return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz") # node[kwargs]
 
@@ -620,7 +651,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         for i, x in enumerate(nodes):
             text = self.visit(x)
             if text != "":
-                s.append(self.tag('td', self.process_line(text),
+                s.append(self.tag('td', self.parse_markdown(text, 'line').strip(),
                     align=self.table_align.get(i, ''), newline=False, enclose=2))
             else:
                 s.append(self.tag("td", "", newline=False, enclose=2))
@@ -649,7 +680,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         name = node.text[2:-1]
         _id = self.footnote_id
         self.footnote_id += 1
-        return self.tag('sup', self.tag('a', f"{_id}", href=f"#fn-{name}", _class='footnote-rel inner'), id=f"fnref-{name}")
+        return self.tag('sup', self.tag('a', f"{_id}", href=f"#fn-{name}", _class='footnote-rel inner', newline=False), id=f"fnref-{name}")
 
     def visit_footnote_desc(self, node):
         name = node.find('footnote').text.strip('[^]')
@@ -657,7 +688,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             raise Exception("The footnote %s is already existed" % name)
 
         txt = self.visit(node.find('footnote_text')).rstrip()
-        text = self.parse_text(txt, 'content').rstrip()
+        text = self.parse_markdown(txt, 'content').rstrip()
         self.resources.add('footnotes', {'name': name, 'text': text})
         return ''
 
@@ -679,21 +710,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def __end__(self):
-        s = []; footnotes = self.resources.get('footnotes')
-        if len(footnotes) > 0:
-            s.append(self.tag('div', _class='footnotes', newline=False))
-            s.append(self.tag('ol', newline=False))
-            for note in footnotes:
-                s.append(self.tag('li', note['text'], id=f"fn-{note['name']}", newline=False))
-                s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner'))
-                s.append(self.tag('li', enclose=3))
-            s.append(self.tag('ol', enclose=3, newline=False))
-            s.append(self.tag('div', enclose=3, newline=False))
-
+        s = []; 
         if hasattr(self, '_current_section_level'):
             s.append(self._close_section())
             self._current_section_level = None
-        return '\n'.join(s)
+
+        footnotes = self.resources.get('footnotes')
+        if len(footnotes) > 0:
+            s.append(self.tag('div', _class='footnotes', newline=False) + self.tag('ol', newline=False))
+            for note in footnotes:
+                s.append(self.tag('li', id=f"fn-{note['name']}", newline=False, enclose=0))
+                s.append(note['text'] + "\n")
+                s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner'))
+                s.append(self.tag('li', enclose=3, newline=False))
+            s.append(self.tag('ol', enclose=3, newline=False) + self.tag('div', enclose=3, newline=False))
+        return '\n'.join(s).strip()
 
 
     def template(self, node: Symbol):

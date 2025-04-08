@@ -539,10 +539,10 @@ def test_footnote():
     ... '''
     >>> print (parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p>That's some text with a footnote.<sup id="fnref-1"><a href="#fn-1" class="footnote-rel inner">1</a></sup></p>
+    <p>That's some text with a footnote.<sup id="fnref-1"><a class="footnote-rel inner" href="#fn-1">1</a></sup></p>
     <div class="footnotes"><ol>
     <li id="fn-1">
-    <p> <strong>aaaa</strong></p>
+    <p><strong>aaaa</strong></p>
     <BLANKLINE>
     <a class="footnote-backref inner" href="#fnref-1">↩</a>
     <BLANKLINE>
@@ -570,6 +570,72 @@ def test_attr_1():
     <h3 id="subject">subject<a class="anchor" href="#subject"></a></h3>
     <h3 id="subject">subject<a class="anchor" href="#subject"></a></h3>
     <p><a href="#anchor">link to anchor</a></p>
+    <BLANKLINE>
+    """
+
+def test_bold():
+    r"""
+    >>> text = '''
+    ... This is **bold** text.
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p>This is <strong>bold</strong> text.</p>
+    <BLANKLINE>
+    """
+
+def test_italic():
+    r"""
+    >>> text = '''
+    ... This is *italic* text.
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p>This is <em>italic</em> text.</p>
+    <BLANKLINE>
+    """
+
+def test_bold_and_italic():
+    r"""
+    >>> text = '''
+    ... This is ***bold and italic*** text.
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p>This is <strong><em>bold and italic</em></strong> text.</p>
+    <BLANKLINE>
+    """
+
+def test_inline_code():
+    r"""
+    >>> text = '''
+    ... This is `inline code`.
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p>This is <code>inline code</code>.</p>
+    <BLANKLINE>
+    """
+
+def test_bold_and_code():
+    r"""
+    >>> text = '''
+    ... This is **bold** and `code`.
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p>This is <strong>bold</strong> and <code>code</code>.</p>
+    <BLANKLINE>
+    """
+
+def test_combined_formatting():
+    r"""
+    >>> text = '''
+    ... This is **bold**, *italic*, and `code` in one sentence.
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p>This is <strong>bold</strong>, <em>italic</em>, and <code>code</code> in one sentence.</p>
     <BLANKLINE>
     """
 
