@@ -40,7 +40,6 @@ class MarkdownGrammar(dict):
         #  0 = ? = Optional ; -1 = * = Zero or more ; -2 = + = One or more ; n = n matches
 
         ## basic
-        def ws()               : return _(r'\s+')
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
         def wordlike()         : return _(r'[^\*\^`~\s\d\.]+') # Remove brackets maybe?
@@ -102,13 +101,13 @@ class MarkdownGrammar(dict):
 
         ## pre
         def indent_line_text() : return _(r'.+')
-        def indent_line()      : return _(r'[ ]{4}|\t'), indent_line_text, eol
+        def indent_line()      : return _(r'[ ]{4}|\t'), indent_line_text, blankline
         def indent_block()     : return -2, [indent_line, blankline]
         def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
         def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
         def pre_text2()        : return _(r'.+?(?=</code>)', re.M|re.DOTALL)
-        def pre_extra1()       : return _(r'```|~{3,}'), 0, pre_lang, 0, space, eol, pre_text1, _(r'```|~{3,}'), -2, blankline
-        def pre_extra2()       : return _(r'<code>'), 0, pre_lang, 0, space, eol, pre_text2, _(r'</code>'), -2, blankline
+        def pre_extra1()       : return _(r'```|~{3,}'), 0, pre_lang, blankline, pre_text1, _(r'```|~{3,}'), -2, blankline
+        def pre_extra2()       : return _(r'<code>'), 0, pre_lang, blankline, pre_text2, _(r'</code>'), -2, blankline
         def pre()              : return [indent_block, pre_extra1, pre_extra2]
     
         ## class and id definition
@@ -144,14 +143,14 @@ class MarkdownGrammar(dict):
         def dl()              : return dl_line, -1, [blankline, dl_line]
 
         # Horizontal items
-        def side_block_head()  : return _(r'\|\|\|'), eol
+        def side_block_head()  : return _(r'\|\|\|'), blankline
         def side_block_cont()  : return -2, [text, space]
         def side_block_item()  : return side_block_head, -2, side_block_cont
         def side_block()       : return -2, side_block_item
 
         ## lists
         def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
-        def list_rest_of_line(): return _(r'.+'), eol
+        def list_rest_of_line(): return _(r'.+'), blankline
         def list_first_para()  : return 0, check_radio, list_rest_of_line, -1, (0, space, text), -1, blanklines
         def list_line()        : return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
         def list_lines()       : return list_norm_line, -1, [list_indent_lines, blankline]
@@ -164,12 +163,12 @@ class MarkdownGrammar(dict):
         def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
 
         ## quote
-        def quote_text()       : return _(r'[^\r\n]*'), eol
-        def quote_blank_line() : return _(r'>[ \t]*'), eol
+        def quote_text()       : return _(r'[^\r\n]*'), blankline
+        def quote_blank_line() : return _(r'>[ \t]*'), blankline
         def quote_line()       : return _(r'> (?!- )'), quote_text
         def quote_name()       : return _(r'[^\r\n\(\)\d]*')
         def quote_date()       : return _(r'[^\r\n\)]+')
-        def quote_attr()       : return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), eol
+        def quote_attr()       : return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), blankline
         def quote_lines()      : return [quote_blank_line, quote_line]
         def blockquote()       : return -2, quote_lines, 0, quote_attr, -1, blankline
 
@@ -200,7 +199,7 @@ class MarkdownGrammar(dict):
         def link_refer_link()  : return 0, _(r'(<)?(\S+)(?(1)>)')
         def link_refer_title() : return [_(r'\([^\)]*\)'), literal]
         def link_refer_note()  : return 0, _(r' {1,3}'), link_inline_capt, _(
-            r':'), space, link_refer_link, 0, (ws, link_refer_title), -2, blankline
+            r':'), space, link_refer_link, 0, space, link_refer_title, -2, blankline
         
         def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto]
 
