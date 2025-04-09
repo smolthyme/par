@@ -2,7 +2,6 @@
 # Syntax according from http://daringfireball.net/projects/markdown/syntax
 
 import types
-from collections import defaultdict
 from par.pyPEG import *
 from .__init__ import SimpleVisitor, MDHTMLVisitor
 
@@ -44,21 +43,21 @@ class MarkdownGrammar(dict):
         def ws()               : return _(r'\s+')
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'\S+?')
+        def wordlike()         : return _(r'[^\*\^`~\s\d\.]+') # Remove brackets maybe?
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
 
         def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
         def htmlentity()       : return _(r'&\w+;')
         def escape_string()    : return _(r'\\'), _(r'.')
-        def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[]+')
+        def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[\]]+')
 
-        def format_bold()         : return _(r'\*\*'), words , _(r'\*\*')
-        def format_italic()       : return _(r'\*'),   words , _(r'\*')
-        def format_code()         : return _(r'`'),    words , _(r'`')
-        def format_subscript()    : return _(r',,'),   words , _(r',,')
-        def format_superscript()  : return _(r'\^'),   words , _(r'\^\^')
-        def format_strikethrough(): return _(r'~~'),   words , _(r'~~')
+        def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
+        def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
+        def fmt_code()         : return _(r'`'),    words , _(r'`')
+        def fmt_subscript()    : return _(r',,'),   words , _(r',,')
+        def fmt_superscript()  : return _(r'\^'),   words , _(r'\^\^')
+        def fmt_strikethrough(): return _(r'~~'),   words , _(r'~~')
 
         ## inline
         def longdash()         : return _(r"--\B")
@@ -70,20 +69,17 @@ class MarkdownGrammar(dict):
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
 
         def word()             : return [ # Tries to show parse-order
-                format_bold, format_italic, format_code,
-                format_subscript, format_superscript, format_strikethrough,
-                
                 escape_string,
                 html_inline_block, inline_tag,
+                fmt_bold, fmt_italic, fmt_code,
+                fmt_subscript, fmt_superscript, fmt_strikethrough,
                 footnote, link, 
-                htmlentity, longdash, star_rating, string
+                htmlentity, longdash, star_rating, string, wordlike
             ]
         
         def words()            : return word, -1, [space, word]
-        def line()             : return 0, space, -2, [words, wordlike], eol
-        def common_text()      : return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
-        def common_line()      : return common_text, eol
-        def paragraph()        : return line, -1, (0, space, common_line), -1, blanklines
+        def text()             : return 0, space, -2, words
+        def paragraph()        : return text, -1, (0, space, text), -2, blanklines
 
         def directive_name()   : return _(r'\w+')
         def directive_title()  : return _(r'[^\n\r]+')
@@ -122,7 +118,7 @@ class MarkdownGrammar(dict):
         def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
         
         ## titles / subject
-        def title_text()       : return _(r'[^\]\[\n#\{\}]+', re.U)
+        def title_text()       : return _(r'[^\[\]\n#\{\}]+', re.U)
         def hashes()           : return _(r'#{1,6}')
         def atx_title()        : return hashes, 0, space, title_text, 0, space, 0, hashes, 0, space, 0, attr_def, -2, blankline
         def setext_underline() : return _(r'[ \t]*[-=]+[ \t]*')
@@ -149,24 +145,23 @@ class MarkdownGrammar(dict):
 
         # Horizontal items
         def side_block_head()  : return _(r'\|\|\|'), eol
-        def side_block_cont()  : return -2, [common_line, space]
+        def side_block_cont()  : return -2, [text, space]
         def side_block_item()  : return side_block_head, -2, side_block_cont
         def side_block()       : return -2, side_block_item
 
         ## lists
         def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
         def list_rest_of_line(): return _(r'.+'), eol
-        def list_first_para()  : return 0, check_radio, list_rest_of_line, -1, (0, space, common_line), -1, blanklines
+        def list_first_para()  : return 0, check_radio, list_rest_of_line, -1, (0, space, text), -1, blanklines
         def list_line()        : return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
         def list_lines()       : return list_norm_line, -1, [list_indent_lines, blankline]
         def list_indent_line() : return _(r' {4}|\t'), list_rest_of_line
-        def list_norm_line()   : return _(r' {1,3}'), common_line, -1, (0, space, common_line), -1, blanklines
+        def list_norm_line()   : return _(r' {1,3}'), text, -1, (0, space, text), -1, blanklines
         def list_indent_lines(): return list_indent_line, -1, [list_indent_line, list_line], -1, blanklines
-        def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines]
+        def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines, lists]
         def bullet_list_item() : return 0, _(r' {1,3}'), _(r'\*|\+|-'), space, list_content
         def number_list_item() : return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
-        def list_item()        : return -2, [bullet_list_item, number_list_item]
-        def lists()            : return -2, list_item, -1, blankline
+        def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
 
         ## quote
         def quote_text()       : return _(r'[^\r\n]*'), eol
@@ -190,9 +185,9 @@ class MarkdownGrammar(dict):
 
         ## links
         def link_raw()         : return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
-        def link_image_raw()   : return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)', re.I)
+        def link_image_raw()   : return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)')
         def link_mailto()      : return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
-        def link_wiki()        : return _(r'(\[\[)(.*?)((1)?\]\])')
+        def link_wiki()        : return _(r'\[\[[^\[\]]*\]\]')
 
         def link_inline_capt() : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
         def link_inline_title(): return literal
@@ -207,14 +202,14 @@ class MarkdownGrammar(dict):
         def link_refer_note()  : return 0, _(r' {1,3}'), link_inline_capt, _(
             r':'), space, link_refer_link, 0, (ws, link_refer_title), -2, blankline
         
-        def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto], -1, space
+        def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto]
 
         ## article
-        def content(): return -2, [blanklines, \
-                hr, title, link_refer_note, directive,
+        def content(): return -2, [blanklines,
+                hr, lists, link_refer_note, directive,
                 pre, html_block,
-                side_block, table, lists, dl, blockquote, footnote_desc,
-                paragraph ]
+                side_block, table, blockquote, dl, footnote_desc,
+                title, paragraph ]
 
         def article(): return content
 
@@ -325,61 +320,61 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_indent_line(self, node: Symbol):
         return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
     
-    def visit_format_bold_begin(self, node: Symbol) -> str:
+    def visit_fmt_bold_begin(self, node: Symbol) -> str:
         return self.tag('strong', newline=False)
     
-    def visit_format_bold(self, node: Symbol) -> str:
+    def visit_fmt_bold(self, node: Symbol) -> str:
         a = node.find('words')
         return self.visit(a) if a else node.text.strip("*")
 
-    def visit_format_bold_end(self, node: Symbol) -> str:
+    def visit_fmt_bold_end(self, node: Symbol) -> str:
         return self.tag('strong', enclose=3, newline=False)
 
-    def visit_format_italic_begin(self, node: Symbol) -> str:
+    def visit_fmt_italic_begin(self, node: Symbol) -> str:
         return self.tag('em', newline=False)
 
-    def visit_format_italic(self, node: Symbol) -> str:
+    def visit_fmt_italic(self, node: Symbol) -> str:
         a = node.find('words')
         return self.visit(a) if a else node.text.strip("_")
 
-    def visit_format_italic_end(self, node: Symbol) -> str:
+    def visit_fmt_italic_end(self, node: Symbol) -> str:
         return self.tag('em', enclose=3, newline=False)
 
-    def visit_format_code_begin(self, node: Symbol) -> str:
+    def visit_fmt_code_begin(self, node: Symbol) -> str:
         return self.tag('code', newline=False)
     
-    def visit_format_code(self, node: Symbol) -> str:
+    def visit_fmt_code(self, node: Symbol) -> str:
         a = node.find('words')
         return self.visit(a) if a else node.text.strip("`")
 
-    def visit_format_code_end(self, node: Symbol) -> str:
+    def visit_fmt_code_end(self, node: Symbol) -> str:
         return self.tag('code', enclose=3, newline=False)
 
-    def visit_format_subscript_begin(self, node: Symbol) -> str:
+    def visit_fmt_subscript_begin(self, node: Symbol) -> str:
         return self.tag('sub', newline=False)
     
-    def visit_format_subscript(self, node: Symbol) -> str:
+    def visit_fmt_subscript(self, node: Symbol) -> str:
         return node.text.strip(",")
 
-    def visit_format_subscript_end(self, node: Symbol) -> str:
+    def visit_fmt_subscript_end(self, node: Symbol) -> str:
         return self.tag('sub', enclose=3, newline=False)
 
-    def visit_format_superscript_begin(self, node: Symbol) -> str:
+    def visit_fmt_superscript_begin(self, node: Symbol) -> str:
         return self.tag('sup', newline=False)
     
-    def visit_format_superscript(self, node: Symbol) -> str:
+    def visit_fmt_superscript(self, node: Symbol) -> str:
         return node.text.strip("^")
 
-    def visit_format_superscript_end(self, node: Symbol) -> str:
+    def visit_fmt_superscript_end(self, node: Symbol) -> str:
         return self.tag('sup', enclose=3, newline=False)
 
-    def visit_format_strikethrough_begin(self, node: Symbol) -> str:
+    def visit_fmt_strikethrough_begin(self, node: Symbol) -> str:
         return self.tag('span', style="text-decoration: line-through", newline=False)
 
-    def visit_format_strikethrough(self, node: Symbol) -> str:
+    def visit_fmt_strikethrough(self, node: Symbol) -> str:
         return node.text.strip("~")
 
-    def visit_format_strikethrough_end(self, node: Symbol) -> str:
+    def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
         return self.tag('span', enclose=3, newline=False)
 
     def visit_paragraph(self, node: Symbol) -> str:
@@ -444,7 +439,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
 
         self.resources.add('images', src)
-        return self.tag('img', enclose=1, **kwargs)
+        return self.tag('img', enclose=1, **kwargs, newline=False)
 
     def visit_link_refer(self, node: Symbol) -> str:
         caption = noder[1] if (noder := node.find('link_refer_capt')) else ''
@@ -464,7 +459,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         kwargs = {'src': d.get('href', ''), 'title': d.get('title', '')}
 
         self.resources.add('images', kwargs['src'])
-        return self.tag('img', enclose=1, **kwargs)
+        return self.tag('img', enclose=1, **kwargs, newline=False)
 
     def visit_link_refer_note(self, node: Symbol) -> str:
         key = noder.text.strip("][").upper() if (noder := node.find('link_inline_capt')) else ''
@@ -476,7 +471,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_link_raw(self, node: Symbol) -> str:
         href = node.text.strip('<>')
-        return self.tag('a', href, href=href)
+        return self.tag('a', href, href=href, newline=False)
 
     def visit_link_wiki(self, node: Symbol) -> str:
         """ # TODO: Needs a resource store to validate, path etc.
@@ -490,7 +485,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             _v,  caption = ( t.split('|', 1) + [''])[:2]
             name, anchor = (_v.split('#', 1) + [''])[:2]
             return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html", newline=False) \
-                if name else self.tag('a', caption, href=anchor, newline=False)
+                if name else self.tag('a', caption, href=f"#{anchor}", newline=False)
         
         filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
         href = f"images/{filename}"
@@ -501,13 +496,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             cls.append(f'height="{height}px"' if height.isdigit() else f'height="{height}"')
         
         self.resources.add('images', href)
-        img_tag = self.tag('img', '', attrs=' '.join(cls), src=href, enclose=1)
-        return    self.tag('div', img_tag, _class=f"float{align}", enclose=1) if align else img_tag
+        img_tag = self.tag('img', '', attrs=' '.join(cls), src=href, enclose=1, newline=False)
+        return    self.tag('div', img_tag, _class=f"float{align}", enclose=1, newline=False) if align else img_tag
 
     def visit_image_link(self, node: Symbol) -> str:
         href = f"images/{node.text.strip('<>')}"
         self.resources.add('images', href)
-        return self.tag('img', src=href, enclose=1)
+        return self.tag('img', src=href, enclose=1, newline=False)
 
     def visit_link_mailto(self, node: Symbol) -> str:
         import random
@@ -592,7 +587,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         #txt = node.text.rstrip().rstrip(':').rstrip(' -')
         #text = self.parse_text(txt, 'line')
         txt = self.visit(node).rstrip(' -\n')
-        text = self.parse_markdown(txt, 'line').strip()
+        text = self.parse_markdown(txt, 'text').strip()
         return self.tag('dt', text, enclose=1)
     
     def visit_dl_dd(self, node: Symbol) -> str:
@@ -651,7 +646,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         for i, x in enumerate(nodes):
             text = self.visit(x)
             if text != "":
-                s.append(self.tag('td', self.parse_markdown(text, 'line').strip(),
+                s.append(self.tag('td', self.parse_markdown(text, 'text').strip(),
                     align=self.table_align.get(i, ''), newline=False, enclose=2))
             else:
                 s.append(self.tag("td", "", newline=False, enclose=2))
@@ -701,7 +696,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if self._current_section_level is not None:
             stry += self._close_section()
         self._current_section_level = id
-        return stry+self.tag('section', '', secid=f'{id}')
+        return stry+self.tag('section', '', id=f'section-{id}')
 
     def _close_section(self):
         if hasattr(self, '_current_section_level') and self._current_section_level is not None:
@@ -721,7 +716,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             for note in footnotes:
                 s.append(self.tag('li', id=f"fn-{note['name']}", newline=False, enclose=0))
                 s.append(note['text'] + "\n")
-                s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner'))
+                s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner', newline=False))
                 s.append(self.tag('li', enclose=3, newline=False))
             s.append(self.tag('ol', enclose=3, newline=False) + self.tag('div', enclose=3, newline=False))
         return '\n'.join(s).strip()

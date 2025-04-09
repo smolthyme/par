@@ -12,7 +12,7 @@ def test_symbol():
     >>> text = '''
     ... This is **a** symbol **test**.
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p>This is <strong>a</strong> symbol <strong>test</strong>.</p>
     <BLANKLINE>
@@ -24,7 +24,7 @@ def test_list_1():
     ... * a
     ... * b
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ul>
     <li>a</li>
@@ -39,7 +39,7 @@ def test_list_2():
     ... 1. a
     ... 2. b
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ol>
     <li>a</li>
@@ -59,7 +59,7 @@ def test_list_3():
     ... * d
     ... 
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ul>
     <li>a</li>
@@ -80,7 +80,7 @@ def test_list_4():
     ...     * e
     ... 
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ul>
     <li><p>a</p>
@@ -105,7 +105,7 @@ def test_dl_1():
     ... b --
     ...     cde
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <dl>
     <dt>a</dt>
@@ -127,7 +127,7 @@ def test_dl_2():
     ... **b** --
     ...     * li
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <dl>
     <dt>a_</dt>
@@ -151,7 +151,7 @@ def test_dl_3():
     ... **b**
     ... :   * li
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <dl>
     <dt>a</dt>
@@ -177,7 +177,7 @@ def test_dl_4():
     ...     ```
     ... 
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <dl>
     <dt>a</dt>
@@ -198,7 +198,7 @@ def test_dl_5():
     ...     ```
     ... 
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <dl>
     <dt>a</dt>
@@ -220,7 +220,7 @@ def test_dl_6():
     ...         return {}
     ...         ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ol>
     <li><p>aaa</p>
@@ -257,7 +257,7 @@ def test_dl_7():
     ...
     ...     test
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <dl>
     <dt>a</dt>
@@ -283,7 +283,7 @@ def test_hr():
     ... ----
     ... __ __ __
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <hr/>
     <hr/>
@@ -298,7 +298,7 @@ def test_url_1():
     ... 
     ... [foo]: http://example.com/  "Optional Title Here"
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p>This is <a href="http://example.com/" title="Optional Title Here">Test</a> .</p>
     <BLANKLINE>
@@ -311,7 +311,7 @@ def test_url_2():
     ... 
     ... [foo]: http://example.com/  'Optional Title Here'
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p>This is <a href="http://example.com/" title="Optional Title Here">Test</a> .</p>
     <BLANKLINE>
@@ -324,7 +324,7 @@ def test_url_3():
     ... 
     ... [foo]: http://example.com/  (Optional Title Here)
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p>This is <a href="http://example.com/" title="Optional Title Here">Test</a> .</p>
     <BLANKLINE>
@@ -337,7 +337,7 @@ def test_url_4():
     ... 
     ... [foo]: http://example.com/  (Optional Title Here)
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p>This is <a href="http://example.com/" title="Optional Title Here">foo</a> .</p>
     <BLANKLINE>
@@ -349,7 +349,7 @@ def test_table():
     ... || a || b || c ||
     ... || b || c || d ||
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <table>
     <tr><td>a</td><td>b</td><td>c</td>
@@ -367,7 +367,7 @@ def test_table_0():
     ... |--|--|                                                                                      
     ... |asd||
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <table>
     <thead>
@@ -378,7 +378,111 @@ def test_table_0():
     </tbody></table>
     <BLANKLINE>
     """
-    
+
+def test_image_basic():
+    r"""
+    >>> text = '''
+    ... ![Alt text](image.jpg)
+    ... ![Another image](path/to/image.png)
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p><img src="image.jpg" alt="Alt text"/></p>
+    <p><img src="path/to/image.png" alt="Another image"/></p>
+    <BLANKLINE>
+    """
+
+def test_image_with_title():
+    r"""
+    >>> text = '''
+    ... ![Alt text](image.jpg "Optional Title")
+    ... ![Another image](path/to/image.png "Another Title")
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p><img src="image.jpg" alt="Alt text" title="Optional Title"/></p>
+    <p><img src="path/to/image.png" alt="Another image" title="Another Title"/></p>
+    <BLANKLINE>
+    """
+    def test_inline_tag():
+        r"""
+        >>> text = '''
+        ... {tag:class}[index]
+        ... '''
+        >>> print(parseHtml(text, '%(body)s'))
+        <BLANKLINE>
+        <p><span class="inline-tag class" data-rel="index">tag</span></p>
+        <BLANKLINE>
+        """
+
+    def test_side_block_item():
+        r"""
+        >>> text = '''
+        ... ||| Item 1
+        ... ||| Item 2
+        ... '''
+        >>> print(parseHtml(text, '%(body)s'))
+        <BLANKLINE>
+        <div class="collection-horiz">Item 1</div>
+        <div class="collection-horiz">Item 2</div>
+        <BLANKLINE>
+        """
+
+    def test_star_rating():
+        r"""
+        >>> text = '''
+        ... ★★★★☆ / 5
+        ... '''
+        >>> print(parseHtml(text, '%(body)s'))
+        <BLANKLINE>
+        <p><span class="star-rating" title="4 stars out of 5">⭐⭐⭐⭐</span></p>
+        <BLANKLINE>
+        """
+
+    def test_star_rating_invalid():
+        r"""
+        >>> text = '''
+        ... ★★★★☆ / wombat
+        ... '''
+        >>> print(parseHtml(text, '%(body)s'))
+        <BLANKLINE>
+        <p><span class="star-rating">⭐⭐⭐⭐⭐</span></p>
+        <BLANKLINE>
+        """
+
+def list_nest_1():
+    r"""
+    >>> text = '''
+    ... *   Abacus
+    ...     * answer
+    ... *   Bubbles
+    ...     1.  bunk
+    ...     2.  bupkis
+    ...         * BELITTLER
+    ...     3. burper
+    ... *   Cunning
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <ul>
+    <li><p>Abacus</p>
+    <ul>
+    <li>answer</li>
+    </ul></li>
+    <li><p>Bubbles</p>
+    <ol>
+    <li>bunk</li>
+    <li>bupkis</li>
+    <ul>
+    <li>BELITTLER</li>
+    </ul></li>
+    <li>burper</li>
+    </ol></li>
+    <li><p>Cunning</p></li>
+    </ul>
+    <BLANKLINE>
+    """
+
 # def test_block_1():
 #     r"""
 #     >>> text = '''
@@ -394,7 +498,7 @@ def test_table_0():
 #     ... {% endtabs %}
 #     ... '''
 #     >>> from par.bootstrap_ext import blocks
-#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
 #     <BLANKLINE>
 #     <div class="tabbable">
 #     <ul class="nav nav-tabs">
@@ -423,7 +527,7 @@ def test_table_0():
 #     ...     This is an alert.
 #     ... {%endalert%}'''
 #     >>> from par.bootstrap_ext import blocks
-#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
 #     <BLANKLINE>
 #     <div class="alert alert-info">
 #     <button class="close" data-dismiss="alert">&times;</button>
@@ -441,7 +545,7 @@ def test_pre_1():
     ... c
     ... ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <pre id="test"><code class="language-python">a
     b
@@ -458,7 +562,7 @@ def test_pre_2():
     ... c
     ... ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <pre><code class="language-python">a
     b
@@ -475,7 +579,7 @@ def test_pre_3():
     ... c
     ... ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <pre id="test"><code>a
     b
@@ -492,7 +596,7 @@ def test_pre_4():
     ... c
     ... ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <pre><code>a
     b
@@ -507,7 +611,7 @@ def test_pre5():
     ... asfadsf
     ... ~~~~~~
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <pre><code>asfadsf</code></pre>
     <BLANKLINE>
@@ -522,7 +626,7 @@ def test_pre_6():
     ... c
     ... ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <pre class="linenums"><code>a
     b
@@ -537,7 +641,7 @@ def test_footnote():
     ... 
     ... [^1]: **aaaa**
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p>That's some text with a footnote.<sup id="fnref-1"><a class="footnote-rel inner" href="#fn-1">1</a></sup></p>
     <div class="footnotes"><ol>
@@ -563,7 +667,7 @@ def test_attr_1():
     ... 
     ... [link to anchor](#anchor)
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <h1 id="test">test<a class="anchor" href="#test"></a></h1>
     <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
@@ -648,7 +752,7 @@ def test_attr_2():
     ... ## hello  {.hello}
     ... ## hello  {.hello #title .class}
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
     <h2 class="hello" id="title_0-1">hello<a class="anchor" href="#title_0-1"></a></h2>
@@ -671,7 +775,7 @@ def test_link_1():
     ... <Page>
     ... <http://localhost:8000>
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p><a href="Page.html">Hello world</a> <a href="Page.html#title">Hello world</a> <a href="Page.html">Hello world</a>
     </p>
@@ -690,7 +794,7 @@ def test_link_2():
     ... [[#edit]]
     ... [abc][cde]
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p><a href="http://aaaa.com">http://aaaa.com</a> <img src="http://aaaa.com"/>
      <a href="page">page</a> <a href="http://aaaa.com">http://aaaa.com</a> <a href="Page.html">Page</a>
@@ -708,7 +812,7 @@ def test_table_1():
     ... Content Cell  | Content Cell
     ... Content Cell  | Content Cell
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <table>
     <thead>
@@ -729,7 +833,7 @@ def test_table_2():
     ... Content Cell  | Content Cell  | Content Cell 
     ... Content Cell  | Content Cell  | Content Cell 
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <table>
     <thead>
@@ -750,7 +854,7 @@ def test_table_3():
     ... | **cell**      | Content Cell  |
     ... | Content Cell  | Content Cell  |
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <table>
     <thead>
@@ -770,7 +874,7 @@ def test_table_4():
     ... |--|--|
     ... |asd||
     ... '''
-    >>> print (parseHtml(text, '%(body)s', tag_class={'table':'table'}))
+    >>> print(parseHtml(text, '%(body)s', tag_class={'table':'table'}))
     <BLANKLINE>
     <table>
     <thead>
@@ -791,7 +895,7 @@ def test_list_pre():
     ...     code
     ...     ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ol>
     <li><p>abc</p>
@@ -807,7 +911,7 @@ def test_list_pre_1():
     ... 
     ...         code
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ol>
     <li><p>abc</p>
@@ -827,7 +931,7 @@ def test_list_pre_2():
     ...     code
     ...     ```
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ol>
     <li><p>abc</p>
@@ -844,7 +948,7 @@ def test_list_pre_2():
 #     ... This is a test.
 #     ... {% endalert %}
 #     ... '''
-#     >>> print (parseHtml(text, '%(body)s', block_callback=semantic_blocks))
+#     >>> print(parseHtml(text, '%(body)s', block_callback=semantic_blocks))
 #     <BLANKLINE>
 #     <div class="ui  message">
 #     <p>This is a test.</p>
@@ -864,7 +968,7 @@ def test_list_pre_2():
 #     ... 1. d
 #     ... {% endtabs %}
 #     ... '''
-#     >>> print (parseHtml(text, '%(body)s', block_callback=semantic_blocks))
+#     >>> print(parseHtml(text, '%(body)s', block_callback=semantic_blocks))
 #     <BLANKLINE>
 #     <div class="ui tabular filter menu">
 #     <a class=" class="active"item" data-tab="tab_item_1_1">name</a>
@@ -903,7 +1007,7 @@ def test_list_check_radio():
     ...     * <*> c
     ...     * < > d
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <ul>
     <li><input type="checkbox"></input>a</li>
@@ -930,7 +1034,7 @@ def test_toc():
     ... Something here
     ... ## Second heading
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <section class="toc">
     <ul>
@@ -949,7 +1053,7 @@ def test_video_direct():
     >>> text = '''
     ... ![](cool.mp4)
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p><video controls="yesplz" disablePictureInPicture="True" playsinline="True" src="images/cool.mp4" type="video/mp4"/></p>
     <BLANKLINE>
@@ -960,7 +1064,7 @@ def test_video_youtube():
     >>> text = '''
     ... ![](https://www.youtube.com/watch?v=iNiImDNtLpQ)
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p><object class="yt-embed" data="https://www.youtube.com/embed/iNiImDNtLpQ"></object></p>
     <BLANKLINE>
@@ -971,7 +1075,7 @@ def test_blockquote():
     >>> text = '''
     ... > "I have been using the AquaBoostAG liquefied polymer" -- Mystery Mountain Grove
     ... '''
-    >>> print (parseHtml(text, '%(body)s'))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <blockquote><p>"I have been using the AquaBoostAG liquefied polymer" — Mystery Mountain Grove</p>
     </blockquote>
@@ -1045,15 +1149,25 @@ def color_output(output: str):
         if line[-16:] in sections_headers:
             # If the line is a section header, color it
             heading_clr = sections_headers[line[-16:]]
-            print(termfont.fg_white + line + termfont.endc)
+            if line.startswith("Trying:"):
+                continue
+            if heading_clr != 'hide':
+                print(termfont.fg_white + line + termfont.endc)
         elif len(line) > 0 and line[0] in ('\t', ' '):
             if heading_clr == "hide":
+                continue
+            elif line.startswith("    print(parseHtml"):
+                print()
                 continue
             else:
                 print(heading_clr + line + termfont.endc)
         elif line == 'ok':
+            continue
             print(termfont.fg_green + line + termfont.endc)
         elif len(line) > 0:
+            if line.startswith("Expecting nothing") or line.startswith('File "'):
+                continue
+
             heading_clr = termfont.fg_default
             print(line)
         else:
