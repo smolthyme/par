@@ -115,7 +115,6 @@ def test_dl_1():
     <dd><p>cde</p>
     </dd>
     </dl>
-    
     """
 
 def test_dl_2():
@@ -139,7 +138,6 @@ def test_dl_2():
     </ul>
     </dd>
     </dl>
-    
     """
 
 def test_dl_3():
@@ -163,7 +161,6 @@ def test_dl_3():
     </ul>
     </dd>
     </dl>
-    
     """
 
 def test_dl_4():
@@ -273,6 +270,31 @@ def test_dl_7():
     <p>test</p>
     </dd>
     </dl>
+    """
+
+def test_deflist_1():
+    r"""
+    >>> text = '''
+    ... Term
+    ... : Definition
+    ... 
+    ... Another Term
+    ... : Its definition
+    ... : Can have multiple definitions
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <dl>
+    <dt>Term</dt>
+    <dd><p>Definition</p>
+    </dd>
+    <dt>Another Term</dt>
+    <dd><p>Its definition</p>
+    </dd>
+    <dd><p>Can have multiple definitions</p>
+    </dd>
+    </dl>
+    <BLANKLINE>
     """
 
 
@@ -387,8 +409,8 @@ def test_image_basic():
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p><img src="image.jpg" alt="Alt text"/></p>
-    <p><img src="path/to/image.png" alt="Another image"/></p>
+    <p><img alt="Alt text" src="images/image.jpg"/></p>
+    <p><img alt="Another image" src="images/path/to/image.png"/></p>
     <BLANKLINE>
     """
 
@@ -400,55 +422,59 @@ def test_image_with_title():
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <p><img src="image.jpg" alt="Alt text" title="Optional Title"/></p>
-    <p><img src="path/to/image.png" alt="Another image" title="Another Title"/></p>
+    <p><img alt="Alt text" src="images/image.jpg" title="Optional Title"/></p>
+    <p><img alt="Another image" src="images/path/to/image.png" title="Another Title"/></p>
     <BLANKLINE>
     """
-    def test_inline_tag():
-        r"""
-        >>> text = '''
-        ... {tag:class}[index]
-        ... '''
-        >>> print(parseHtml(text, '%(body)s'))
-        <BLANKLINE>
-        <p><span class="inline-tag class" data-rel="index">tag</span></p>
-        <BLANKLINE>
-        """
 
-    def test_side_block_item():
-        r"""
-        >>> text = '''
-        ... ||| Item 1
-        ... ||| Item 2
-        ... '''
-        >>> print(parseHtml(text, '%(body)s'))
-        <BLANKLINE>
-        <div class="collection-horiz">Item 1</div>
-        <div class="collection-horiz">Item 2</div>
-        <BLANKLINE>
-        """
+def test_inline_tag():
+    r"""
+    >>> text = '''
+    ... {tag:class}[index]
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p><span class="inline-tag class" data-rel="index">tag</span></p>
+    <BLANKLINE>
+    """
 
-    def test_star_rating():
-        r"""
-        >>> text = '''
-        ... ★★★★☆ / 5
-        ... '''
-        >>> print(parseHtml(text, '%(body)s'))
-        <BLANKLINE>
-        <p><span class="star-rating" title="4 stars out of 5">⭐⭐⭐⭐</span></p>
-        <BLANKLINE>
-        """
+def test_side_block_item():
+    r"""
+    >>> text = '''
+    ... ||| 
+    ... Item 1
+    ... Item 2
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <div class="collection-horiz">
+    <p>Item 1</p>
+    <p>Item 2</p>
+    </div>
+    <BLANKLINE>
+    """
 
-    def test_star_rating_invalid():
-        r"""
-        >>> text = '''
-        ... ★★★★☆ / wombat
-        ... '''
-        >>> print(parseHtml(text, '%(body)s'))
-        <BLANKLINE>
-        <p><span class="star-rating">⭐⭐⭐⭐⭐</span></p>
-        <BLANKLINE>
-        """
+def test_star_rating():
+    r"""
+    >>> text = '''
+    ... ★★★★ / 5
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p><span class="star-rating" title="4 stars out of 5">⭐⭐⭐⭐</span></p>
+    <BLANKLINE>
+    """
+
+def test_star_rating_invalid():
+    r"""
+    >>> text = '''
+    ... ★★★★ / wombat
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <p><span class="star-rating">⭐⭐⭐⭐⭐</span></p>
+    <BLANKLINE>
+    """
 
 def list_nest_1():
     r"""
@@ -669,12 +695,19 @@ def test_attr_1():
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
+    <section id="section-test">
     <h1 id="test">test<a class="anchor" href="#test"></a></h1>
+    </section>
+    <section id="section-hello">
     <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
+    </section>
+    <section id="section-subject">
     <h3 id="subject">subject<a class="anchor" href="#subject"></a></h3>
+    </section>
+    <section id="section-subject">
     <h3 id="subject">subject<a class="anchor" href="#subject"></a></h3>
     <p><a href="#anchor">link to anchor</a></p>
-    <BLANKLINE>
+    </section>
     """
 
 def test_bold():
@@ -754,12 +787,21 @@ def test_attr_2():
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
+    <section id="section-hello">
     <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
-    <h2 class="hello" id="title_0-1">hello<a class="anchor" href="#title_0-1"></a></h2>
+    </section>
+    <section id="section-hello">
+    <h2 class="hello" id="title_0-3">hello<a class="anchor" href="#title_0-3"></a></h2>
+    </section>
+    <section id="section-hello">
     <h2 id="hello">hello<a class="anchor" href="#hello"></a></h2>
-    <h2 class="hello" id="title_0-2">hello<a class="anchor" href="#title_0-2"></a></h2>
+    </section>
+    <section id="section-hello">
+    <h2 class="hello" id="title_0-4">hello<a class="anchor" href="#title_0-4"></a></h2>
+    </section>
+    <section id="section-hello">
     <h2 class="hello class" id="title">hello<a class="anchor" href="#title"></a></h2>
-    <BLANKLINE>
+    </section>
     """
 
 def test_link_1():
@@ -1042,10 +1084,13 @@ def test_toc():
     <li><a href="#toc_2">Second heading</a></li>
     </ul>
     </section>
+    <section id="section-first-heading">
     <h2 id="title_0-1">First heading<a class="anchor" href="#title_0-1"></a></h2>
     <p>Something here</p>
+    </section>
+    <section id="section-second-heading">
     <h2 id="title_0-2">Second heading<a class="anchor" href="#title_0-2"></a></h2>
-    <BLANKLINE>
+    </section>
     """
 
 def test_video_direct():
@@ -1091,10 +1136,15 @@ def test_heading_1():
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
+    <section id="section-heading-1">
     <h1 id="title_2">Heading 1<a class="anchor" href="#title_2"></a></h1>
+    </section>
+    <section id="section-heading-2">
     <h2 id="title_2-2">Heading 2<a class="anchor" href="#title_2-2"></a></h2>
+    </section>
+    <section id="section-heading-3">
     <h3 id="title_2-2-2">Heading 3<a class="anchor" href="#title_2-2-2"></a></h3>
-    <BLANKLINE>
+    </section>
     """
 
 def test_heading_2():
@@ -1110,10 +1160,15 @@ def test_heading_2():
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
+    <section id="section-heading-1">
     <h1 id="title_2">Heading 1<a class="anchor" href="#title_2"></a></h1>
+    </section>
+    <section id="section-heading-2">
     <h2 id="title_2-2">Heading 2<a class="anchor" href="#title_2-2"></a></h2>
+    </section>
+    <section id="section-heading-3">
     <h3 id="title_2-2-2">Heading 3<a class="anchor" href="#title_2-2-2"></a></h3>
-    <BLANKLINE>
+    </section>
     """
 
 
