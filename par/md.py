@@ -42,7 +42,7 @@ class MarkdownGrammar(dict):
         ## basic
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'[^\*\^`~\s\d\.]+') # Remove brackets maybe?
+        def wordlike()         : return _(r'[^\*\_^`~\s\d\.]+') # Remove brackets maybe?
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
 
@@ -53,9 +53,10 @@ class MarkdownGrammar(dict):
 
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
+        def fmt_underline()    : return _(r'__'),   words , _(r'__')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
-        def fmt_superscript()  : return _(r'\^'),   words , _(r'\^\^')
+        def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
         def fmt_strikethrough(): return _(r'~~'),   words , _(r'~~')
 
         ## inline
@@ -69,8 +70,8 @@ class MarkdownGrammar(dict):
 
         def word()             : return [ # Tries to show parse-order
                 escape_string,
-                html_inline_block, inline_tag,
-                fmt_bold, fmt_italic, fmt_code,
+                html_block, html_inline_block, inline_tag,
+                fmt_bold, fmt_italic, fmt_code, fmt_underline,
                 fmt_subscript, fmt_superscript, fmt_strikethrough,
                 footnote, link, 
                 htmlentity, longdash, star_rating, string, wordlike
@@ -78,7 +79,7 @@ class MarkdownGrammar(dict):
         
         def words()            : return word, -1, [space, word]
         def text()             : return 0, space, -2, words
-        def paragraph()        : return text, -1, (0, space, text), -2, blanklines
+        def paragraph()        : return text, -1, (0, space, text), blanklines
 
         def directive_name()   : return _(r'\w+')
         def directive_title()  : return _(r'[^\n\r]+')
@@ -134,17 +135,10 @@ class MarkdownGrammar(dict):
         def table_body_line()  : return 0, table_sep, -2, table_td, -1, table_other, blankline
         def table_body()       : return -2, table_body_line
         def table()            : return table_head, table_separator, table_body
-        
-        ## definition lists
-        # Works but not correctly.
-        def dl_dt()           : return _(r'[^ \t\r\n]+.*(?:--|:)?'), -2, blankline
-        def dl_dd()           : return _(r':?'), space, list_rest_of_line, -1, [list_indent_lines, blankline]
-        def dl_line()         : return dl_dt, dl_dd
-        def dl()              : return dl_line, -1, [blankline, dl_line]
 
         # Horizontal items
         def side_block_head()  : return _(r'\|\|\|'), blankline
-        def side_block_cont()  : return -2, [text, space]
+        def side_block_cont()  : return paragraph
         def side_block_item()  : return side_block_head, -2, side_block_cont
         def side_block()       : return -2, side_block_item
 
@@ -161,6 +155,14 @@ class MarkdownGrammar(dict):
         def bullet_list_item() : return 0, _(r' {1,3}'), _(r'\*|\+|-'), space, list_content
         def number_list_item() : return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
         def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
+
+        def dl_dt_1()          : return _(r'[^ \t\r\n]+.*--'), -2, blankline
+        def dl_dd_1()          : return 0, space, -1, [text, blankline]
+        def dl_dt_2()          : return _(r'[^ \t\r\n]+.*'), -1, blankline
+        def dl_dd_2()          : return _(r':'), _(r' {1,3}'), list_rest_of_line, -1, [text, blankline]
+        def dl_line_1()        : return dl_dt_1, dl_dd_1
+        def dl_line_2()        : return dl_dt_2, -2, dl_dd_2
+        def dl()               : return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
 
         ## quote
         def quote_text()       : return _(r'[^\r\n]*'), blankline
@@ -206,8 +208,8 @@ class MarkdownGrammar(dict):
         ## article
         def content(): return -2, [blanklines,
                 hr, lists, link_refer_note, directive,
-                pre, html_block,
-                side_block, table, blockquote, dl, footnote_desc,
+                pre, html_block, dl,
+                side_block, table, blockquote, footnote_desc,
                 title, paragraph ]
 
         def article(): return content
@@ -335,6 +337,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_fmt_italic(self, node: Symbol) -> str:
         a = node.find('words')
         return self.visit(a) if a else node.text.strip("_")
+    
+    def visit_fmt_underline_begin(self, node: Symbol) -> str:
+        return self.tag('u', newline=False)
+    
+    def visit_fmt_underline(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("_")
+    
+    def visit_fmt_underline_end(self, node: Symbol) -> str:
+        return self.tag('u', enclose=3, newline=False)
 
     def visit_fmt_italic_end(self, node: Symbol) -> str:
         return self.tag('em', enclose=3, newline=False)
@@ -391,15 +403,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                         cwargs['class'] = 'language-' + (val or key)
                     else:
                         kwargs[key] = val or 'language-' + key
-        code_content = self.to_html(self.visit(node).rstrip())
         
-        return self.tag('pre', self.tag('code', code_content, newline=False, **cwargs), **kwargs)
+        if pre_text := node.find('pre_text1') or node.find('pre_text2'):
+            code_content = self.to_html(pre_text.text.strip("` \t\n"))
+            return self.tag('pre', self.tag('code', code_content, newline=False, **cwargs), **kwargs)
+        else:
+            return self.tag('pre', self.tag('code', node.text.strip("` \t\n"), newline=False, **cwargs), **kwargs)
 
     def visit_pre_extra1(self, node: Symbol):
-        return (text_node := node.find('pre_text1')) and text_node.text.rstrip()
+        return "XXXX" # Are  these unused?
 
     def visit_pre_extra2(self, node: Symbol):
-        return (text_node := node.find('pre_text2')) and text_node.text.rstrip()
+        return "XXXX" # Are  these unused?
 
     def visit_link_inline(self, node: Symbol):
         # FIXME: What is opaque? oh, this code
@@ -576,22 +591,30 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return ''.join(buf)
         return create_list(self.lists)
 
-    def visit_dl_begin(self, node: Symbol) -> str:
+    def visit_dl_begin(self, node):
         return self.tag('dl')
 
-    def visit_dl_end(self, node: Symbol) -> str:
-        return self.tag('dl', enclose=3, newline=False)
+    def visit_dl_end(self, node):
+        return self.tag('dl', enclose=3)
 
-    def visit_dl_dt(self, node: Symbol) -> str:
-        #txt = node.text.rstrip().rstrip(':').rstrip(' -')
-        #text = self.parse_text(txt, 'line')
-        txt = self.visit(node).rstrip(' -\n')
-        text = self.parse_markdown(txt, 'text').strip()
+    def visit_dl_dt_1(self, node):
+        txt = node.text.rstrip()[:-3]
+        text = self.parse_markdown(txt, 'text')
         return self.tag('dt', text, enclose=1)
-    
-    def visit_dl_dd(self, node: Symbol) -> str:
+
+    def visit_dl_dd_1(self, node):
         txt = self.visit(node).rstrip()
-        text = self.parse_markdown(txt.lstrip(':').lstrip(), 'content')
+        text = self.parse_markdown(txt, 'text')
+        return self.tag('dd', text.strip(), enclose=1)
+
+    def visit_dl_dt_2(self, node):
+        txt = node.text.rstrip()
+        text = self.parse_markdown(txt, 'text')
+        return self.tag('dt', text.strip(), enclose=1)
+
+    def visit_dl_dd_2(self, node):
+        txt = self.visit(node).rstrip()
+        text = self.parse_markdown(txt[1:].lstrip(), 'text')
         return self.tag('dd', text, enclose=1)
 
     def visit_star_rating(self, node: Symbol) -> str:
@@ -606,13 +629,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             if (name := node.find('inline_tag_name')):
                 _c = node.find('inline_tag_class')
                 cls = ' ' + _c.text.strip() if _c is not None else ''
-                return self.tag('span', name.text.strip(), _class=f"inline-tag{cls}", data_rel=rel.text.strip())
+                return self.tag('span', name.text.strip(), _class=f"inline-tag{cls}", attrs=f'data-rel="{rel.text.strip()}"')
         return self.tag('span', node.text, _class='inline-tag')
 
-    def visit_side_block_item(self, node: Symbol) -> str:
-        content = [self.parse_markdown(thing.text, 'content') 
+    def visit_side_block(self, node: Symbol) -> str:
+        content = [self.parse_markdown(thing.text, 'content').strip()
                 for thing in node.find_all('side_block_cont')]
-        return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz") # node[kwargs]
+        return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz") # node[kwargs]
 
     def visit_table_begin(self, node: Symbol) -> str:
         self.table_align = {}
