@@ -1,14 +1,18 @@
 # YPL parser 1.5
-
 # written by VB.
 
-import re
-import sys
-
+import sys, re
 from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional, Dict, Iterator
-from collections import defaultdict
 
 class keyword(str): pass
+
+class ignore(object):
+    def __init__(self, regex_text: str, *args):
+        self._regex = re.compile(regex_text, *args)
+
+    @property
+    def regex(self) -> Pattern[str]:
+        return self._regex
 
 class _and(object):
     def __init__(self, something: 'ParsePattern'):
@@ -20,15 +24,6 @@ class _and(object):
 
 class _not(_and): pass
 
-class ignore(object):
-    def __init__(self, regex_text: str, *args):
-        self._regex = re.compile(regex_text, *args)
-
-    @property
-    def regex(self) -> Pattern[str]:
-        return self._regex
-
-
 class Name(str):
     def __init__(self, *args):
         self.line = 0
@@ -38,12 +33,12 @@ ParsePattern = Union[
     Pattern[str],                      # compiled regex
     str,                               # literal text 
     keyword,                           # named word match
+    ignore,                            # ignore specific text via regex
     _not,                              # negative lookahead
     _and,                              # positive lookahead
-    ignore,                            # ignore specific text via regex
     int,                               # integer repetition count
-    Tuple["int | ParsePattern", ...],  # tuple with optional integer repetition counts
     List["ParsePattern"],              # alternatives (OR)
+    Tuple["int | ParsePattern", ...],  # tuple with order and optional repetition
     Callable[[], "ParsePattern"]       # callable returning another pattern
 ]
 
@@ -71,22 +66,25 @@ class Symbol(list):
         return ''.join(buf)
     
     def find(self, name: str) -> Optional['Symbol']:
-        for x in self.what:
-            if not isinstance(x, str):
-                if x.__name__ == name:
-                    return x
-                elif (r := x.find(name)):
+        """Find the first node with the given name."""
+        for node in self.what:
+            if not isinstance(node, str):
+                if node.__name__ == name:
+                    return node
+                elif (r := node.find(name)):
                     return r
         return None
     
     def find_all(self, name: str) -> Generator['Symbol', None, None]:
-        for x in self.what:
-            if not isinstance(x, str):
-                if x.__name__ == name:
-                    yield x
-                yield from x.find_all(name)
+        """Find all nodes with matching name anywhere in the decendants."""
+        for node in self.what:
+            if not isinstance(node, str):
+                if node.__name__ == name:
+                    yield node
+                yield from node.find_all(name)
     
     def find_all_here(self, name: str) -> Generator['Symbol', None, None]:
+        """Find all nodes with matching name in the immediate child nodes."""
         yield from (x for x in self.what if not isinstance(x, str) and x.__name__ == name)
     
     @property
@@ -111,35 +109,33 @@ def skip(skipper, text: str, skipWS: bool, skipComments: Union[Callable, None]) 
     return t
 
 class parser(object):
-    def __init__(self, another=False, p=False):
-        self.restlen = -1 
+    def __init__(self, another=False, p=False): 
         if not(another):
             self.skipper = parser(True, p)
             self.skipper.packrat = p
         else:
             self.skipper = self
-        self.lines = []
         self.textlen = 0
-        self.memory = {}
+        self.restlen = -1
+        self.lines   = []
+        self.memory  = {}
         self.packrat = p
 
-    # parseLine():
-    # * textline:     text to parse
-    # * pattern:      pyPEG language description
-    # * resultSoFar:  parsing result so far (default: blank list [])
-    # * skipWS:       Flag if whitespace should be skipped (default: True)
-    # * skipComments: Python functions returning pyPEG for matching comments
-    #   
-    #   - returns:    pyAST, textrest
-    #   - raises:     SyntaxError(reason) if textline is detected not being in language described by pattern
-    #                 SyntaxError(reason) if pattern is an illegal language description
-
     def parseLine(self, textline, pattern:ParsePattern, resultSoFar=[], skipWS=True, skipComments: Union[Callable, None]=None) -> Tuple[list, str]:
+        """\
+* textline:     text to parse
+* pattern:      pyPEG language description
+* resultSoFar:  parsing result so far (default: blank list [])
+* skipWS:       Flag if whitespace should be skipped (default: True)
+* skipComments: Python functions returning pyPEG for matching comments
+
+- returns:    pyAST, textrest"""
+
         name = None
         _textline = textline
         _pattern = pattern
 
-        def R(result: object, text: str) -> tuple:
+        def Result(result: object, text: str) -> tuple:
             if __debug__ and print_trace:
                 try:
                     if (pattern_name := getattr(_pattern, "__name__")) != "comment":
@@ -151,23 +147,23 @@ class parser(object):
             else:
                 self.restlen = min(self.restlen, len(text))
             
-            res = resultSoFar
+            results = resultSoFar
             if name and result:
                 name.line = self.lineNo()
-                res.append(Symbol(name, result))
+                results.append(Symbol(name, result))
             elif name:
                 name.line = self.lineNo()
-                res.append(Symbol(name, []))
+                results.append(Symbol(name, []))
             elif result:
                 if type(result) is type([]):
-                    res.extend(result)
+                    results.extend(result)
                 else:
-                    res.extend([result])
+                    results.extend([result])
             
             if self.packrat:
-                self.memory[(len(_textline), id(_pattern))] = (res, text)
+                self.memory[(len(_textline), id(_pattern))] = (results, text)
             
-            return res, text
+            return results, text
 
         def syntaxError(error=None):
             if self.packrat:
@@ -205,16 +201,15 @@ class parser(object):
         if type(pattern) is str:
             if text[:len(pattern)] == pattern:
                 text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
-                return R(None, text)
+                return Result(None, text)
             else:
                 syntaxError()
 
         elif type(pattern) is keyword:
-            m = word_regex.match(text)
-            if m:
+            if m := word_regex.match(text):
                 if m.group(0) == pattern and isinstance(pattern, str):
                     text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
-                    return R(None, text)
+                    return Result(None, text)
                 else:
                     syntaxError()
             else:
@@ -237,16 +232,15 @@ class parser(object):
             if isinstance(pattern, Pattern) and (m := pattern.match(text)):
                 text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
                 if pattern_type is ignore:
-                    return R(None, text)
+                    return Result(None, text)
                 else:
-                    return R(m.group(0), text)
+                    return Result(m.group(0), text)
             else:
                 #syntaxError(pattern.pattern+' text='+repr(text))
                 syntaxError()
 
         elif type(pattern) is tuple:
-            result = []
-            n = 1
+            n = 1; result = []
             for p in pattern:
                 if type(p) is type(0):
                     n = p
@@ -275,7 +269,7 @@ class parser(object):
                             syntaxError(f"{text} function={p}")
                             #syntaxError()
                     n = 1
-            return R(result, text)
+            return Result(result, text)
 
         elif type(pattern) is list:
             result = []
@@ -289,7 +283,7 @@ class parser(object):
                 if found:
                     break
             if found:
-                return R(result, text)
+                return Result(result, text)
             else:
                 syntaxError()
 
@@ -324,21 +318,18 @@ def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments =
     text = skip(p.skipper, textline, skipWS, skipComments)
     return p.parseLine(text, pattern, resultSoFar, skipWS, skipComments)
 
-# parse():
-# * language     : pyPEG language description
-# * lineSource   : a fileinput.FileInput object
-# * skipWS:      :  Flag if whitespace should be skipped (default: True)
-# * skipComments : Python function which returns pyPEG for matching comments
-# * packrat      : use memoization
-# * lineCount    : add line number information to AST
-#   
-#   - returns    pyAST
-#   - raises     SyntaxError(reason), if a parsed line is not in language
-#                SyntaxError(reason), if the language description is illegal
-
 def parse(language, lineSource, skipWS = True, skipComments = None, packrat = False, lineCount = True):
     lines, lineNo = [], 0
 
+    """\
+* language     : pyPEG language description
+* lineSource   : a fileinput.FileInput object
+* skipWS:      :  Flag if whitespace should be skipped (default: True)
+* skipComments : Python function which returns pyPEG for matching comments
+* packrat      : use memoization
+* lineCount    : add line number information to AST
+    
+- returns   pyAST"""
     # while callable(language):    # Fairly sure this is handled in the parser anyway.
         # language = language()    # Remove: Late 2025
 
