@@ -1,8 +1,9 @@
 # This version has some differences between Standard Markdown
 # Syntax according from http://daringfireball.net/projects/markdown/syntax
 
+import re
 import types
-from par.pyPEG import *
+from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
 from .__init__ import SimpleVisitor, MDHTMLVisitor
 
 class ResourceStore:
@@ -53,7 +54,9 @@ class MarkdownGrammar(dict):
 
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
-        def fmt_underline()    : return _(r'__'),   words , _(r'__')
+        def fmt_bold2()        : return _(r'__'),   words , _(r'__')
+        #def fmt_underline()    : return _(r'_'),    words , _(r'_')
+        def fmt_italic2()      : return _(r'_'),   words , _(r'_')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
         def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
@@ -71,15 +74,16 @@ class MarkdownGrammar(dict):
         def word()             : return [ # Tries to show parse-order
                 escape_string,
                 html_block, html_inline_block, inline_tag,
-                fmt_bold, fmt_italic, fmt_code, fmt_underline,
+                fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,# fmt_underline,
                 fmt_subscript, fmt_superscript, fmt_strikethrough,
                 footnote, link, 
-                htmlentity, longdash, star_rating, string, wordlike
+                htmlentity, star_rating, string, wordlike, longdash
             ]
         
-        def words()            : return word, -1, [space, word]
+        #def words()            : return word, -1, [space, word]
+        def words(ig='(?!)')   : return word, -1, [space, ignore(ig), word]
         def text()             : return 0, space, -2, words
-        def paragraph()        : return text, -1, (0, space, text), blanklines
+        def paragraph()        : return text, -1, [space, text], blanklines
 
         def directive_name()   : return _(r'\w+')
         def directive_title()  : return _(r'[^\n\r]+')
@@ -101,9 +105,9 @@ class MarkdownGrammar(dict):
         def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
 
         ## pre
-        def indent_line_text() : return _(r'.+')
+        def indent_line_text() : return text
         def indent_line()      : return _(r'[ ]{4}|\t'), indent_line_text, blankline
-        def indent_block()     : return -2, [indent_line, blankline]
+        def indent_block()     : return -2, indent_line, -1, [indent_line, blankline]
         def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
         def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
         def pre_text2()        : return _(r'.+?(?=</code>)', re.M|re.DOTALL)
@@ -156,13 +160,12 @@ class MarkdownGrammar(dict):
         def number_list_item() : return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
         def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
 
-        def dl_dt_1()          : return _(r'[^ \t\r\n]+.*--'), -2, blankline
-        def dl_dd_1()          : return 0, space, -1, [text, blankline]
-        def dl_dt_2()          : return _(r'[^ \t\r\n]+.*'), -1, blankline
-        def dl_dd_2()          : return _(r':'), _(r' {1,3}'), list_rest_of_line, -1, [text, blankline]
-        def dl_line_1()        : return dl_dt_1, dl_dd_1
-        def dl_line_2()        : return dl_dt_2, -2, dl_dd_2
-        def dl()               : return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
+        ## Definition Lists
+        def dl_dt()            : return -2, words(ig='--'), 0, _(r'--'), blankline
+        def dl_dd_content()    : return [text, lists, pre]
+        def dl_dd()            : return [space, _(r':\s*')], dl_dd_content
+        def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, [dl_dd, blankline]
+        def dl()               : return -2, dl_dt_n_dd, -1, blankline
 
         ## quote
         def quote_text()       : return _(r'[^\r\n]*'), blankline
@@ -207,9 +210,9 @@ class MarkdownGrammar(dict):
 
         ## article
         def content(): return -2, [blanklines,
-                hr, lists, link_refer_note, directive,
-                pre, html_block, dl,
-                side_block, table, blockquote, footnote_desc,
+                hr, link_refer_note, directive,
+                pre, html_block, lists,
+                side_block, table, dl, blockquote, footnote_desc,
                 title, paragraph ]
 
         def article(): return content
@@ -269,75 +272,100 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_hr(self, node: Symbol) -> str:
         return self.tag('hr', enclose=1)
-    
-    def visit_table_sep(self, node: Symbol) -> str:
+
+    def visit_paragraph(self, node: Symbol) -> str:
+        return self.tag('p', self.visit(node).strip(), enclose=2)
+
+    def visit_lists_begin(self, node: Symbol) -> str:
+        self.lists = []
         return ''
 
-    def get_title_id(self, level:int, begin=1) -> str:
-        self.titles_ids[level] = self.titles_ids.get(level, 0) + 1
-        _ids = [self.titles_ids.get(x, 0) for x in range(begin, level + 1)]
-        return f'title_{'-'.join(map(str, _ids))}'
+    def visit_list_line(self, node: Symbol) -> str:
+        return node.text.strip()
 
-    def _alt_title(self, node: Symbol):
-        node  = node.what[0]
-        level = 1
-        match node.__name__:
-            case 'atx_title':
-                if (level := node.find('hashes')) and level.text:
-                    level = len(level.text)
-                else:level = 1
-            case 'setext_title':
-                if (marker := node.find('setext_underline')) and marker.text:
-                    level = 1 if marker.text[0] == '=' else 2
-        
-        _id_node = node.find('attr_def_id')
-        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
-        title = (title_node := node.find('title_text')) and title_node.text.strip()
-        self.resources.add('tocitems', (level, _id, title))
+    def visit_list_indent_line(self, node: Symbol):
+        return (text_node := node.find('list_rest_of_line')) and text_node.text
 
-    def _get_title(self, node: Symbol, level: int):
-        _id_node = node.find('attr_def_id')
-        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
-        title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
-        anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
-        _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
-        section_s = self._open_section(f"{title}".lower().replace(' ', '-'))
+    def visit_bullet_list_item(self, node: Symbol) -> str:
+        self.lists.append(('b', node.find('list_content')))
+        return ''
 
-        # Combine section opening with title tag
-        return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
+    def visit_number_list_item(self, node: Symbol) -> str:
+        self.lists.append(('n', node.find('list_content')))
+        return ''
 
-    def visit_atx_title(self, node: Symbol) -> str:
-        level = len(level.text) if (level := node.find('hashes')) and level.text else 1
-        return self._get_title(node, level)
+    def visit_check_radio(self, node: Symbol) -> str:
+        return self.tag('input', '', newline=False, attrs=('checked' if node.text[1] in ['x', 'X', '*'] else ""), enclose=2,
+                type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else '')
 
-    def visit_setext_title(self, node: Symbol) -> str:
-        marker = noder.text[0] if (noder := node.find('setext_underline')) else '='
-        level = 1 if marker == '=' else 2
-        return self._get_title(node, level)
+    def visit_lists_end(self, node: Symbol) -> str:
+        def process_node(n):
+            text = ''.join(self.visit(node) for node in n)
+            t = self.parse_markdown(text, 'content').rstrip()
+            # TODO: remove this by just parsing simpler text
+            return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
 
-    def visit_indent_block_line(self, node: Symbol) -> str:
-        return node[1].text
+        def create_list(lists):
+            buf = []; old = None; parent = None
 
-    def visit_indent_line(self, node: Symbol):
-        return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
-    
+            for _type, _node in lists:
+                if _type == old:
+                    buf.append(self.tag('li', process_node(_node)))
+                else:
+                    if parent:
+                        buf.append(self.tag(parent, enclose=3))
+                    parent = 'ul' if _type == 'b' else 'ol'
+                    buf.append(self.tag(parent))
+                    buf.append(self.tag('li', process_node(_node)))
+                    old = _type
+            if len(buf) > 0 and parent:
+                buf.append(self.tag(parent, enclose=3))
+            
+            return ''.join(buf)
+        return create_list(self.lists)
+
+    def visit_dl_begin(self, node: Symbol) -> str:
+        return self.tag('dl', newline=True)
+
+    def visit_dl_end(self, node: Symbol) -> str:
+        return self.tag('dl', enclose=3)#, newline=True)
+
+    def visit_dl_dt(self, node: Symbol) -> str:
+        return self.tag('dt', self.visit(node).strip(), enclose=2, newline=True)
+
+    def visit_dl_dd(self, node: Symbol) -> str:
+        description_nodes = node.find_all('dl_dd_content')
+        description_content = ''.join(self.visit(n) for n in description_nodes)
+        return self.tag('dd', description_content, newline=True)
+
     def visit_fmt_bold_begin(self, node: Symbol) -> str:
         return self.tag('strong', newline=False)
     
     def visit_fmt_bold(self, node: Symbol) -> str:
         a = node.find('words')
-        return self.visit(a) if a else node.text.strip("*")
+        return self.visit(a) if a else node.text.strip("*_")
 
     def visit_fmt_bold_end(self, node: Symbol) -> str:
         return self.tag('strong', enclose=3, newline=False)
+    
+    visit_fmt_bold2_begin = visit_fmt_bold_begin
+    visit_fmt_bold2 = visit_fmt_bold
+    visit_fmt_bold2_end = visit_fmt_bold_end
 
     def visit_fmt_italic_begin(self, node: Symbol) -> str:
         return self.tag('em', newline=False)
 
     def visit_fmt_italic(self, node: Symbol) -> str:
         a = node.find('words')
-        return self.visit(a) if a else node.text.strip("_")
+        return self.visit(a) if a else node.text.strip("*_")
     
+    def visit_fmt_italic_end(self, node: Symbol) -> str:
+        return self.tag('em', enclose=3, newline=False)
+    
+    visit_fmt_italic2_begin = visit_fmt_italic_begin
+    visit_fmt_italic2 = visit_fmt_italic
+    visit_fmt_italic2_end = visit_fmt_italic_end
+
     def visit_fmt_underline_begin(self, node: Symbol) -> str:
         return self.tag('u', newline=False)
     
@@ -347,9 +375,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     
     def visit_fmt_underline_end(self, node: Symbol) -> str:
         return self.tag('u', enclose=3, newline=False)
-
-    def visit_fmt_italic_end(self, node: Symbol) -> str:
-        return self.tag('em', enclose=3, newline=False)
 
     def visit_fmt_code_begin(self, node: Symbol) -> str:
         return self.tag('code', newline=False)
@@ -388,8 +413,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
         return self.tag('span', enclose=3, newline=False)
 
-    def visit_paragraph(self, node: Symbol) -> str:
-        return self.tag('p', self.visit(node).strip(), enclose=2)
+    def visit_indent_line(self, node: Symbol):
+        return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
 
     def visit_pre(self, node: Symbol) -> str:
         cwargs = {}; kwargs = {}
@@ -544,78 +569,54 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             result = result + self.tag('span', self.tag("span", atrdat.text, _class='text-date'), _class='quote-timeplace')
         return self.tag('blockquote', result)
 
-    def visit_lists_begin(self, node: Symbol) -> str:
-        self.lists = []
+    def visit_table_sep(self, node: Symbol) -> str:
         return ''
 
-    def visit_list_line(self, node: Symbol) -> str:
-        return node.text.strip()
+    def get_title_id(self, level:int, begin=1) -> str:
+        self.titles_ids[level] = self.titles_ids.get(level, 0) + 1
+        _ids = [self.titles_ids.get(x, 0) for x in range(begin, level + 1)]
+        return f'title_{'-'.join(map(str, _ids))}'
 
-    def visit_list_indent_line(self, node: Symbol):
-        return (text_node := node.find('list_rest_of_line')) and text_node.text
+    def _alt_title(self, node: Symbol):
+        node  = node.what[0]
+        level = 1
+        match node.__name__:
+            case 'atx_title':
+                if (level := node.find('hashes')) and level.text:
+                    level = len(level.text)
+                else:level = 1
+            case 'setext_title':
+                if (marker := node.find('setext_underline')) and marker.text:
+                    level = 1 if marker.text[0] == '=' else 2
+        
+        _id_node = node.find('attr_def_id')
+        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        title = (title_node := node.find('title_text')) and title_node.text.strip()
+        self.resources.add('tocitems', (level, _id, title))
 
-    def visit_bullet_list_item(self, node: Symbol) -> str:
-        self.lists.append(('b', node.find('list_content')))
-        return ''
+    def _get_title(self, node: Symbol, level: int):
+        _id_node = node.find('attr_def_id')
+        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
+        anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
+        _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
+        section_s = self._open_section(f"{title}".lower().replace(' ', '-'))
 
-    def visit_number_list_item(self, node: Symbol) -> str:
-        self.lists.append(('n', node.find('list_content')))
-        return ''
+        # Combine section opening with title tag
+        return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
 
-    def visit_check_radio(self, node: Symbol) -> str:
-        return self.tag('input', '', newline=False, attrs=('checked' if node.text[1] in ['x', 'X', '*'] else ""), enclose=2,
-                type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else '')
+    def visit_atx_title(self, node: Symbol) -> str:
+        level = len(level.text) if (level := node.find('hashes')) and level.text else 1
+        return self._get_title(node, level)
 
-    def visit_lists_end(self, node: Symbol) -> str:
-        def process_node(n):
-            text = ''.join(self.visit(node) for node in n)
-            t = self.parse_markdown(text, 'content').rstrip()
-            return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
+    def visit_setext_title(self, node: Symbol) -> str:
+        marker = noder.text[0] if (noder := node.find('setext_underline')) else '='
+        level = 1 if marker == '=' else 2
+        return self._get_title(node, level)
 
-        def create_list(lists):
-            buf = []; old = None; parent = None
+    def visit_indent_block_line(self, node: Symbol) -> str:
+        return node[1].text
 
-            for _type, _node in lists:
-                if _type == old:
-                    buf.append(self.tag('li', process_node(_node)))
-                else:
-                    if parent:
-                        buf.append(self.tag(parent, enclose=3))
-                    parent = 'ul' if _type == 'b' else 'ol'
-                    buf.append(self.tag(parent))
-                    buf.append(self.tag('li', process_node(_node)))
-                    old = _type
-            if len(buf) > 0 and parent:
-                buf.append(self.tag(parent, enclose=3))
-            
-            return ''.join(buf)
-        return create_list(self.lists)
-
-    def visit_dl_begin(self, node):
-        return self.tag('dl')
-
-    def visit_dl_end(self, node):
-        return self.tag('dl', enclose=3)
-
-    def visit_dl_dt_1(self, node):
-        txt = node.text.rstrip()[:-3]
-        text = self.parse_markdown(txt, 'text')
-        return self.tag('dt', text, enclose=1)
-
-    def visit_dl_dd_1(self, node):
-        txt = self.visit(node).rstrip()
-        text = self.parse_markdown(txt, 'text')
-        return self.tag('dd', text.strip(), enclose=1)
-
-    def visit_dl_dt_2(self, node):
-        txt = node.text.rstrip()
-        text = self.parse_markdown(txt, 'text')
-        return self.tag('dt', text.strip(), enclose=1)
-
-    def visit_dl_dd_2(self, node):
-        txt = self.visit(node).rstrip()
-        text = self.parse_markdown(txt[1:].lstrip(), 'text')
-        return self.tag('dd', text, enclose=1)
 
     def visit_star_rating(self, node: Symbol) -> str:
         r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
