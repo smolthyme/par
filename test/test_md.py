@@ -675,7 +675,6 @@ def test_footnote():
     <p><strong>aaaa</strong></p>
     <BLANKLINE>
     <a class="footnote-backref inner" href="#fnref-1">↩</a>
-    <BLANKLINE>
     </li>
     </ol></div>
     """
