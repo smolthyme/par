@@ -24,11 +24,6 @@ class _and(object):
 
 class _not(_and): pass
 
-class Name(str):
-    def __init__(self, *args):
-        self.line = 0
-        self.file = ""
-
 ParsePattern = Union[
     Pattern[str],                      # compiled regex
     str,                               # literal text 
@@ -41,6 +36,11 @@ ParsePattern = Union[
     Tuple["int | ParsePattern", ...],  # tuple with order and optional repetition
     Callable[[], "ParsePattern"]       # callable returning another pattern
 ]
+
+class Name(str):
+    def __init__(self, *args):
+        self.line = 0
+        self.file = ""
 
 class Symbol(list):
     def __init__(self, name: str, what: Any):
