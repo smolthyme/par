@@ -76,8 +76,8 @@ class MarkdownGrammar(dict):
                 html_block, html_inline_block, inline_tag,
                 fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,# fmt_underline,
                 fmt_subscript, fmt_superscript, fmt_strikethrough,
-                footnote, link, 
-                htmlentity, star_rating, string, wordlike, longdash
+                footnote, link, longdash,
+                htmlentity, star_rating, string, wordlike
             ]
         
         #def words()            : return word, -1, [space, word]
@@ -106,7 +106,7 @@ class MarkdownGrammar(dict):
 
         ## pre
         def indent_line_text() : return text
-        def indent_line()      : return _(r'[ ]{4}|\t'), indent_line_text, blankline
+        def indent_line()      : return _(r' {4}|\t'), indent_line_text, blankline
         def indent_block()     : return -2, indent_line, -1, [indent_line, blankline]
         def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
         def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
@@ -142,9 +142,9 @@ class MarkdownGrammar(dict):
 
         # Horizontal items
         def side_block_head()  : return _(r'\|\|\|'), blankline
-        def side_block_cont()  : return paragraph
+        def side_block_cont()  : return [text, lists, paragraph], blankline
         def side_block_item()  : return side_block_head, -2, side_block_cont
-        def side_block()       : return -2, side_block_item
+        def side_block()       : return -2, side_block_item, -1, blankline
 
         ## lists
         def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
@@ -162,16 +162,16 @@ class MarkdownGrammar(dict):
 
         ## Definition Lists
         def dl_dt()            : return -2, words(ig='--'), 0, _(r'--'), blankline
-        def dl_dd_content()    : return [text, lists, pre]
+        def dl_dd_content()    : return [paragraph, lists, pre]
         def dl_dd()            : return [space, _(r':\s*')], dl_dd_content
         def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, [dl_dd, blankline]
-        def dl()               : return -2, dl_dt_n_dd, -1, blankline
+        def dl()               : return -2, dl_dt_n_dd, -1, blanklines
 
         ## quote
-        def quote_text()       : return _(r'[^\r\n]*'), blankline
+        def quote_text()       : return text, blankline
         def quote_blank_line() : return _(r'>[ \t]*'), blankline
         def quote_line()       : return _(r'> (?!- )'), quote_text
-        def quote_name()       : return _(r'[^\r\n\(\)\d]*')
+        def quote_name()       : return text
         def quote_date()       : return _(r'[^\r\n\)]+')
         def quote_attr()       : return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), blankline
         def quote_lines()      : return [quote_blank_line, quote_line]
@@ -209,7 +209,7 @@ class MarkdownGrammar(dict):
         def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto]
 
         ## article
-        def content(): return -2, [blanklines,
+        def content(): return -2, [blankline,
                 hr, link_refer_note, directive,
                 pre, html_block, lists,
                 side_block, table, dl, blockquote, footnote_desc,
@@ -302,7 +302,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         def process_node(n):
             text = ''.join(self.visit(node) for node in n)
             t = self.parse_markdown(text, 'content').rstrip()
-            # TODO: remove this by just parsing simpler text
             return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
 
         def create_list(lists):
@@ -328,15 +327,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('dl', newline=True)
 
     def visit_dl_end(self, node: Symbol) -> str:
-        return self.tag('dl', enclose=3)#, newline=True)
+        return self.tag('dl', enclose=3)
 
     def visit_dl_dt(self, node: Symbol) -> str:
         return self.tag('dt', self.visit(node).strip(), enclose=2, newline=True)
 
     def visit_dl_dd(self, node: Symbol) -> str:
         description_nodes = node.find_all('dl_dd_content')
-        description_content = ''.join(self.visit(n) for n in description_nodes)
-        return self.tag('dd', description_content, newline=True)
+        description_content = ''.join(self.visit(n) for n in description_nodes).strip()
+        return self.tag('dd', description_content+'\n', newline=True)
 
     def visit_fmt_bold_begin(self, node: Symbol) -> str:
         return self.tag('strong', newline=False)
@@ -413,8 +412,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
         return self.tag('span', enclose=3, newline=False)
 
-    def visit_indent_line(self, node: Symbol):
-        return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
+    # def visit_indent_line(self, node: Symbol):
+    #     return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
 
     def visit_pre(self, node: Symbol) -> str:
         cwargs = {}; kwargs = {}
@@ -434,12 +433,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return self.tag('pre', self.tag('code', code_content, newline=False, **cwargs), **kwargs)
         else:
             return self.tag('pre', self.tag('code', node.text.strip("` \t\n"), newline=False, **cwargs), **kwargs)
-
-    def visit_pre_extra1(self, node: Symbol):
-        return "XXXX" # Are  these unused?
-
-    def visit_pre_extra2(self, node: Symbol):
-        return "XXXX" # Are  these unused?
 
     def visit_link_inline(self, node: Symbol):
         # FIXME: What is opaque? oh, this code
