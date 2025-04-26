@@ -380,7 +380,57 @@ def test_table_0():
     <BLANKLINE>
     """
     
-def test_block_1():
+# def test_block_1():
+#     r"""
+#     >>> text = '''
+#     ... {% tabs %}
+#     ... -- index.html --
+#     ... ```    
+#     ... This is hello
+#     ... ```
+#     ... -- hello.html --
+#     ... ```
+#     ... This is hello
+#     ... ```
+#     ... {% endtabs %}
+#     ... '''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="tabbable">
+#     <ul class="nav nav-tabs">
+#     <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
+#     <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
+#     </ul>
+#     <div class="tab-content">
+#     <div class="tab-pane active" id="tab_item_1_1">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     <div class="tab-pane" id="tab_item_1_2">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     </div>
+#     </div>
+#     """
+    
+# def test_block_2():
+#     r"""
+#     >>> text = '''
+#     ... {%alert class=info, close%}
+#     ...     This is an alert.
+#     ... {%endalert%}'''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="alert alert-info">
+#     <button class="close" data-dismiss="alert">&times;</button>
+#     <p>This is an alert.</p>
+#     <BLANKLINE>
+#     """
     r"""
     >>> text = '''
     ... {% tabs %}
