@@ -431,57 +431,103 @@ def test_table_0():
 #     <p>This is an alert.</p>
 #     <BLANKLINE>
 #     """
+
+def test_star_rating_invalid():
     r"""
     >>> text = '''
-    ... {% tabs %}
-    ... -- index.html --
-    ... ```    
-    ... This is hello
-    ... ```
-    ... -- hello.html --
-    ... ```
-    ... This is hello
-    ... ```
-    ... {% endtabs %}
+    ... ★★★★ / wombat wontparse
     ... '''
-    >>> from par.bootstrap_ext import blocks
-    >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <div class="tabbable">
-    <ul class="nav nav-tabs">
-    <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
-    <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
-    </ul>
-    <div class="tab-content">
-    <div class="tab-pane active" id="tab_item_1_1">
+    <p>★★★★ / wombat wontparse</p>
     <BLANKLINE>
-    <pre><code>This is hello</code></pre>
-    <BLANKLINE>
-    </div>
-    <div class="tab-pane" id="tab_item_1_2">
-    <BLANKLINE>
-    <pre><code>This is hello</code></pre>
-    <BLANKLINE>
-    </div>
-    </div>
-    </div>
     """
-    
-def test_block_2():
+
+def list_nest_1():
     r"""
     >>> text = '''
-    ... {%alert class=info, close%}
-    ...     This is an alert.
-    ... {%endalert%}'''
-    >>> from par.bootstrap_ext import blocks
-    >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+    ... *   Abacus
+    ...     * answer
+    ... *   Bubbles
+    ...     1.  bunk
+    ...     2.  bupkis
+    ...         * BELITTLER
+    ...     3. burper
+    ... *   Cunning
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
-    <div class="alert alert-info">
-    <button class="close" data-dismiss="alert">&times;</button>
-    <p>This is an alert.</p>
+    <ul>
+    <li><p>Abacus</p>
+    <ul>
+    <li>answer</li>
+    </ul></li>
+    <li><p>Bubbles</p>
+    <ol>
+    <li>bunk</li>
+    <li>bupkis</li>
+    <ul>
+    <li>BELITTLER</li>
+    </ul></li>
+    <li>burper</li>
+    </ol></li>
+    <li><p>Cunning</p></li>
+    </ul>
     <BLANKLINE>
-    </div>
     """
+
+# def test_block_1():
+#     r"""
+#     >>> text = '''
+#     ... {% tabs %}
+#     ... -- index.html --
+#     ... ```    
+#     ... This is hello
+#     ... ```
+#     ... -- hello.html --
+#     ... ```
+#     ... This is hello
+#     ... ```
+#     ... {% endtabs %}
+#     ... '''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="tabbable">
+#     <ul class="nav nav-tabs">
+#     <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
+#     <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
+#     </ul>
+#     <div class="tab-content">
+#     <div class="tab-pane active" id="tab_item_1_1">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     <div class="tab-pane" id="tab_item_1_2">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     </div>
+#     </div>
+#     """
+    
+# def test_block_2():
+#     r"""
+#     >>> text = '''
+#     ... {%alert class=info, close%}
+#     ...     This is an alert.
+#     ... {%endalert%}'''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="alert alert-info">
+#     <button class="close" data-dismiss="alert">&times;</button>
+#     <p>This is an alert.</p>
+#     <BLANKLINE>
+#     </div>
+#     """
     
 def test_pre_1():
     r"""
@@ -963,7 +1009,191 @@ def test_blockquote():
     <BLANKLINE>
     <blockquote><p>"I have been using the AquaBoostAG liquefied polymer" — Mystery Mountain Grove</p>
     </blockquote>
-    <BLANKLINE>z
+    <BLANKLINE>
     """
-    
 
+def test_heading_1():
+    r"""
+    >>> text = '''
+    ... # Heading 1
+    ... ## Heading 2
+    ... ### Heading 3
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <section id="section-heading-1">
+    <h1 id="title_2">Heading 1<a class="anchor" href="#title_2"></a></h1>
+    </section>
+    <section id="section-heading-2">
+    <h2 id="title_2-2">Heading 2<a class="anchor" href="#title_2-2"></a></h2>
+    </section>
+    <section id="section-heading-3">
+    <h3 id="title_2-2-2">Heading 3<a class="anchor" href="#title_2-2-2"></a></h3>
+    </section>
+    """
+
+def test_heading_2():
+    r"""
+    >>> text = '''
+    ... Heading 1
+    ... =========
+    ... 
+    ... Heading 2
+    ... ---------
+    ... 
+    ... ### Heading 3
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <section id="section-heading-1">
+    <h1 id="title_2">Heading 1<a class="anchor" href="#title_2"></a></h1>
+    </section>
+    <section id="section-heading-2">
+    <h2 id="title_2-2">Heading 2<a class="anchor" href="#title_2-2"></a></h2>
+    </section>
+    <section id="section-heading-3">
+    <h3 id="title_2-2-2">Heading 3<a class="anchor" href="#title_2-2-2"></a></h3>
+    </section>
+    """
+
+
+class termfont:
+    # foreground              # background              # end/reset
+    fg_black    = '\033[30m'; bg_black    = '\033[40m'; endc         = '\033[0m'   
+    fg_red      = '\033[31m'; bg_red      = '\033[41m'; 
+    fg_green    = '\033[32m'; bg_green    = '\033[42m'; # effects 
+    fg_orange   = '\033[33m'; bg_orange   = '\033[43m'; ef_bold      = '\033[1m'   # 'bright'?
+    fg_blue     = '\033[34m'; bg_blue     = '\033[44m'; ef_dim       = '\033[2m'
+    fg_magenta  = '\033[35m'; bg_magenta  = '\033[45m'; ef_underline = '\033[4m'
+    fg_cyan     = '\033[36m'; bg_cyan     = '\033[46m'; ef_flash     = '\033[5m'
+    fg_white    = '\033[37m'; bg_white    = '\033[47m'; ef_highlight = '\033[7m'
+
+    fg_default  = '\033[39m'; bg_default  = '\033[49m'; ef_default   = '\033[22m'  # test?
+
+    @staticmethod # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    def windows_enable_term_features():
+        import sys
+        if sys.platform=='win32': from ctypes import windll as Wd;Wd.kernel32.SetConsoleMode(Wd.kernel32.GetStdHandle(-11), 7)
+
+    @staticmethod
+    def term_size(): import shutil; return (shutil.get_terminal_size().columns, shutil.get_terminal_size().lines)
+
+def display_diff(sample, expected, result, term_width):
+    """
+    Display short diffs in the terminal, formatted into blocks or printed line-by-line if too wide.
+
+    Args:
+        sample (str): Multi-line string for the sample.
+        expected (str): Multi-line string for the expected output.
+        result (str): Multi-line string for the actual result.
+        term_width (int): Width of the terminal.
+    """
+
+    sample_lines = sample.splitlines()
+    expected_lines = expected.splitlines()
+    result_lines = result.splitlines() if result != '' else ['']
+
+    from difflib import Differ
+    d = Differ()
+    diff_lines = list(d.compare(expected_lines, result_lines))
+
+    # Determine the maximum line length for padding
+    max_line_length = max(
+        max(len(line) for line in sample_lines),
+        max(len(line) for line in expected_lines),
+        max(len(line) for line in result_lines),
+        max(len(line) for line in diff_lines),
+    )
+    # If blocks are too wide, print lines in order and return
+    if (max_line_length *4) > term_width:
+        print(f"{termfont.fg_orange}{sample}{termfont.endc}")
+        print(f"{termfont.fg_green}{expected}{termfont.endc}")
+        print(f"{termfont.fg_red}{result}{termfont.endc}")
+        return
+
+    max_line_length = term_width // 4 - 2  # Adjust for terminal width and padding
+
+    # Determine the maximum number of lines for height padding
+    max_lines = max(len(sample_lines), len(expected_lines), len(result_lines), len(diff_lines))
+
+    # Pad lines to the maximum length and height
+    pad_line = lambda line: line.ljust(max_line_length)
+    pad_height = lambda lines: lines + [' ' * max_line_length] * (max_lines - len(lines))
+
+    sample_lines = color_lines([pad_line(line) for line in pad_height(sample_lines)], color=termfont.fg_orange)
+    expected_lines = [pad_line(line) for line in pad_height(expected_lines)]
+    result_lines = [pad_line(line) for line in pad_height(result_lines)]
+    diff_lines = color_lines([pad_line(line) for line in pad_height(diff_lines)], color='diff')
+
+    # Calculate the total width of the blocks
+    block_width = max_line_length + 2  # Add 2 for padding
+    total_width = block_width * 4  # Four blocks side by side
+
+    # Combine lines into blocks
+    for s, e, r, d in zip(sample_lines, expected_lines, result_lines, diff_lines):
+        print(f"{s}  {e}  {r}  {d}")
+
+
+def color_lines(lines: list[str], color) -> list[str]:
+    if color == 'diff':
+        for i in range(len(lines)):
+            first_char = lines[i][0]
+            match first_char:
+                case ' ' , _: continue 
+                case '+': lines[i] = termfont.fg_green  + lines[i] + termfont.endc
+                case '-': lines[i] = termfont.fg_red    + lines[i] + termfont.endc
+                case '!': lines[i] = termfont.fg_orange + lines[i] + termfont.endc
+                case '@': lines[i] = termfont.fg_orange + lines[i] + termfont.endc
+    elif color is not None:
+        for i in range(len(lines)):
+            lines[i] = color + lines[i] + termfont.endc
+    return lines
+
+import doctest
+from doctest import DocTestFailure, DocTestRunner, DebugRunner
+
+def run_tests(test_name=None):
+    """Run doctests and display formatted output for failed tests."""
+    termfont.windows_enable_term_features()
+
+    # Capture test results
+    finder = doctest.DocTestFinder()
+    #runner = CustomDocTestRunner()
+    runner = DebugRunner()
+    tests = finder.find(sys.modules[__name__])
+    term_width = termfont.term_size()[0] or 80
+
+    # Filter tests by name if a test_name is provided
+    if test_name:
+        tests = [test for test in tests if test.name[9:].startswith(test_name)]
+
+    n_failed = 0
+    n_run = 0
+    for test in tests:
+        runner.test = test
+        runner.test.globs = {'parseHtml': parseHtml}
+        try:
+            runner.run(test)
+        except DocTestFailure as failed:
+            sample = failed.test.examples[0].source.strip()[11:-4:]
+            expected = failed.example.want.strip()
+            got = failed.got.strip()
+
+            print(f"Name: {test.name[9:]}")
+            display_diff(sample, expected, got, term_width)
+            print(f"{termfont.fg_cyan}{" - " * (term_width // 4)}{termfont.endc}")
+            n_failed += 1
+        n_run += 1
+    
+    print(f"{termfont.fg_red if n_failed > 0 else termfont.fg_green}Tests failed: {n_failed}{termfont.endc}")
+    print(f"{termfont.fg_green}Tests run: {n_run}{termfont.endc}")
+
+if __name__ == '__main__':
+    def get_args():
+        import argparse
+        argz = argparse.ArgumentParser(description="Run tests for the Markdown parser.")
+        argz.add_argument('-n', '--name', type=str, help='(start of-) Name of the test(s) to run.')
+        return argz.parse_args()
+
+    args = get_args()
+    run_tests(test_name=args.name)
