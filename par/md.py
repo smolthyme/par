@@ -454,7 +454,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if ( yt_id := re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)):
                     return self.tag('object', _class='yt-embed', data=f"https://www.youtube.com/embed/{yt_id.group(1)}", newline=False, enclose=2)
 
-            src = "images/" + location  # later may need to split media so bbl
+            src = f"images/{location}" if not location.strip().startswith('http') else location.strip('<>')
             kwargs['src'] = src
             if (title := node.find('link_inline_title')):
                 kwargs['title'] = title.text[1:-1]
@@ -520,7 +520,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if name else self.tag('a', caption, href=f"#{anchor}", newline=False)
         
         filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
-        href = f"images/{filename}"
+        href = f"images/{filename}" if not filename.strip().startswith('http') else filename.strip()
         cls = []
         if width:
             cls.append( f'width="{width}px"'  if width.isdigit()  else f'width="{width}"')
@@ -528,11 +528,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             cls.append(f'height="{height}px"' if height.isdigit() else f'height="{height}"')
         
         self.resources.add('images', href)
-        img_tag = self.tag('img', '', attrs=' '.join(cls), src=href, enclose=1, newline=False)
+        img_tag = self.tag('img', '', src=href, attrs=' '.join(cls), enclose=1, newline=False)
         return    self.tag('div', img_tag, _class=f"float{align}", enclose=1, newline=False) if align else img_tag
 
     def visit_image_link(self, node: Symbol) -> str:
-        href = f"images/{node.text.strip('<>')}"
+        # If the image is a link, just use that for href, else it's a local link
+        href = f"images/{node.text.strip('<>')}" if not node.text.strip().startswith('http') else node.text.strip('<>')
         self.resources.add('images', href)
         return self.tag('img', src=href, enclose=1, newline=False)
 

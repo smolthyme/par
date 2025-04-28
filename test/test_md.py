@@ -438,7 +438,7 @@ def test_inline_tag():
     <BLANKLINE>
     """
 
-def test_side_block_item():
+def test_side_by_side():
     r"""
     >>> text = '''
     ... ||| 
@@ -452,6 +452,34 @@ def test_side_block_item():
     <p>Item 2</p>
     </div>
     <BLANKLINE>
+    """
+
+def test_side_by_side2():
+    r"""
+    >>> text = '''
+    ... |||
+    ... First paragraph
+    ... Second paragraph
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <div class="collection-horiz">
+    <p>First paragraph</p>
+    <p>Second paragraph</p>
+    </div>
+    """
+
+def test_side_by_side_image_paragraph():
+    r"""
+    >>> text = '''
+    ... |||
+    ... ![alt](http://example.com/image.png) A paragraph relating to the image.
+    ... ![alt](image2.png) A paragraph relating to the image.
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <div class="collection-horiz">
+    <p><img alt="alt" src="http://example.com/image.png"/> A paragraph relating to the image.</p>
+    <p><img alt="alt" src="images/image2.png"/> A paragraph relating to the image.</p>
+    </div>
     """
 
 def test_star_rating():
