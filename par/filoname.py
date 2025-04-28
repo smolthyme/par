@@ -15,11 +15,11 @@ ig = ignore
 class FileParts():
     """Simple dataclass to hold the parts of a filename, either as a definite set or set of regular expression."""
     title: str
-    tags: List[str] = field(default_factory=list)
-    meta: Dict[str, str] = field(default_factory=dict)
-    group: Optional[str] = None
-    exts: Optional[str] = None
-    sort: Optional[str] = None
+    tags : List[str]      = field(default_factory=list)
+    meta : Dict[str, str] = field(default_factory=dict)
+    group: Optional[str]  = None
+    exts : Optional[str]  = None
+    sort : Optional[str]  = None
     
     def __str__(self):
         # Meta is a dict-like syntax
@@ -91,7 +91,7 @@ class FilonameGrammar(dict):
         def prefix()    : return [fname_spam, sort_order]
         
         # Try to find the title by avoiding extensions and tags (Can we do it without?)
-        def title()     : return rx(r'[^\{\[]+?(?=(\.[a-zA-Z\d]{2,5}){1,2}\b|[\[\{])'), 0, ws
+        def title()     : return rx(r'[^\{\[]+?(?=(\.[a-zA-Z\d]{2,5}){1,2}\b|/|[\[\{])'), 0, ws
         
         def tag()       : return word
         def hashtags()  : return ig(r"\#"), tag, -1, ig(r"[,; ]")
@@ -114,18 +114,23 @@ class FilonameGrammar(dict):
     def parse(self, text, root=None, skipWS=False, **kwargs):
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
-def file_sort_init(sort_var, sort_default=1.0) -> float:
+def normalize_alpha(string) -> float:
+    """Normalizes a string to a float value based on the sum of the alphabetical positions of its characters."""
+    return sum((ord(char.lower()) - ord('a') + 1) for char in string if char.isalpha()) / len(string)
+
+def file_sort_init(sort_var, title:str, sort_default=1.0) -> float:
     """While the filename parser is good, the sort variable sometimes contains strange values.
         This function is a helper to ensure that sort is always a float"""
     first = -888.0  ; firstchars = "^!"
     last  =  888.0  ; lastchars  = "_zv"
     
-    if sort_var == None:            return sort_default
-    elif sort_var[0] in firstchars: return first
-    elif sort_var[0] in lastchars:  return last
+    if not sort_var                : return sort_default
+    if not sort_var and title != "": return normalize_alpha(title)
+    elif sort_var[0] in firstchars : return first
+    elif sort_var[0] in lastchars  : return last
     else:
-        try:                        return float(sort_var)
-        except ValueError:          return sort_default
+        try:                         return float(sort_var)
+        except ValueError:           return sort_default
 
 def get_filename_parts(fname_str: str) -> FileParts:
     """Parse a filename string into its component parts if possible.
@@ -139,8 +144,9 @@ def get_filename_parts(fname_str: str) -> FileParts:
         return FileParts(title=fname_str)
     
     rootnode   = result[0]
-    sort_order = rootnode.find("sort_order").text.strip() if rootnode.find("sort_order") else None
+
     title      = rootnode.find("title").text.strip()
+    sort_order = rootnode.find("sort_order").text.strip() if rootnode.find("sort_order") else None
     tags       = [tag.text for tag in rootnode.find_all("tag")]
     group      = rootnode.find("group_name").text if rootnode.find("group") else None  # FIXME: 'Group' is the wrong word for this
     meta_dict  = {match[0].text: match[1].text for match in rootnode.find_all("key_n_val")}
