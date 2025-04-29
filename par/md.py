@@ -1,1035 +1,770 @@
-from urllib.parse import urljoin
-
-# Parsing Markdown
 # This version has some differences between Standard Markdown
 # Syntax according from http://daringfireball.net/projects/markdown/syntax
-# 
-# They are:
-#   || `^super^script` || <sup>super</sup>script ||
-#   || `,,sub,,script` || <sub>sub</sub>script ||
-#   || `~~strikeout~~` || <span style="text-decoration: line-through">strikeout</span> ||
-#  
-#   directly url and image support, e.g.:
-#     http://code.google.com/images/code_sm.png
-#     http://www.google.com
-#   Table support
-#   Difinition list support <dl><dt><dd>
-#   github flavored Markdown support:
-#     Multiple underscores in words
-#     Fenced code blocks
-#     Syntax highlighting
 
-
-
-from par.pyPEG import *
 import re
 import types
-from par.gwiki import WikiGrammar, WikiHtmlVisitor, SimpleVisitor
+from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
+from .__init__ import SimpleVisitor, MDHTMLVisitor
+
+class ResourceStore:
+    def __init__(self, initial_data:dict|None=None):
+        self.store = {'link_refers': {}, 'tocitems': [], 'footnotes': [], 'images': []}
+        if initial_data:
+            self.store = {**self.store, **initial_data}
+
+    def add(self, key, value):
+        if key not in self.store:
+            self.store[key] = []
+        if isinstance(self.store[key], list):
+            self.store[key].append(value)
+        else:
+            raise TypeError(f"Cannot add to key '{key}' as it is not a list.")
+    
+    def get(self, key):
+        return self.store[key]
+    
+    def set(self, key, subkey, value):
+        if isinstance(self.store[key], dict):
+            self.store[key][subkey] = value
+        else:
+            raise TypeError(f"Cannot set subkey '{subkey}' for key '{key}' as it is not a dict.")
 
 _ = re.compile
 
-class MarkdownGrammar(WikiGrammar):
+class MarkdownGrammar(dict):
     def __init__(self):
-        super(MarkdownGrammar, self).__init__()
+        peg, self.root = self._get_rules()
+        self.update(peg)
         
     def _get_rules(self):
         ## Cheats for return value repeats
-        #  0 ?
-        # -1 *
-        # -2 +
+        #  0 = ? = Optional ; -1 = * = Zero or more ; -2 = + = One or more ; n = n matches
 
         ## basic
-        def ws():       return _(r'\s+')
-        def space():    return _(r'[ \t]+')
-        def eol():      return _(r'\r\n|\r|\n')
-        def seperator():return _(r'[\.,!?$ \t\^]')
-    
-        def blankline(): return 0, space, eol
+        def eol()              : return _(r'\r\n|\r|\n')
+        def space()            : return _(r'[ \t]+')
+        def wordlike()         : return _(r'[^\*\_^`~\s\d\.]+') # Remove brackets maybe?
+        def blankline()        : return 0, space, eol
+        def blanklines()       : return -2, blankline
 
-        def literal():  return _(r'u?r?"[^"\\]*(?:\\.[^"\\]*)*"', re.I|re.DOTALL)
-        def literal1(): return _(r"u?r?'[^'\\]*(?:\\.[^'\\]*)*'", re.I|re.DOTALL)
+        def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
+        def htmlentity()       : return _(r'&\w+;')
+        def escape_string()    : return _(r'\\'), _(r'.')
+        def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[\]]+')
 
-        def htmlentity(): return _(r'&\w+;')
-        def longdash():   return _(r"--\B")
+        def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
+        def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
+        def fmt_bold2()        : return _(r'__'),   words , _(r'__')
+        #def fmt_underline()    : return _(r'_'),    words , _(r'_')
+        def fmt_italic2()      : return _(r'_'),   words , _(r'_')
+        def fmt_code()         : return _(r'`'),    words , _(r'`')
+        def fmt_subscript()    : return _(r',,'),   words , _(r',,')
+        def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
+        def fmt_strikethrough(): return _(r'~~'),   words , _(r'~~')
 
-        def escape_string():    return _(r'\\'), _(r'.')
-        def string():           return _(r'[^\\\*_\^~ \t\r\n`,<\[]+', re.U)
-        def code_string_short():return _(r'`'), _(r'[^`]*'), _(r'`')
-        def code_string():      return _(r'``'), _(r'.+(?=``)'), _(r'``')
-        def default_string():   return _(r'\S+')
+        ## inline
+        def longdash()         : return _(r"--\B")
+        def hr()               : return _(r'(?:([-_*])[ \t]*\1?){3,}'), -2, blankline
+        def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
-        ## paragraph
-        #def simple_op(): return _(r'[ \t]+(\*\*|__|\*|_|~~|\^|,,)(?=\r|\n|[ \t]+)')
-        def op_string(): return _(r'\*{1,3}|_{1,3}|~~|\^|,,')
-        def op(): return [(-1, longdash, seperator, op_string), (op_string, -1, seperator)]
-        # def underscore_words(): return _(r'[\w\d]+_[\w\d]+[\w\d_]*')
-        # def identifer(): return _(r'[a-zA-Z_][a-zA-Z_0-9]*', re.U)
+        ## embedded html
+        def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL)
+        def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
 
-        def star_rating(): return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
-
-        def word(): return [ # Tries to show parse-order
-                escape_string, 
-                code_string, code_string_short,
-                html_inline_block, inline_tag,
-                footnote, link, 
-                htmlentity, longdash, star_rating,
-                string, default_string
+        def word()             : return [ # Tries to show parse-order
+                escape_string,
+                html_block, html_inline_block, inline_tag,
+                fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,# fmt_underline,
+                fmt_subscript, fmt_superscript, fmt_strikethrough,
+                footnote, link, longdash,
+                htmlentity, star_rating, string, wordlike
             ]
         
-        def words(): return [op, word], -1, [op, space, word]
-        #def words(): return -1, [word, space]
-        def line(): return 0, space, words, eol
-        def common_text(): return _(r'(?:[^\-\+#\r\n\*>\d]|(?:\*|\+|-)\S+|>\S+|\d+\.\S+)[^\r\n]*')
-        def common_line(): return common_text, eol 
+        #def words()            : return word, -1, [space, word]
+        def words(ig='(?!)')   : return word, -1, [space, ignore(ig), word]
+        def text()             : return 0, space, -2, words
+        def paragraph()        : return text, -1, [space, text], blanklines
 
-        def paragraph(): return line, -1, (0, space, common_line), -1, blanklines
-        def blanklines(): return -2, blankline
-
-        def directive_name(): return _(r'\w+')
-        def directive_title(): return _(r'[^\n\r]+')
-        def directive(): return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
+        def directive_name()   : return _(r'\w+')
+        def directive_title()  : return _(r'[^\n\r]+')
+        def directive()        : return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
     
+        def block_kwargs_key() : return _(r'[^=,\)\n]+')
+        def block_kwargs_val() : return _(r'[^\),\n]+')
+        def block_kwargs()     : return block_kwargs_key, 0, (_(r'='), block_kwargs_val)
+        
         ## footnote
-        def footnote(): return _(r'\[\^\w+\]')
-        def footnote_text(): return list_first_para, -1, [list_content_indent_lines, list_content_lines]
-        def footnote_desc(): return footnote, _(r':'), footnote_text
+        def footnote()         : return _(r'\[\^\w+\]')
+        def footnote_text()    : return list_first_para, -1, [list_indent_lines, list_lines]
+        def footnote_desc()    : return footnote, _(r':'), footnote_text
     
         ## custom inline tag
-        def inline_tag_name():  return _(r'[^\}:]*')
-        def inline_tag_index(): return _(r'[^\]]*')
-        def inline_tag_class(): return _(r'[^\}:]*')
-        def inline_tag(): return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
-    
-        ## hr
-        # Note: is something like (?:([-_\*])[ \t]*\1){3,} slower?
-        def hr1(): return _(r'\*[ \t]*\*[ \t]*\*[ \t]*[\* \t]*'), -2, blankline
-        def hr2(): return _(r'\-[ \t]*\-[ \t]*\-[ \t]*[\- \t]*'), -2, blankline
-        def hr3(): return _(r'\_[ \t]*\_[ \t]*\_[ \t]*[\_ \t]*'), -2, blankline
-        def hr(): return [hr1, hr2, hr3]
-
-        ## html block
-        def html_block(): return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL), -2, blankline
-        def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup).*?>.*?<(/\1)>|<(img|br).*?/>', re.I|re.DOTALL)
+        def inline_tag_name()  : return _(r'[^\}:]*')
+        def inline_tag_index() : return _(r'[^\]]*')
+        def inline_tag_class() : return _(r'[^\}:]*')
+        def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
 
         ## pre
-        def indent_line_text(): return _(r'.+')
-        def indent_line(): return _(r'[ ]{4}|\t'), indent_line_text, eol
-        def indent_block(): return -2, [indent_line, blankline]
-        def pre_lang(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
-        def pre_text1():    return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
-        def pre_text2():    return _(r'.+?(?=</code>)', re.M|re.DOTALL)
-        def pre_extra1():   return _(r'```|~{3,}'), 0, pre_lang, 0, space, eol, pre_text1, _(r'```|~{3,}'), -2, blankline
-        def pre_extra2():   return _(r'<code>'), 0, pre_lang, 0, space, eol, pre_text2, _(r'</code>'), -2, blankline
-        def pre(): return [indent_block, pre_extra1, pre_extra2]
+        def indent_line_text() : return text
+        def indent_line()      : return _(r' {4}|\t'), indent_line_text, blankline
+        def indent_block()     : return -2, indent_line, -1, [indent_line, blankline]
+        def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
+        def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
+        def pre_text2()        : return _(r'.+?(?=</code>)', re.M|re.DOTALL)
+        def pre_extra1()       : return _(r'```|~{3,}'), 0, pre_lang, blankline, pre_text1, _(r'```|~{3,}'), -2, blankline
+        def pre_extra2()       : return _(r'<code>'), 0, pre_lang, blankline, pre_text2, _(r'</code>'), -2, blankline
+        def pre()              : return [indent_block, pre_extra1, pre_extra2]
     
         ## class and id definition
-        def attr_def_id(): return _(r'#[^\s\}]+')
-        def attr_def_class(): return _(r'\.[^\s\}]+')
-        def attr_def_set(): return [attr_def_id, attr_def_class], -1, (space, [attr_def_id, attr_def_class])
-        def attr_def(): return _(r'\{'), attr_def_set, _(r'\}')
+        def attr_def_id()      : return _(r'#[^\s\}]+')
+        def attr_def_class()   : return _(r'\.[^\s\}]+')
+        def attr_def_set()     : return [attr_def_id, attr_def_class], -1, (space, [attr_def_id, attr_def_class])
+        def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
         
-        ## subject
-        def setext_title1(): return title_text, 0, space, 0, attr_def, blankline, _(r'={1,}'), -2, blankline
-        def setext_title2(): return title_text, 0, space, 0, attr_def, blankline, _(r'-{1,}'), -2, blankline
-        def title_text(): return _(r'.+?(?= #| \{#| \{\.)|.+', re.U)
-        def atx_title1(): return _(r'# '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def atx_title2(): return _(r'## '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title1(): return [atx_title1, setext_title1]
-        def title2(): return [atx_title2, setext_title2]
-        def title3(): return _(r'### '),    title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title4(): return _(r'#### '),   title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title5(): return _(r'##### '),  title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title6(): return _(r'###### '), title_text, 0, _(r' #+'), 0, space, 0, attr_def, -2, blankline
-        def title(): return [title6, title5, title4, title3, title2, title1]
+        ## titles / subject
+        def title_text()       : return _(r'[^\[\]\n#\{\}]+', re.U)
+        def hashes()           : return _(r'#{1,6}')
+        def atx_title()        : return hashes, 0, space, title_text, 0, space, 0, hashes, 0, space, 0, attr_def, -2, blankline
+        def setext_underline() : return _(r'[ \t]*[-=]+[ \t]*')
+        def setext_title()     : return title_text, 0, space, 0, attr_def, blankline, setext_underline, -2, blankline
+        def title()            : return [atx_title, setext_title]
     
         ## table
-        # def table_column(): return -2, [space, escape_string, code_string_short, code_string, op, link, _(r'[^\\\*_\^~ \t\r\n`,\|]+', re.U)], _(r'\|\|')
-        def table_column(): return _(r'.+?(?=\|\|)'), _(r'\|\|')
-        def table_line():   return _(r'\|\|'), -2, table_column, eol
-        def table(): return -2, table_line, -1, blankline
-        def table_td(): return _(r'[^\|\r\n]*\|')
-        def table_separator_line(): return _(r'\s*:?-+:?\s*\|')
-        # def table_separator_char(): return _(r'\|')
-        def table_other(): return _(r'[^\r\n]+')
-        def table_head(): return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
-        def table_separator(): return 0, _(r'\|'), -2, table_separator_line, -1, table_other, blankline
-        def table_body_line(): return 0, _(r'\|'), -2, table_td, -1, table_other, blankline
-        def table_body(): return -2, table_body_line
-        def table2(): return table_head, table_separator, table_body
-        
-        ## definition lists
-        def dl_dt_1(): return _(r'[^ \t\r\n]+.*--'), -2, blankline
-        def dl_dd_1(): return -1, [list_content_indent_lines, blankline]
-        def dl_dt_2(): return _(r'[^ \t\r\n]+.*'), -1, blankline
-        def dl_dd_2(): return _(r':'), _(r' {1,3}'), list_rest_of_line, -1, [list_content_indent_lines, blankline]
-        def dl_line_1(): return dl_dt_1, dl_dd_1
-        def dl_line_2(): return dl_dt_2, -2, dl_dd_2
-        def dl(): return [dl_line_1, dl_line_2], -1, [blankline, dl_line_1, dl_line_2]
-    
-        ## block
-        #   [[tabs(filename=hello.html)]]:
-        #       content
-        #
-        # def block_name(): return _(r'[a-zA-Z_\-][a-zA-Z_\-0-9]*')
-        def block_kwargs_key():     return _(r'[^=,\)\n]+')
-        def block_kwargs_value():   return _(r'[^\),\n]+')
-        def block_kwargs(): return block_kwargs_key, 0, (_(r'='), block_kwargs_value)
-        # def block_args(): return _(r'\('), 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space, _(r'\)')
-        # def block_head(): return _(r'\[\['), 0, space, block_name, 0, space, 0, block_args, 0, space, _(r'\]\]:'), eol
-        # def block_body(): return list_content_indent_lines
-        # def block_item(): return block_head, block_body
-        # def block(): return -2, block_item
-    
-        ## new block NB
-        #  {% blockname para_name=para_value[, para_name, para_name=para_value] %}
-        #  content
-        #  {% endblockname %}
-        #
+        def table_sep()        : return _(r'\|')
+        def table_td()         : return _(r'[^\|\r\n]*'), table_sep
+        def table_horiz_line() : return _(r'\s*:?-+:?\s*'), table_sep
+        def table_other()      : return _(r'[^\r\n]+')
+        def table_head()       : return 0, table_sep, -2, table_td, -1, table_other, blankline
+        def table_separator()  : return 0, table_sep, -2, table_horiz_line, -1, table_other, blankline
+        def table_body_line()  : return 0, table_sep, -2, table_td, -1, table_other, blankline
+        def table_body()       : return -2, table_body_line
+        def table()            : return table_head, table_separator, table_body
 
-        # def new_block_args(): return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs)), 0, space
-        # def new_block_name(): return _(r'([a-zA-Z_\-][a-zA-Z_\-0-9]*)')
-        # def new_block_head(): return _(r'\{%'), 0, space, new_block_name, new_block_args, _(r'%\}'), eol
-        # def new_block_end(): return _(r'\{%'), 0, space, _(r'end\1'), 0, space, _(r'%\}'), eol
-        # def new_block_item(): return new_block_head, new_block_body, new_block_end
-        # def new_block(): return -2, new_block_item
-        def new_block(): return _(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL), eol
-
-
-        def side_block_head(): return _(r'\|\|\|'), eol
-        def side_block_content(): return -2, [common_line, space]
-        def side_block_item():  return side_block_head, -2, side_block_content
-        def side_block(): return -2, side_block_item
+        # Horizontal items
+        def side_block_head()  : return _(r'\|\|\|'), blankline
+        def side_block_cont()  : return [text, lists, paragraph], blankline
+        def side_block_item()  : return side_block_head, -2, side_block_cont
+        def side_block()       : return -2, side_block_item, -1, blankline
 
         ## lists
-        def check_radio(): return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
-        def list_rest_of_line(): return _(r'.+'), eol
-        def list_first_para(): return 0, check_radio, list_rest_of_line, -1, (0, space, common_line), -1, blanklines
-        # def list_content_text(): return list_rest_of_line, -1, [list_content_norm_line, blankline]
-        def list_content_line(): return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
-        def list_content_lines(): return list_content_norm_line, -1, [list_content_indent_lines, blankline]
-        def list_content_indent_line(): return _(r' {4}|\t'), list_rest_of_line
-        def list_content_norm_line(): return _(r' {1,3}'), common_line, -1, (0, space, common_line), -1, blanklines
-        def list_content_indent_lines(): return list_content_indent_line, -1, [list_content_indent_line, list_content_line], -1, blanklines
-        def list_content(): return list_first_para, -1, [list_content_indent_lines, list_content_lines]
-        def bullet_list_item(): return 0, _(r' {1,3}'), _(r'\*|\+|-'), space, list_content
-        def number_list_item(): return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
-        def list_item(): return -2, [bullet_list_item, number_list_item]
-        def lists(): return -2, list_item, -1, blankline
+        def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
+        def list_rest_of_line(): return _(r'.+'), blankline
+        def list_first_para()  : return 0, check_radio, list_rest_of_line, -1, (0, space, text), -1, blanklines
+        def list_line()        : return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
+        def list_lines()       : return list_norm_line, -1, [list_indent_lines, blankline]
+        def list_indent_line() : return _(r' {4}|\t'), list_rest_of_line
+        def list_norm_line()   : return _(r' {1,3}'), text, -1, (0, space, text), -1, blanklines
+        def list_indent_lines(): return list_indent_line, -1, [list_indent_line, list_line], -1, blanklines
+        def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines, lists]
+        def bullet_list_item() : return 0, _(r' {1,3}'), _(r'\*|\+|-'), space, list_content
+        def number_list_item() : return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
+        def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
+
+        ## Definition Lists
+        def dl_dt()            : return -2, words(ig='--'), 0, _(r'--'), blankline
+        def dl_dd_content()    : return [paragraph, lists, pre]
+        def dl_dd()            : return [space, _(r':\s*')], dl_dd_content
+        def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, [dl_dd, blankline]
+        def dl()               : return -2, dl_dt_n_dd, -1, blanklines
 
         ## quote
-        def quote_text():       return _(r'[^\r\n]*'), eol
-        def quote_blank_line(): return _(r'>[ \t]*'), eol
-        def quote_line():       return _(r'> (?!- )'), quote_text
-        def quote_name():       return _(r'[^\r\n\(\)\d]*')
-        def quote_date():       return _(r'[^\r\n\)]+')
-        def quote_attr():       return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), eol 
-        def quote_lines(): return [quote_blank_line, quote_line]
-        def blockquote(): return -2, quote_lines, 0, quote_attr, -1, blankline
+        def quote_text()       : return text, blankline
+        def quote_blank_line() : return _(r'>[ \t]*'), blankline
+        def quote_line()       : return _(r'> (?!- )'), quote_text
+        def quote_name()       : return text
+        def quote_date()       : return _(r'[^\r\n\)]+')
+        def quote_attr()       : return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), blankline
+        def quote_lines()      : return [quote_blank_line, quote_line]
+        def blockquote()       : return -2, quote_lines, 0, quote_attr, -1, blankline
+
+        def image_refer_alt()  : return _(r'!\['), inline_text, _(r'\]')
+        def image_refer_refer(): return _(r'[^\]]*')
+        def image_refer()      : return image_refer_alt, 0, space, _(r'\['), image_refer_refer, _(r'\]')
+
+        def inline_text()      : return _(r'[^\]\^]*')
+        def inline_href()      : return _(r'[^\s\)]+')
+        def inline_image_alt() : return _(r'!\['), inline_text, _(r'\]')
+        def inline_image_link(): return _(r'\('), inline_href, 0, space, 0, link_inline_title, 0, space, _(r'\)')
+        def inline_image()     : return inline_image_alt, inline_image_link
 
         ## links
-        # def protocal(): return [_(r'http://'), _(r'https://'), _(r'ftp://')]
-        def direct_link():  return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
-        def image_link():   return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)', re.I)
-        def mailto():       return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
-        def wiki_link():    return _(r'(\[\[)(.*?)((1)?\]\])')
+        def link_raw()         : return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
+        def link_image_raw()   : return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)')
+        def link_mailto()      : return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
+        def link_wiki()        : return _(r'\[\[[^\[\]]*\]\]')
 
-        # def inline_image_title(): return literal
-        def inline_text():      return _(r'[^\]\^]*')
-        def inline_image_alt(): return _(r'!\['), inline_text, _(r'\]')
-        def inline_href():      return _(r'[^\s\)]+')
-        def inline_image_link():return _(r'\('), inline_href, 0, space, 0, inline_link_title, 0, space, _(r'\)')
-        def inline_image(): return inline_image_alt, inline_image_link
+        def link_inline_capt() : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
+        def link_inline_title(): return literal
+        def link_inline_link() : return _(r'\('), _(r'[^\s\)]+'), 0, space, 0, link_inline_title, 0, space, _(r'\)')
+        def link_inline()      : return link_inline_capt, link_inline_link
 
-        def refer_image_alt():  return _(r'!\['), inline_text, _(r'\]')
-        def refer_image_refer():return _(r'[^\]]*')
-        def refer_image():      return refer_image_alt, 0, space, _(r'\['), refer_image_refer, _(r'\]')
-        # def refer_image_title(): return [literal, literal1, r'\(.*?\)']
-
-        def inline_link_caption(): return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
-        def inline_link_title(): return literal
-        def inline_link_link(): return _(r'\('), _(r'[^\s\)]+'), 0, space, 0, inline_link_title, 0, space, _(r'\)')
-        def inline_link(): return inline_link_caption, inline_link_link
-
-        def refer_link_caption(): return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
-        def refer_link_refer(): return _(r'[^\]]*')
-        def refer_link(): return refer_link_caption, 0, space, _(r'\['), refer_link_refer, _(r'\]')
-        def refer_link_link(): return 0, _(r'(<)?(\S+)(?(1)>)')
-        def refer_link_title(): return [_(r'\([^\)]*\)'), literal, literal1]
-        def refer_link_note(): return 0, _(r' {1,3}'), inline_link_caption, _(
-            r':'), space, refer_link_link, 0, (ws, refer_link_title), -2, blankline
+        def link_refer_capt()  : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
+        def link_refer_refer() : return _(r'[^\]]*')
+        def link_refer()       : return link_refer_capt, 0, space, _(r'\['), link_refer_refer, _(r'\]')
+        def link_refer_link()  : return 0, _(r'(<)?(\S+)(?(1)>)')
+        def link_refer_title() : return [_(r'\([^\)]*\)'), literal]
+        def link_refer_note()  : return 0, _(r' {1,3}'), link_inline_capt, _(
+            r':'), space, link_refer_link, 0, space, link_refer_title, -2, blankline
         
-        def link(): return [inline_image, refer_image, inline_link, refer_link, image_link, direct_link, wiki_link, mailto], -1, space
+        def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto]
 
         ## article
-        def content(): return -2, [ blanklines, hr, title, refer_link_note, directive,
-                                    pre, html_block,
-                                    side_block, new_block,
-                                    table, table2,
-                                    lists, dl,
-                                    blockquote, footnote_desc,
-                                    paragraph
-                                ]
-        #def metacontent(): return -2, [ content ]
+        def content(): return -2, [blankline,
+                hr, link_refer_note, directive,
+                pre, html_block, lists,
+                side_block, table, dl, blockquote, footnote_desc,
+                title, paragraph ]
+
         def article(): return content
 
+        # Finish up _get_rules() by returning the peg_rules and the 'root'
         peg_rules = {}
         for k, v in ((x, y) for (x, y) in list(locals().items()) if isinstance(y, types.FunctionType)):
             peg_rules[k] = v
         return peg_rules, article
+    
+    def parse(self, text:str, root=None, skipWS=False, **kwargs):
+        # Normalise on unix-style line ending and we end with a newline
+        text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
+        return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
 
-class MarkdownHtmlVisitor(WikiHtmlVisitor):
-    op_maps = {
-        '`'  :  ['<code>',          '</code>'],
-        '*'  :  ['<em>',            '</em>'],
-        '_'  :  ['<em>',            '</em>'],
-        '**' :  ['<strong>',        '</strong>'],
-        '***':  ['<strong><em>',    '</em></strong>'],
-        '___':  ['<strong><em>',    '</em></strong>'],
-        '__' :  ['<strong>',        '</strong>'],
-        '^'  :  ['<sup>',           '</sup>'],
-        ',,' :  ['<sub>',           '</sub>'],
-        '~~' :  ['<span style="text-decoration: line-through">', '</span>'],
-    }
+class MarkdownHtmlVisitor(MDHTMLVisitor):
     tag_class = {}
 
-    def __init__(self, template=None, tag_class=None, grammar=None,
-                    title='Untitled', block_callback=None, init_callback=None,
-                    wiki_prefix='./', footnote_id=None, filename=None):
-        super(MarkdownHtmlVisitor, self).__init__(template, tag_class,
-                                                    grammar, title, block_callback, init_callback, filename=filename)
-
-        self.refer_links = {}
-        self.chars = list(self.op_maps.keys())
-        self.chars.sort(key=lambda x: len(x), reverse=True)
-        self.wiki_prefix = wiki_prefix
+    def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled', footnote_id=None, filename=None, resources=None):
+        super().__init__(grammar, filename)
+        
+        self.title       = title
+        self.tag_class   = tag_class or self.__class__.tag_class
         self.footnote_id = footnote_id or 1
-        self.footnodes = []
-        self.tocitems = []
+        self.resources   = ResourceStore(resources)
+        self._current_section_level = None
 
-    def visit(self, nodes, root=False):
-        if root:
-            for obj in nodes[0].find_all('refer_link_note'):
-                self.visit_refer_link_note(obj)
-
-            # Collect titles for use in ToC
-            for onk in nodes[0].find_all('title'):
-                self._alt_title(onk)
+    def visit(self, nodes: Symbol, root=False) -> str:
+        if root:# Collect titles for use in ToC, global things
+            [self.visit_link_refer_note(obj) for obj in nodes[0].find_all('link_refer_note')]
+            [self._alt_title(onk) for onk in nodes[0].find_all('title')]
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
 
-    def parse_text(self, text, peg=None):
+    def parse_markdown(self, text, peg=None):
         g = self.grammar or MarkdownGrammar()
         if isinstance(peg, str):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
-        v = self.__class__('', self.tag_class, g, block_callback=self.block_callback,
-                        init_callback=self.init_callback, wiki_prefix=self.wiki_prefix, filename=self.filename,
-                        footnote_id=self.footnote_id)
-        v.refer_links = self.refer_links
-        r = v.visit(result)
+        v = self.__class__('', self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id)
+        v.resources = self.resources
+        parsed_output = v.visit(result[0])
         self.footnote_id = v.footnote_id
         
-        return r
-
-
-    def process_line(self, line):
-        chars = self.chars
-        op_maps = self.op_maps
-
-        buf = []
-        pos = []  # stack of special chars
-        i = 0
-        codes = re.split(r"\\s+", line)
-        while i < len(codes):
-            left = codes[i]
-
-            # process begin match
-            for c in chars:
-                if left.startswith(c):
-                    p = left[len(c):]
-                    if p:
-                        buf.append(c)
-                        pos.append(len(buf) - 1)
-                        left = p
-                    else:
-                        buf.append(left)
-                        left = ''
-                    break
-
-            # process end match
-            if left:
-                for c in chars:
-                    if left.endswith(c):
-                        p = left[:-len(c)]
-                        if p:
-                            while len(pos) > 0:
-                                t = pos.pop()
-                                if buf[t] == c:
-                                    buf[t] = op_maps[c][0]
-                                    buf.append(p)
-                                    buf.append(op_maps[c][1])
-                                    left = ''
-                                    break
-                        break
-
-            if left:
-                buf.append(left)
-
-            i += 1
-            if i < len(codes):
-                buf.append(codes[i])
-                i += 1
-        
-        return ''.join(buf)
-
-    def visit_string(self, node):
+        return parsed_output
+    
+    def visit_string(self, node: Symbol) -> str:
         return self.to_html(node.text)
 
-    def visit_blanklines(self, node):
+    def visit_blankline(self, node: Symbol) -> str:
         return '\n'
 
-    def visit_blankline(self, node):
-        return '\n'
+    def visit_longdash(self, node: Symbol) -> str:
+        return '—'
 
-    def visit_longdash(self, node):
-        return '—' # &mdash;
+    def visit_hr(self, node: Symbol) -> str:
+        return self.tag('hr', enclose=1)
 
-    def _alt_title(self, node):
-        node = node.what[0]
+    def visit_paragraph(self, node: Symbol) -> str:
+        return self.tag('p', self.visit(node).strip(), enclose=2)
 
-        match node.__name__:
-            case 'title1':  level = 1
-            case 'title2':  level = 2
-            case 'title3':  level = 3
-            case 'title4':  level = 4
-            case 'title5':  level = 5
-            case _:         level = 1
-        
-        if node.find('attr_def_id'):
-            _id = node.find('attr_def_id').text[1:]
-        else:
-            _id = self.get_title_id(level)
-        
-        title = node.find('title_text').text.strip()
-        self.tocitems.append((level, _id, title))
-
-
-    def _get_title(self, node, level):
-        if node.find('attr_def_id'):
-            _id = node.find('attr_def_id').text[1:]
-        else:
-            _id = self.get_title_id(level)
-        
-        anchor = '<a class="anchor" href="#{}"></a>'.format(_id)
-        title = node.find('title_text').text.strip()
-
-        # process classes
-        _cls = []
-        for x in node.find_all('attr_def_class'):
-            _cls.append(x.text[1:])
-
-        return self.tag('h' + str(level), title + anchor, id=_id, _class=' '.join(_cls))
-
-    def visit_title1(self, node):
-        return self._get_title(node, 1)
-
-    def visit_setext_title1(self, node):
-        return node[0]
-
-    def visit_atx_title1(self, node):
-        return node[1].text
-
-    def visit_title2(self, node):
-        return self._get_title(node, 2)
-
-    def visit_setext_title2(self, node):
-        return node[0]
-
-    def visit_atx_title2(self, node):
-        return node[1].text
-
-    def visit_title3(self, node):
-        return self._get_title(node, 3)
-
-    def visit_title4(self, node):
-        return self._get_title(node, 4)
-
-    def visit_title5(self, node):
-        return self._get_title(node, 5)
-
-    def visit_title6(self, node):
-        return self._get_title(node, 6)
-
-    def visit_indent_block_line(self, node):
-        return node[1].text
-
-    def visit_indent_line(self, node):
-        return node.find('indent_line_text').text + '\n'
-
-    def visit_paragraph(self, node):
-        txt = node.text.rstrip().replace('\n', ' ')
-        text = self.parse_text(txt, 'words')
-
-        return self.tag('p', self.process_line(text))
-
-    def visit_pre(self, node):
-        lang = node.find('pre_lang')
-        kwargs = {}
-        cwargs = {}
-        if lang:
-            for n in lang.find_all('block_kwargs'):
-                k = n.find('block_kwargs_key').text.strip()
-                v_node = n.find('block_kwargs_value')
-                if v_node:
-                    v = v_node.text.strip()
-                    if k == 'lang':
-                        k = 'class'
-                        v = 'language-' + v
-                        cwargs[k] = v
-                        continue
-                else:
-                    v = 'language-' + k
-                    k = 'class'
-                    cwargs[k] = v
-                    continue
-                kwargs[k] = v
-        
-        return self.tag('pre', self.tag('code', self.to_html(self.visit(node).rstrip()), newline=False, **cwargs),
-                        **kwargs)
-
-    def visit_pre_extra1(self, node):
-        return node.find('pre_text1').text.rstrip()
-
-    def visit_pre_extra2(self, node):
-        return node.find('pre_text2').text.rstrip()
-
-    def visit_inline_link(self, node):
-        kwargs = {'href': node[1][1]}
-        if len(node[1]) > 3:
-            kwargs['title'] = node[1][3].text[1:-1]
-        caption = node[0].text[1:-1].strip()
-        if not caption:
-            caption = kwargs['href']
-        
-        return self.tag('a', caption, newline=False, **kwargs)
-
-    def visit_inline_image(self, node):
-        kwargs = {}
-        title = node.find('inline_link_title')
-        alt = node.find('inline_text')
-        location = node.find('inline_href').text
-
-        # TODO: Move to .tag
-        scheme = re.search(r'^(\w{3,5})://.+', location)
-        if scheme:
-            scheme = scheme.group(1)
-            
-            if scheme.lower() in ['javascript', 'vbscript', 'data']: #Just be safe
-                return ""
-            yt_id = re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)
-            if yt_id:
-                return f"<object class='yt-embed' data='https://www.youtube.com/embed/{yt_id.group(1)}'></object>"
-        location = "images/" + location  # later may need to split media so bbl
-
-        src = location
-        kwargs['src'] = src
-        if title:
-            kwargs['title'] = title.text[1:-1]
-        if alt:
-            kwargs['alt'] = alt.text
-
-        # controls disablePictureInPicture playsinline
-        if src.endswith(".mp4") or src.endswith(".m4v") or src.endswith(".mkv") or src.endswith(".webm"):
-            return self.tag('video', enclose=1, type="video/mp4", controls="yesplz", disablePictureInPicture=True,
-                            playsinline="True", **kwargs)
-        elif src.endswith(".m4a") or src.endswith(".aac") or src.endswith(".ogg") or src.endswith(".oga") or src.endswith(".opus"):
-            return self.tag('audio', enclose=1, type="video/mp4", controls="yesplz", **kwargs)
-        elif src.endswith(".mp3"):
-            return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
-
-        return self.tag('img', enclose=1, **kwargs)
-
-    def visit_refer_link(self, node):
-        caption = node.find('refer_link_caption')[1]
-        key = node.find('refer_link_refer')
-
-        if not key:
-            key = caption
-        else:
-            key = key.text
-        
-        return self.tag('a', caption, **self.refer_links.get(key.upper(), {}))
-
-    def visit_refer_image(self, node):
-        kwargs = {}
-
-        alt = node.find('refer_image_alt')
-        if alt:
-            alt = alt.find('inline_text').text
-        else:
-            alt = ''
-        key = node.find('refer_image_refer')
-        if not key:
-            key = alt
-        else:
-            key = key.text
-        
-        d = self.refer_links.get(key.upper(), {})
-        kwargs.update({'src': d.get('href', ''), 'title': d.get('title', '')})
-
-        return self.tag('img', enclose=1, **kwargs)
-
-    def visit_refer_link_note(self, node):
-        key = node.find('inline_link_caption').text[1:-1].upper()
-        self.refer_links[key] = {'href': node.find('refer_link_link').text}
-
-        r = node.find('refer_link_title')
-        if r:
-            self.refer_links[key]['title'] = r.text[1:-1]
-        
-        return ''
-
-    def template(self, node):
-        body = self.visit(node, True)
-        return self._template % {'title': self.title, 'body': body}
-
-    def visit_direct_link(self, node):
-        t = node.text
-
-        if t.startswith('<'):
-            t = t[1:-1]
-        href = t
-
-        return self.tag('a', href, newline=False, href=href)
-
-    def visit_wiki_link(self, node):
-        """
-        [[(type:)name(#anchor)(|alter name)]]
-        type = 'wiki', or 'image'
-        if type == 'wiki':
-            [[(wiki:)name(#anchor)(|alter name)]]
-        if type == 'image':
-            [[(image:)filelink(|align|width|height)]]
-            float = 'left', 'right'
-            width or height = '' will not set
-        """
-
-        t = node.text[2:-2].strip()
-        type = 'wiki'
-        begin = 0
-        if t[:6].lower() == 'image:':
-            type = 'image'
-            begin = 6
-        elif t[:5].lower() == 'wiki:':
-            type = 'wiki'
-            begin = 5
-
-        t = t[begin:]
-        if type == 'wiki':
-            #_prefix = self.wiki_prefix # FIXME: Should go back to using this
-            _v,   caption = (t.split('|', 1) + [''])[:2]
-            name, anchor = (_v.split('#', 1) + [''])[:2]
-            if anchor:
-                anchor = "#" + anchor
-
-            if not caption:
-                caption = name
-            
-            if not name:
-                return self.tag('a', caption, href=anchor)
-
-            # FIXME: file path should be verified since 'wiki' is local. //central store??
-            return self.tag('a', caption, href=f"{name}.html{anchor}")
-
-        elif type == 'image':
-            _v = (t.split('|') + ['', '', ''])[:4]
-            filename, align, width, height = _v
-            cls = ''
-            if width:
-                if width.isdigit():
-                    cls += ' width="%spx"' % width
-                else:
-                    cls += ' width="%s"' % width
-            if height:
-                if height.isdigit():
-                    cls += ' height="%spx"' % height
-                else:
-                    cls += ' height="%s"' % height
-
-            # TODO: Move to .tag
-            s = '<img src="images/%s" %s/>' % (filename, cls)
-            if align:
-                s = '<div class="float%s">%s</div>' % (align, s)
-            
-            return s
-
-    def visit_image_link(self, node):
-        t = node.text
-        if t.startswith('<'):
-            e = -1
-            b = 1
-        else:
-            b = 0
-            e = len(t)
-        href = t[b:e]
-
-        return self.tag('img', src="images/" + href, enclose=1)
-
-    def visit_mailto(self, node):
-        href = node.text[1:-1]
-        if href.startswith('mailto:'):
-            href = href[7:]
-
-        def shuffle(text):
-            import random
-
-            t = []
-            for x in text:
-                if random.choice('01') == '1':
-                    t.append('&#x%X;' % ord(x))
-                else:
-                    t.append(x)
-            return ''.join(t)
-
-        return self.tag('a', shuffle(href), href=shuffle("mailto:" + href), newline=False)
-
-    def visit_quote_line(self, node):
-        return node.text[2:]
-
-    def visit_quote_blank_line(self, node):
-        return '\n'
-
-    def visit_blockquote(self, node):
-        text = []
-        for line in node.find_all('quote_lines'):
-            text.append(self.visit(line))
-        result = self.parse_text(''.join(text), 'article')
-        
-        attrib = node.find("quote_name")
-        atrdat = node.find("quote_date")
-        if attrib:
-            result = result + f"&mdash; <i class='quote-attrib'>{attrib.text}</i>"
-        if atrdat:
-            result = result + f"<span class='quote-timeplace'>(<span class='text-date'>{atrdat.text}</span>)</span>"
-        return self.tag('blockquote', result)
-
-    def visit_lists_begin(self, node):
+    def visit_lists_begin(self, node: Symbol) -> str:
         self.lists = []
         return ''
 
-    def visit_list_content_line(self, node):
+    def visit_list_line(self, node: Symbol) -> str:
         return node.text.strip()
 
-    def visit_list_content_indent_line(self, node):
-        return node.find('list_rest_of_line').text
+    def visit_list_indent_line(self, node: Symbol):
+        return (text_node := node.find('list_rest_of_line')) and text_node.text
 
-    def visit_bullet_list_item(self, node):
+    def visit_bullet_list_item(self, node: Symbol) -> str:
         self.lists.append(('b', node.find('list_content')))
         return ''
 
-    def visit_number_list_item(self, node):
+    def visit_number_list_item(self, node: Symbol) -> str:
         self.lists.append(('n', node.find('list_content')))
         return ''
 
-    def visit_check_radio(self, node):
-        tag = []
-        if node.text[0] == '[':
-            tag.append('<input type="checkbox"')
-        else:
-            tag.append('<input type="radio"')
-        if node.text[1] == '*' or node.text[1].upper() == 'X':
-            tag.append(' checked')
-        tag.append('></input> ')
+    def visit_check_radio(self, node: Symbol) -> str:
+        return self.tag('input', '', newline=False, attrs=('checked' if node.text[1] in ['x', 'X', '*'] else ""), enclose=2,
+                type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else '')
 
-        return ''.join(tag)
-
-    def visit_lists_end(self, node):
+    def visit_lists_end(self, node: Symbol) -> str:
         def process_node(n):
-            txt = []
-            for node in n:
-                txt.append(self.visit(node))
-            text = ''.join(txt)
-            t = self.parse_text(text, 'article').rstrip()
-            if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>'):
-                ret = t[3:-4].rstrip()
-            else:
-                ret = t
-            
-            return ret
+            text = ''.join(self.visit(node) for node in n)
+            t = self.parse_markdown(text, 'content').rstrip()
+            return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
 
         def create_list(lists):
-            buf = []
-            old = None
-            parent = None
+            buf = []; old = None; parent = None
 
             for _type, _node in lists:
                 if _type == old:
                     buf.append(self.tag('li', process_node(_node)))
                 else:
-                    # find another list
                     if parent:
-                        buf.append('</' + parent + '>\n')
-                    if _type == 'b':
-                        parent = 'ul'
-                    else:
-                        parent = 'ol'
+                        buf.append(self.tag(parent, enclose=3))
+                    parent = 'ul' if _type == 'b' else 'ol'
                     buf.append(self.tag(parent))
                     buf.append(self.tag('li', process_node(_node)))
                     old = _type
-            if buf and parent:
-                buf.append('</' + parent + '>\n')
+            if len(buf) > 0 and parent:
+                buf.append(self.tag(parent, enclose=3))
             
             return ''.join(buf)
-
         return create_list(self.lists)
 
-    def visit_dl_begin(self, node):
-        return self.tag('dl')
+    def visit_dl_begin(self, node: Symbol) -> str:
+        return self.tag('dl', newline=True)
 
-    def visit_dl_end(self, node):
-        return '</dl>'
+    def visit_dl_end(self, node: Symbol) -> str:
+        return self.tag('dl', enclose=3)
 
-    def visit_dl_dt_1(self, node):
-        txt = node.text.rstrip()[:-3]
-        text = self.parse_text(txt, 'words')
-        return self.tag('dt', self.process_line(text), enclose=1)
+    def visit_dl_dt(self, node: Symbol) -> str:
+        return self.tag('dt', self.visit(node).strip(), enclose=2, newline=True)
 
-    def visit_dl_dd_1(self, node):
-        txt = self.visit(node).rstrip()
-        text = self.parse_text(txt, 'article')
-        return self.tag('dd', text, enclose=1)
+    def visit_dl_dd(self, node: Symbol) -> str:
+        description_nodes = node.find_all('dl_dd_content')
+        description_content = ''.join(self.visit(n) for n in description_nodes).strip()
+        return self.tag('dd', description_content+'\n', newline=True)
 
-    def visit_dl_dt_2(self, node):
-        txt = node.text.rstrip()
-        text = self.parse_text(txt, 'words')
-        return self.tag('dt', self.process_line(text), enclose=1)
+    def visit_fmt_bold_begin(self, node: Symbol) -> str:
+        return self.tag('strong', newline=False)
+    
+    def visit_fmt_bold(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("*_")
 
-    def visit_dl_dd_2(self, node):
-        txt = self.visit(node).rstrip()
-        text = self.parse_text(txt[1:].lstrip(), 'article')
-        return self.tag('dd', text, enclose=1)
+    def visit_fmt_bold_end(self, node: Symbol) -> str:
+        return self.tag('strong', enclose=3, newline=False)
+    
+    visit_fmt_bold2_begin = visit_fmt_bold_begin
+    visit_fmt_bold2 = visit_fmt_bold
+    visit_fmt_bold2_end = visit_fmt_bold_end
 
-    def visit_inline_tag(self, node):
-        rel = node.find('inline_tag_index').text.strip()
-        name = node.find('inline_tag_name').text.strip()
-        _c = node.find('inline_tag_class')
-        rel = rel or name
-        cls = ' ' + _c.text.strip() if _c is not None else ''
+    def visit_fmt_italic_begin(self, node: Symbol) -> str:
+        return self.tag('em', newline=False)
 
-        return ('<span class="inline-tag%s" data-rel="' % cls) + rel + '">' + name + '</span>'
+    def visit_fmt_italic(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("*_")
+    
+    def visit_fmt_italic_end(self, node: Symbol) -> str:
+        return self.tag('em', enclose=3, newline=False)
+    
+    visit_fmt_italic2_begin = visit_fmt_italic_begin
+    visit_fmt_italic2 = visit_fmt_italic
+    visit_fmt_italic2_end = visit_fmt_italic_end
 
-    def visit_new_block(self, node):
-        block = { 'new': True }
-        r = re.compile(r'\{%\s*([a-zA-Z_\-][a-zA-Z_\-0-9]*)\s*(.*?)%\}(.*?)\{%\s*end\1\s*%\}', re.DOTALL)
-        m = r.match(node.text)
-        if m and self.grammar:
-            block_args = m.group(2).strip()
-            resultSoFar = []
-            result, rest = self.grammar.parse(block_args, root=self.grammar['new_block_args'], resultSoFar=resultSoFar, skipWS=False)
-            kwargs = {}
-            for node in result[0].find_all('block_kwargs'):
-                k = node.find('block_kwargs_key').text.strip()
-                v = node.find('block_kwargs_value')
-                if v:
-                    v = v.text.strip()
-                kwargs[k] = v
-            
-            block = {'name': m.group(1), 'body': m.group(3).strip(), 'kwargs': kwargs}
-            
-        func = self.block_callback.get(block['name'])
-        if func:
-            return func(self, block)
+    def visit_fmt_underline_begin(self, node: Symbol) -> str:
+        return self.tag('u', newline=False)
+    
+    def visit_fmt_underline(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("_")
+    
+    def visit_fmt_underline_end(self, node: Symbol) -> str:
+        return self.tag('u', enclose=3, newline=False)
+
+    def visit_fmt_code_begin(self, node: Symbol) -> str:
+        return self.tag('code', newline=False)
+    
+    def visit_fmt_code(self, node: Symbol) -> str:
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("`")
+
+    def visit_fmt_code_end(self, node: Symbol) -> str:
+        return self.tag('code', enclose=3, newline=False)
+
+    def visit_fmt_subscript_begin(self, node: Symbol) -> str:
+        return self.tag('sub', newline=False)
+    
+    def visit_fmt_subscript(self, node: Symbol) -> str:
+        return node.text.strip(",")
+
+    def visit_fmt_subscript_end(self, node: Symbol) -> str:
+        return self.tag('sub', enclose=3, newline=False)
+
+    def visit_fmt_superscript_begin(self, node: Symbol) -> str:
+        return self.tag('sup', newline=False)
+    
+    def visit_fmt_superscript(self, node: Symbol) -> str:
+        return node.text.strip("^")
+
+    def visit_fmt_superscript_end(self, node: Symbol) -> str:
+        return self.tag('sup', enclose=3, newline=False)
+
+    def visit_fmt_strikethrough_begin(self, node: Symbol) -> str:
+        return self.tag('span', style="text-decoration: line-through", newline=False)
+
+    def visit_fmt_strikethrough(self, node: Symbol) -> str:
+        return node.text.strip("~")
+
+    def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
+        return self.tag('span', enclose=3, newline=False)
+
+    # def visit_indent_line(self, node: Symbol):
+    #     return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
+
+    def visit_pre(self, node: Symbol) -> str:
+        cwargs = {}; kwargs = {}
+        if (lang := node.find('pre_lang')):
+            for n in lang.find_all('block_kwargs'):
+                if (k := n.find('block_kwargs_key')):
+                    key = k.text.strip()
+                    val = v_node.text.strip() if (v_node := n.find('block_kwargs_val')) else None
+
+                    if key == 'lang' or val is None:
+                        cwargs['class'] = 'language-' + (val or key)
+                    else:
+                        kwargs[key] = val or 'language-' + key
+        
+        if pre_text := node.find('pre_text1') or node.find('pre_text2'):
+            code_content = self.to_html(pre_text.text.strip("` \t\n"))
+            return self.tag('pre', self.tag('code', code_content, newline=False, **cwargs), **kwargs)
         else:
-            return ''
-#            return node.text
+            return self.tag('pre', self.tag('code', node.text.strip("` \t\n"), newline=False, **cwargs), **kwargs)
 
-    def visit_side_block_item(self, node):
-        txt = self.visit(node).rstrip()
-        content = [self.parse_text(thing.text, 'content')
-                    for thing in node.find('side_block_content')]
+    def visit_link_inline(self, node: Symbol):
+        # FIXME: What is opaque? oh, this code
+        kwargs = {'href': node[1][1]}
+        if len(node[1]) > 3:
+            kwargs['title'] = node[1][3].text[1:-1]
+        caption = node[0].text[1:-1].strip() or kwargs['href']
+        
+        return self.tag('a', caption, **kwargs, newline=False)
 
-        # node[kwargs]
-        return self.tag('div', "\n".join(content), enclose=1, _class="collection-horiz")
+    def visit_inline_image(self, node: Symbol) -> str:
+        kwargs = {}
+        if (location := node.find('inline_href')):
+            location = location.text
 
+            if (scheme := re.search(r'^(\w{3,5})://.+', location)):
+                if scheme.group(1).lower() in ['javascript', 'vbscript', 'data']: #Just be safe
+                    return ""
+                if ( yt_id := re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)):
+                    return self.tag('object', _class='yt-embed', data=f"https://www.youtube.com/embed/{yt_id.group(1)}", newline=False, enclose=2)
 
-    def visit_table_column(self, node):
-        text = self.parse_text(node.text[:-2].strip(), 'words')
-        return self.tag('td', self.process_line(text), newline=False)
+            src = f"images/{location}" if not location.strip().startswith('http') else location.strip('<>')
+            kwargs['src'] = src
+            if (title := node.find('link_inline_title')):
+                kwargs['title'] = title.text[1:-1]
+            if (alt := node.find('inline_text')):
+                kwargs['alt'] = alt.text
 
-    def visit_table2_begin(self, node):
-        self.table_align = {}
-        separator = node.find('table_separator')
-        for i, x in enumerate(list(separator.find_all('table_separator_line')) +
-                              list(separator.find_all('table_other'))):
-            t = x.text
-            if t.endswith('|'):
-                t = t[:-1]
-            t = t.strip()
-            left = t.startswith(':')
-            right = t.endswith(':')
-            if left and right:
-                align = 'center'
-            elif left:
-                align = 'left'
-            elif right:
-                align = 'right'
-            else:
-                align = ''
-            self.table_align[i] = align
+            # controls disablePictureInPicture playsinline
+            if src.endswith(".mp4") or src.endswith(".m4v") or src.endswith(".mkv") or src.endswith(".webm"):
+                return self.tag('video', enclose=1, type="video/mp4", controls="yesplz", disablePictureInPicture=True,
+                                playsinline="True", **kwargs)
+            elif src.endswith(".m4a") or src.endswith(".aac") or src.endswith(".ogg") or src.endswith(".oga") or src.endswith(".opus"):
+                return self.tag('audio', enclose=1, type="video/mp4", controls="yesplz", **kwargs)
+            elif src.endswith(".mp3"):
+                return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
 
-        return self.tag('table', newline=True)
+        self.resources.add('images', src)
+        return self.tag('img', enclose=1, **kwargs, newline=False)
 
-    def visit_table2_end(self, node):
-        return '</table>\n'
+    def visit_link_refer(self, node: Symbol) -> str:
+        caption = noder[1] if (noder := node.find('link_refer_capt')) else ''
+        key = node.find('link_refer_refer')
+        key = key.text if key else caption
+        
+        return self.tag('a', caption, **self.resources.get('link_refers').get(key.upper(), {}), newline=False)
 
-    def visit_table_head(self, node):
-        s = ['<thead>\n<tr>']
-        for t in ('table_td', 'table_other'):
-            for x in node.find_all(t):
-                text = x.text
-                if text.endswith('|'):
-                    text = text[:-1]
-                s.append('<th>%s</th>' % self.process_line(text.strip()))
-        s.append('</tr>\n</thead>\n')
+    def visit_image_refer(self, node: Symbol) -> str:
+        alt = node.find('image_refer_alt')
+        alt_text = noder.text if alt and (noder := alt.find('inline_text')) else ''
 
-        return ''.join(s)
+        key = node.find('image_refer_refer')
+        key_text = key.text if key else alt_text
 
-    def visit_table_separator(self, node):
+        d = self.resources.get('link_refers').get(key_text.upper(), {})
+        kwargs = {'src': d.get('href', ''), 'title': d.get('title', '')}
+
+        self.resources.add('images', kwargs['src'])
+        return self.tag('img', enclose=1, **kwargs, newline=False)
+
+    def visit_link_refer_note(self, node: Symbol) -> str:
+        key = noder.text.strip("][").upper() if (noder := node.find('link_inline_capt')) else ''
+        self.resources.set('link_refers', key, {'href': noder.text if (noder := node.find('link_refer_link')) else ''})
+
+        if (r := node.find('link_refer_title')):
+            self.resources.get('link_refers')[key]['title'] = r.text.strip(r")(\"'")
         return ''
 
-    def visit_table_body(self, node):
-        s = ['<tbody>\n']
-        s.append(self.visit(node))
-        s.append('</tbody>')
+    def visit_link_raw(self, node: Symbol) -> str:
+        href = node.text.strip('<>')
+        return self.tag('a', href, href=href, newline=False)
 
+    def visit_link_wiki(self, node: Symbol) -> str:
+        """ # TODO: Needs a resource store to validate, path etc.
+        [[(type:)name(#anchor)(|alter name)]] / [[(image:)filelink(|align|width|height)]]"""
+        t = node.text.strip(r" \]\[")
+        type, begin = ('image', 6) if t[:6].lower() == 'image:'\
+                else (  'wiki', 5) if t[:5].lower() == 'wiki:' else ('wiki', 0)
+        t = t[begin:]
+        
+        if type == 'wiki':
+            _v,  caption = ( t.split('|', 1) + [''])[:2]
+            name, anchor = (_v.split('#', 1) + [''])[:2]
+            return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html", newline=False) \
+                if name else self.tag('a', caption, href=f"#{anchor}", newline=False)
+        
+        filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
+        href = f"images/{filename}" if not filename.strip().startswith('http') else filename.strip()
+        cls = []
+        if width:
+            cls.append( f'width="{width}px"'  if width.isdigit()  else f'width="{width}"')
+        if height:
+            cls.append(f'height="{height}px"' if height.isdigit() else f'height="{height}"')
+        
+        self.resources.add('images', href)
+        img_tag = self.tag('img', '', src=href, attrs=' '.join(cls), enclose=1, newline=False)
+        return    self.tag('div', img_tag, _class=f"float{align}", enclose=1, newline=False) if align else img_tag
+
+    def visit_image_link(self, node: Symbol) -> str:
+        # If the image is a link, just use that for href, else it's a local link
+        href = f"images/{node.text.strip('<>')}" if not node.text.strip().startswith('http') else node.text.strip('<>')
+        self.resources.add('images', href)
+        return self.tag('img', src=href, enclose=1, newline=False)
+
+    def visit_link_mailto(self, node: Symbol) -> str:
+        import random
+        shuffle = lambda text: ''.join(f'&#x{ord(x):X};' if random.choice('01') == '1' else x for x in text)
+        
+        href = node.text[1:-1]
+        if href.startswith('mailto:'):
+            href = href[7:]
+        return self.tag('a', shuffle(href), href=shuffle("mailto:" + href), newline=False)
+
+    def visit_quote_line(self, node: Symbol) -> str:
+        return node.text[2:]
+
+    def visit_blockquote(self, node: Symbol) -> str:
+        text = []
+        for line in node.find_all('quote_lines'):
+            text.append(self.visit(line))
+        result = self.parse_markdown(''.join(text), 'content')
+        
+        attrib = node.find("quote_name")
+        atrdat = node.find("quote_date")
+        if attrib:
+            result = f"{result} &mdash; {self.tag('i', attrib.text, _class='quote-attrib')}"
+        if atrdat:
+            result = result + self.tag('span', self.tag("span", atrdat.text, _class='text-date'), _class='quote-timeplace')
+        return self.tag('blockquote', result)
+
+    def visit_table_sep(self, node: Symbol) -> str:
+        return ''
+
+    def get_title_id(self, level:int, begin=1) -> str:
+        self.titles_ids[level] = self.titles_ids.get(level, 0) + 1
+        _ids = [self.titles_ids.get(x, 0) for x in range(begin, level + 1)]
+        return f'title_{'-'.join(map(str, _ids))}'
+
+    def _alt_title(self, node: Symbol):
+        node  = node.what[0]
+        level = 1
+        match node.__name__:
+            case 'atx_title':
+                if (level := node.find('hashes')) and level.text:
+                    level = len(level.text)
+                else:level = 1
+            case 'setext_title':
+                if (marker := node.find('setext_underline')) and marker.text:
+                    level = 1 if marker.text[0] == '=' else 2
+        
+        _id_node = node.find('attr_def_id')
+        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        title = (title_node := node.find('title_text')) and title_node.text.strip()
+        self.resources.add('tocitems', (level, _id, title))
+
+    def _get_title(self, node: Symbol, level: int):
+        _id_node = node.find('attr_def_id')
+        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
+        anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
+        _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
+        section_s = self._open_section(f"{title}".lower().replace(' ', '-'))
+
+        # Combine section opening with title tag
+        return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
+
+    def visit_atx_title(self, node: Symbol) -> str:
+        level = len(level.text) if (level := node.find('hashes')) and level.text else 1
+        return self._get_title(node, level)
+
+    def visit_setext_title(self, node: Symbol) -> str:
+        marker = noder.text[0] if (noder := node.find('setext_underline')) else '='
+        level = 1 if marker == '=' else 2
+        return self._get_title(node, level)
+
+    def visit_indent_block_line(self, node: Symbol) -> str:
+        return node[1].text
+
+
+    def visit_star_rating(self, node: Symbol) -> str:
+        r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
+        if (m := r.match(node.text)):
+            return self.tag('span', '⭐'*len(m.group('stars')), _class='star-rating', title=f"{len(m.group('stars'))} stars out of {m.group('outta')}")
+        else:
+            return self.tag('span', '⭐'*5, _class='star-rating')
+
+    def visit_inline_tag(self, node: Symbol) -> str:
+        if ( rel := node.find('inline_tag_index')):
+            if (name := node.find('inline_tag_name')):
+                _c = node.find('inline_tag_class')
+                cls = ' ' + _c.text.strip() if _c is not None else ''
+                return self.tag('span', name.text.strip(), _class=f"inline-tag{cls}", attrs=f'data-rel="{rel.text.strip()}"')
+        return self.tag('span', node.text, _class='inline-tag')
+
+    def visit_side_block(self, node: Symbol) -> str:
+        content = [self.parse_markdown(thing.text, 'content').strip()
+                for thing in node.find_all('side_block_cont')]
+        return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz") # node[kwargs]
+
+    def visit_table_begin(self, node: Symbol) -> str:
+        self.table_align = {}
+        if separator := node.find('table_separator'):
+            for i, x in enumerate(list(separator.find_all('table_horiz_line')) + list(separator.find_all('table_other'))):
+                t = x.text.strip("| \t")
+                self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
+        return self.tag('table')
+
+    def visit_table_end(self, node: Symbol) -> str:
+        return self.tag('table', enclose=3)
+
+    def visit_table_head(self, node: Symbol) -> str:
+        s = [self.tag('thead')+self.tag('tr', newline=False)]
+        for t in ('table_td', 'table_other'):
+            for x in node.find_all(t):
+                s.append(self.tag('th', child=self.visit(x).strip(), enclose=2, newline=False))
+        s.append(self.tag('tr', enclose=3)+self.tag('thead', enclose=3))
         return ''.join(s)
 
-    def visit_table_body_line(self, node):
+    def visit_table_separator(self, node: Symbol) -> str:
+        return ''
 
-        def get_node():
-            for t in ('table_td', 'table_other'):
-                for x in node.find_all(t):
-                    yield x
+    def visit_table_body(self, node: Symbol) -> str:
+        return self.tag('tbody', "\n"+self.visit(node), enclose=2, newline=False)
 
-        s = ['<tr>']
-        for i, x in enumerate(get_node()):
-            text = x.text
-            if text.endswith('|'):
-                text = text[:-1]
-            s.append(self.tag('td', self.parse_text(text.strip(), 'words'),
-                                align=self.table_align.get(i, ''),
-                                newline=False,
-                                enclose=2))
-        s.append('</tr>\n')
-
+    def visit_table_body_line(self, node: Symbol) -> str:
+        nodes = list(node.find_all('table_td')) + list(node.find_all('table_other'))
+        s = [self.tag('tr', newline=False)]
+        for i, x in enumerate(nodes):
+            text = self.visit(x)
+            if text != "":
+                s.append(self.tag('td', self.parse_markdown(text, 'text').strip(),
+                    align=self.table_align.get(i, ''), newline=False, enclose=2))
+            else:
+                s.append(self.tag("td", "", newline=False, enclose=2))
+        s.append(self.tag('tr', enclose=3))
         return ''.join(s)
     
-    def visit_directive(self, node):
-        name = node.find('directive_name').text
-        title = node.find('directive_title')
-
-        s = []
-
-        if name in ['toc', 'contents']:
-            if len(self.tocitems):
-                hi = 0
-                s.append("<section class='toc'><ul>")
-                for lvl, anchor, title in self.tocitems:
-                    if lvl > hi:
-                        hi = lvl
-                        s.append("<ul>")
-                    elif lvl < hi:
-                        hi = lvl
-                        s.append("</ul>")
-                    s.append(f"<li><a href='#{anchor}'>{title}</a></li>")
-                    
-                s.append("</ul></section>")
-
+    def visit_directive(self, node: Symbol):
+        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.get('tocitems'):
+            toc = [self.tag('section', _class='toc')]
+            count = 1; hi = 0
+            for lvl, anchor, title in self.resources.get('tocitems'):
+                if lvl > hi:
+                    toc.append(self.tag('ul'))
+                elif lvl < hi:
+                    toc.append(self.tag('ul', enclose=3))
+                hi = lvl
+                toc.append(self.tag('li', self.tag('a', title, href=f"#toc_{count}", newline=False)))
+                count += 1
+            toc.append(self.tag('ul', enclose=3))
+            toc.append(self.tag('section', enclose=3, newline=False))
             # Since we visited these before generating, reset the dict to make sure headings get correct id's
             self.titles_ids = {}
+            return ''.join(toc)
 
-        return ''.join(s)
-
-    def visit_footnote(self, node):
+    def visit_footnote(self, node: Symbol) -> str:
         name = node.text[2:-1]
         _id = self.footnote_id
         self.footnote_id += 1
-
-        return '<sup id="fnref-%s"><a href="#fn-%s" class="footnote-rel inner">%d</a></sup>' % (name, name, _id)
+        return self.tag('sup', self.tag('a', f"{_id}", href=f"#fn-{name}", _class='footnote-rel inner', newline=False), id=f"fnref-{name}")
 
     def visit_footnote_desc(self, node):
-        name = node.find('footnote').text[2:-1]
-        if name in self.footnodes:
+        name = node.find('footnote').text.strip('[^]')
+        if name in [fn['name'] for fn in self.resources.get('footnotes')]:
             raise Exception("The footnote %s is already existed" % name)
 
         txt = self.visit(node.find('footnote_text')).rstrip()
-        text = self.parse_text(txt, 'article')
-        n = {'name': '%s' % name, 'text': text}
-        self.footnodes.append(n)
-
+        text = self.parse_markdown(txt, 'content').rstrip()
+        self.resources.add('footnotes', {'name': name, 'text': text})
         return ''
 
-    def visit_star_rating(self, node):
-        r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
-        m = r.match(node.text)
-        if m:
-            numstars = len(str(m.group("stars")))
+    visit_blanklines = visit_blankline
+    visit_quote_blank_line = visit_blankline
 
-            return f"<span>{'⭐' * numstars}</span>"
+
+    def _open_section(self, id):
+        stry = ""
+        if self._current_section_level is not None:
+            stry += self._close_section()
+        self._current_section_level = id
+        return stry+self.tag('section', '', id=f'section-{id}')
+
+    def _close_section(self):
+        if hasattr(self, '_current_section_level') and self._current_section_level is not None:
+            self._current_section_level = None
+            return self.tag('section', enclose=3)
+        return ''
 
     def __end__(self):
-        s = []
-        
-        if len(self.footnodes) > 0:
-            s.append('<div class="footnotes"><ol>')
-            for n in self.footnodes:
-                name = n['name']
-                s.append('<li id="fn-%s">' % (name, ))
-                s.append(n['text'])
-                s.append(self.tag('a', '↩', href='#fnref-%s' %
-                                    name, _class='footnote-backref'))
-                s.append('</li>')
-            s.append('</ol></div>')
-        
-        return '\n'.join(s)
+        s = []; 
+        if hasattr(self, '_current_section_level'):
+            s.append(self._close_section())
+            self._current_section_level = None
+
+        footnotes = self.resources.get('footnotes')
+        if len(footnotes) > 0:
+            s.append(self.tag('div', _class='footnotes', newline=False) + self.tag('ol', newline=False))
+            for note in footnotes:
+                s.append(self.tag('li', id=f"fn-{note['name']}", newline=False, enclose=0))
+                s.append(note['text'] + "\n")
+                s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner', newline=False))
+                s.append(self.tag('li', enclose=3, newline=False))
+            s.append(self.tag('ol', enclose=3, newline=False) + self.tag('div', enclose=3, newline=False))
+        return '\n'.join(s).strip()
 
 
-def parseHtml(text, template=None, tag_class=None, block_callback=None,
-                init_callback=None, filename=None, grammer=None, visitor=None):
-    template = template or ''
-    tag_class = tag_class or {}
+    def template(self, node: Symbol):
+        if self.grammar is None:
+            raise ValueError("Grammar is not defined.")
+        body = self.visit(node, self.grammar.root)
+        if self._template:
+            return self._template.format_map({'title':self.title, 'body':body})
+        else:
+            return body
+
+
+def parseHtml(text, template=None, tag_class=None, filename=None, grammer=None, visitor=None):
     g = (grammer or MarkdownGrammar)()
     resultSoFar = []
     result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
-    v = (visitor or MarkdownHtmlVisitor)(template, tag_class, g,
-                                            block_callback=block_callback,
-                                            init_callback=init_callback,
-                                            filename=filename)
-    
-    return v.template(result)
+    v = (visitor or MarkdownHtmlVisitor)( # args below
+            template or '{body}', tag_class or {}, g,
+            filename=filename)
+    out = v.template(result[0])
+    return out
 
-
-def parseEmbeddedHtml(text, template=None, tag_class=None, block_callback=None,
-                init_callback=None, filename=None, grammer=None, visitor=None):
-    tag_class = tag_class or {}
-    g = (grammer or MarkdownGrammar)()
-    resultSoFar = []
-    result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
-    v = (visitor or MarkdownHtmlVisitor)(template, tag_class, g,
-                                            block_callback=block_callback,
-                                            init_callback=init_callback,
-                                            filename=filename)
-    parsed = v.template(result)
-
-    reobj = re.compile("<p>")
+def parseEmbeddedHtml(text):
+    parsed = parseHtml(text)
     clean = re.compile(r"</?p\b[^>]*>", re.I | re.MULTILINE)
-    if len(reobj.findall(parsed)) == 1:
+    if len(_("<p>").findall(parsed)) == 1:
         parsed = re.sub(clean, "", parsed)
-
     return parsed
-
 
 def parseText(text, filename=None, grammer=None, visitor=None):
     g = (grammer or MarkdownGrammar)()

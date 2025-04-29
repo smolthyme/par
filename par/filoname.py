@@ -82,7 +82,7 @@ class FilonameGrammar(dict):
         ## Cheats for return value repeats, similar to regex
         #  0 = ?         -1 = *          -2 = +
         def ws()        : return ig(r'\s+')         # All whitespace incl newline/return/half spaces etc
-        def word()      : return rx(r'\w+')         # Word character
+        def word()      : return rx(r'[\w\-]+')         # Word character
         
         # Avoid the title getting filled with spam from some software/cameras etc
         def fname_spam(): return ig(r'[^a-z\s\.]{6,10}'), ws
