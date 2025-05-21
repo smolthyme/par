@@ -8,6 +8,17 @@
 
 from .pyPEG import *
 
+import re, unicodedata
+from html.entities import name2codepoint
+
+HTML_NAMED_ENTITY_RE= re.compile(r'&(%s);' % '|'.join(name2codepoint))
+HTML_HEX_ENTITY_RE  = re.compile(r'&#x([\da-fA-F]+);')
+HTML_DECIMAL_RE     = re.compile(r'&#(\d+);')
+QUOTE_CHARS_RE      = re.compile(r'[\'\"]+')
+DUPLICATE_DASH_RE   = re.compile(r'--+')
+NUM_SEP_COMMAS_RE   = re.compile(r'(?<=\d),(?=\d)')
+VALID_SLUG_RE       = re.compile(r'^[-a-zA-Z0-9]+$')
+
 __author__ = 'limodou'
 __author_email__ = 'limodou@gmail.com'
 __url__ = 'https://github.com/limodou/par'
@@ -90,7 +101,37 @@ class HTMLVisitor(SimpleVisitor):
             case 3:   return f'</{tag}>{nline}'
             case _:   return f'<{ tag}{kwattrs}>{ nline}'
     
-    def to_html(self, text: str) -> str:
+    @staticmethod
+    def slug(text: str, reject_chars_re=re.compile(r'[^-a-zA-Z0-9]+'), separator='-', replace_pairs=(),
+                max_length=0, lowercase=True, clean_html=True):
+        """Normalizes a string by removing non-alphanumeric characters and replacing gaps with the separator."""
+        
+        if replace_pairs:  # user-specific replacements
+            for old, new in replace_pairs:
+                text = text.replace(old, new)
+        
+        text = unicodedata.normalize('NFKD', text)    # try avoid lookalike characters etc
+        text = text.casefold() if lowercase else text # make the text lowercase (optional)
+        text = QUOTE_CHARS_RE.sub(separator, text)    # replace quotes before entity replacement
+        
+        if clean_html:                                # character entity reference
+            text = HTML_NAMED_ENTITY_RE.sub(lambda m: chr(name2codepoint[m.group(1)]), text)
+            text =      HTML_DECIMAL_RE.sub(lambda m: chr(int(m.group(1))), text) if HTML_DECIMAL_RE.match(text) else text
+            text =   HTML_HEX_ENTITY_RE.sub(lambda m: chr(int(m.group(1), 16)), text) if HTML_HEX_ENTITY_RE.match(text) else text
+        
+        text = QUOTE_CHARS_RE.sub('', text)           # remove surplus quotes
+        text = NUM_SEP_COMMAS_RE.sub('', text)        # cleanup numbers
+        text = re.sub(reject_chars_re, separator, text)
+        text = DUPLICATE_DASH_RE.sub(separator, text).strip(separator) # remove redundant
+        
+        if replace_pairs:                             # finalize user-specific replacements
+            for old, new in replace_pairs:
+                text = text.replace(old, new)
+        
+        assert re.match(VALID_SLUG_RE, text)
+        return text[:max_length] if max_length > 0 else text
+
+    def to_html_charcodes(self, text: str) -> str:
         text = text.replace('&', '&amp;')
         text = text.replace('<', '&lt;')
         text = text.replace('>', '&gt;')

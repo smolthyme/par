@@ -262,7 +262,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return parsed_output
     
     def visit_string(self, node: Symbol) -> str:
-        return self.to_html(node.text)
+        return self.to_html_charcodes(node.text)
 
     def visit_blankline(self, node: Symbol) -> str:
         return '\n'
@@ -429,7 +429,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                         kwargs[key] = val or 'language-' + key
         
         if pre_text := node.find('pre_text1') or node.find('pre_text2'):
-            code_content = self.to_html(pre_text.text.strip("` \t\n"))
+            code_content = self.to_html_charcodes(pre_text.text.strip("` \t\n"))
             return self.tag('pre', self.tag('code', code_content, newline=False, **cwargs), **kwargs)
         else:
             return self.tag('pre', self.tag('code', node.text.strip("` \t\n"), newline=False, **cwargs), **kwargs)
@@ -594,7 +594,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
         _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
-        section_s = self._open_section(f"{title}".lower().replace(' ', '-'))
+        #section_s = self._open_section(f"{title}".lower().replace(' ', '-'))
+        section_s = self._open_section(self.slug(f"{title}"))
 
         # Combine section opening with title tag
         return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
