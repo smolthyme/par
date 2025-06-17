@@ -77,60 +77,57 @@ class FilonameGrammar(dict):
     def __init__(self):
         peg, self.root = self._get_rules()
         self.update(peg)
-    
+
     def _get_rules(self):
-        ## Cheats for return value repeats, similar to regex
-        #  0 = ?         -1 = *          -2 = +
-        def ws()        : return ig(r'\s+')         # All whitespace incl newline/return/half spaces etc
-        def word()      : return rx(r'[\w\-]+')         # Word character
-        
-        # Avoid the title getting filled with spam from some software/cameras etc
-        def fname_spam(): return ig(r'[^a-z\s\.]{6,10}'), ws
-        # Looks for a numerical value to sort things by if its before the title
-        def sort_order(): return rx(r'(?!\d+\.\w+$)[\-\d_!][\d\.\^]{0,5}')
-        def prefix()    : return [fname_spam, sort_order]
-        
-        # Try to find the title by avoiding extensions and tags (Can we do it without?)
-        def title()     : return rx(r'[^\{\[]+?(?=(\.[a-zA-Z\d]{2,5}){1,2}\b|/|[\[\{])'), 0, ws
-        
-        def tag()       : return word
-        def hashtags()  : return ig(r"\#"), tag, -1, ig(r"[,; ]")
-        
+        # Whitespace
+        def ws(): return ig(r'\s+')
+
+        # Word (for tags, keys, etc)
+        def word(): return rx(r"[\w\-']+")
+
+        # Date prefix: YYYY.MM.DD- or YYYY-MM-DD_
+        def date_prefix(): return ig(r'\d{4}[\.\-]\d{2}[\.\-]\d{2}[-_ ]+'), 0, ws
+
+        # Sort prefix: e.g. 01., 3.0, 3, ^., ^, 1.Lantè's
+        def sort_order():
+            # Capture ^ or number (with optional . or .0), but don't include trailing dot in group
+            return rx(r'((?:[\^_])|(?:\d+(?:\.\d+)?))\.?'), 0, ws
+
+        # Prefix: date and/or sort
+        def prefix(): return 0, date_prefix, 0, sort_order
+
+        # Title: everything up to group, meta, extension, or end
+        def title():
+            # Stop at: {, [, #, ., /, or end
+            return rx(r"[^\{\[]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|/|[\[\{]|$)"), 0, ws
+
+        # Tag: #tag
+        def tag(): return word
+        def hashtags(): return ig(r"\#"), tag, -1, ig(r"[,; ]")
+
+        # Group: [group]
         def group_name(): return word
-        def group()     : return ig(r"\[ *"), group_name,  ig(r" *\]"), 0, ws
-        
-        def key()       : return word
-        def key_n_val() : return key, ig(r'\s*[=:]\s*'), word, -1, ig(r"[,; ]")
-        def metas()     : return ig(r"\{"), -1, [key_n_val, ws], ig(r"\}"), 0, ws
-        
-        def extension() : return ig(r'\.'), rx(r'(\w{1,5}(?:\.\w{1,5})?)$')
-        
-        def filoname_parts(): return 0, prefix, title, 0, group, 0, hashtags, 0, metas, 0, extension
-        
-        # Collect functions from this funct and add them to the peg_rules dict, for returning with the top level rule
+        def group(): return ig(r"\[ *"), group_name, ig(r" *\]"), 0, ws
+
+        # Meta: {key=val}
+        def key(): return word
+        def key_n_val(): return key, ig(r'\s*[=:]\s*'), word, -1, ig(r"[,; ]")
+        def metas(): return ig(r"\{"), -1, [key_n_val, ws], ig(r"\}"), 0, ws
+
+        # Extension: .ext or .ext.ext
+        def extension():
+            # Accepts .md.txt, .card.yaml, .svg, .ttf, etc.
+            return ig(r'\.'), rx(r'([a-zA-Z\d]{2,5}(?:\.[a-zA-Z\d]{2,5})?)$')
+
+        # Main rule: meta must come before extension!
+        def filoname_parts():
+            return 0, prefix, title, 0, group, 0, hashtags, 0, metas, 0, extension
+
         _peg_rules = {(k, v) for (k, v) in locals().items() if isinstance(v, types.FunctionType)}
         return _peg_rules, filoname_parts
-    
+
     def parse(self, text, root=None, skipWS=False, **kwargs):
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
-
-def normalize_alpha(string) -> float:
-    """Normalizes a string to a float value based on the sum of the alphabetical positions of its characters."""
-    return sum((ord(char.lower()) - ord('a') + 1) for char in string if char.isalpha()) / len(string)
-
-def file_sort_init(sort_var, title:str, sort_default=1.0) -> float:
-    """While the filename parser is good, the sort variable sometimes contains strange values.
-        This function is a helper to ensure that sort is always a float"""
-    first = -888.0  ; firstchars = "^!"
-    last  =  888.0  ; lastchars  = "_zv"
-    
-    if not sort_var                : return sort_default
-    if not sort_var and title != "": return normalize_alpha(title)
-    elif sort_var[0] in firstchars : return first
-    elif sort_var[0] in lastchars  : return last
-    else:
-        try:                         return float(sort_var)
-        except ValueError:           return sort_default
 
 def get_filename_parts(fname_str: str) -> FileParts:
     """Parse a filename string into its component parts if possible.
@@ -153,3 +150,21 @@ def get_filename_parts(fname_str: str) -> FileParts:
     extensions = rootnode.find("extension").text if rootnode.find("extension") else None
     
     return FileParts(sort=sort_order, title=title, group=group, tags=tags, meta=meta_dict , exts=extensions)
+
+def normalize_alpha(string) -> float:
+    """Normalizes a string to a float value based on the sum of the alphabetical positions of its characters."""
+    return sum((ord(char.lower()) - ord('a') + 1) for char in string if char.isalpha()) / len(string)
+
+def file_sort_init(sort_var, title:str, sort_default=1.0) -> float:
+    """While the filename parser is good, the sort variable sometimes contains strange values.
+        This function is a helper to ensure that sort is always a float"""
+    first = -888.0  ; firstchars = "^!"
+    last  =  888.0  ; lastchars  = "_z"
+    
+    if not sort_var                : return sort_default
+    if not sort_var and title != "": return normalize_alpha(title)
+    elif sort_var[0] in firstchars : return first
+    elif sort_var[0] in lastchars  : return last
+    else:
+        try:                         return float(sort_var)
+        except ValueError:           return sort_default
