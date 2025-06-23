@@ -99,7 +99,7 @@ class FilonameGrammar(dict):
         # Title: everything up to group, meta, extension, or end
         def title():
             # Stop at: {, [, #, ., /, or end
-            return rx(r"[^\{\[]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|/|[\[\{]|$)"), 0, ws
+            return rx(r"[^\{\[]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|[\#\[\{]|/|$)"), 0, ws
 
         # Tag: #tag
         def tag(): return word
