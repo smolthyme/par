@@ -151,9 +151,9 @@ def get_filename_parts(fname_str: str) -> FileParts:
     
     return FileParts(sort=sort_order, title=title, group=group, tags=tags, meta=meta_dict , exts=extensions)
 
-def normalize_alpha(string) -> float:
+def normalize_alpha(string: str) -> float:
     """Normalizes a string to a float value based on the sum of the alphabetical positions of its characters."""
-    return sum((ord(char.lower()) - ord('a') + 1) for char in string if char.isalpha()) / len(string)
+    string = string.lower(); return sum((ord(char) - ord('a') + 1) for char in string if char.isalpha()) / len(string)
 
 def file_sort_init(sort_var, title:str, sort_default=1.0) -> float:
     """While the filename parser is good, the sort variable sometimes contains strange values.
@@ -161,8 +161,8 @@ def file_sort_init(sort_var, title:str, sort_default=1.0) -> float:
     first = -888.0  ; firstchars = "^!"
     last  =  888.0  ; lastchars  = "_z"
     
-    if not sort_var                : return sort_default
     if not sort_var and title != "": return normalize_alpha(title)
+    elif not sort_var              : return sort_default
     elif sort_var[0] in firstchars : return first
     elif sort_var[0] in lastchars  : return last
     else:
