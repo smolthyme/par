@@ -152,8 +152,11 @@ def get_filename_parts(fname_str: str) -> FileParts:
     return FileParts(sort=sort_order, title=title, group=group, tags=tags, meta=meta_dict , exts=extensions)
 
 def normalize_alpha(string: str) -> float:
-    """Normalizes a string to a float value based on the sum of the alphabetical positions of its characters."""
-    string = string.lower(); return sum((ord(char) - ord('a') + 1) for char in string if char.isalpha()) / len(string)
+    """Returns a float value for alphabetic sorting using all alphabetic characters in the string."""
+    return sum(
+        (ord(char) - ord('a') + 1) / (26 ** i)
+        for i, char in enumerate(c for c in string.strip().lower() if c.isalpha())
+    )
 
 def file_sort_init(sort_var, title:str, sort_default=1.0) -> float:
     """While the filename parser is good, the sort variable sometimes contains strange values.
