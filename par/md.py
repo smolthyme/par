@@ -64,7 +64,7 @@ class MarkdownGrammar(dict):
 
         ## inline
         def longdash()         : return _(r"--\B")
-        def hr()               : return _(r'(?:([-_*])[ \t]*\1?){3,}'), -2, blankline
+        def hr()               : return _(r'(?:([-_*])[ \t]*\1*){3,}'), blankline
         def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
 
         ## embedded html
@@ -190,7 +190,7 @@ class MarkdownGrammar(dict):
         ## links
         def link_raw()         : return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
         def link_image_raw()   : return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)')
-        def link_mailto()      : return _(r'<(mailto:)?[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+>')
+        def link_mailto()      : return _(r'[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+')
         def link_wiki()        : return _(r'\[\[[^\[\]]*\]\]')
 
         def link_inline_capt() : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
@@ -541,9 +541,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         import random
         shuffle = lambda text: ''.join(f'&#x{ord(x):X};' if random.choice('01') == '1' else x for x in text)
         
-        href = node.text[1:-1]
-        if href.startswith('mailto:'):
-            href = href[7:]
+        href = node.text
         return self.tag('a', shuffle(href), href=shuffle("mailto:" + href), newline=False)
 
     def visit_quote_line(self, node: Symbol) -> str:

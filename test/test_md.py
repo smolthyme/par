@@ -1158,6 +1158,14 @@ def test_heading_2():
     </section>
     """
 
+# Cant test easily as it's dynamic... for some odd reason.
+# def test_raw_email1():
+#     r"""
+#     >>> text = '''gorble_clok@spam.com'''
+#     >>> print(parseHtml(text, '%(body)s'))
+#     <p><a href="&#x6D;ail&#x74;&#x6F;&#x3A;&#x67;orb&#x6C;e&#x5F;c&#x6C;&#x6F;k&#x40;spa&#x6D;.&#x63;o&#x6D;">&#x67;orb&#x6C;&#x65;_&#x63;&#x6C;&#x6F;k@&#x73;pa&#x6D;&#x2E;c&#x6F;m</a></p>
+#     """
+
 
 class termfont:
     # foreground              # background              # end/reset
