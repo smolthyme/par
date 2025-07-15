@@ -1,9 +1,170 @@
 import sys
 sys.path.insert(0, '..')
 
+
+# 'Legacy' features, some of which will be brought back
 # from par.md import parseHtml
 # from par.semantic_ext import blocks as semantic_blocks
 # from par.bootstrap_ext import blocks as bootstrap_blocks
+
+# def test_semantic_alert():
+#     r"""
+#     >>> text = '''
+#     ... {% alert %}
+#     ... This is a test.
+#     ... {% endalert %}
+#     ... '''
+#     >>> print(parseHtml(text, '%(body)s', block_callback=semantic_blocks))
+#     <BLANKLINE>
+#     <div class="ui  message">
+#     <p>This is a test.</p>
+#     <BLANKLINE>
+#     </div>
+#     """
+
+# def test_semantic_tabs():
+#     r"""
+#     >>> text = '''
+#     ... {% tabs %}
+#     ... -- name --
+#     ... * a
+#     ... * b
+#     ... -- name --
+#     ... 1. c
+#     ... 1. d
+#     ... {% endtabs %}
+#     ... '''
+#     >>> print(parseHtml(text, '%(body)s', block_callback=semantic_blocks))
+#     <BLANKLINE>
+#     <div class="ui tabular filter menu">
+#     <a class=" class="active"item" data-tab="tab_item_1_1">name</a>
+#     <a class="item" data-tab="tab_item_1_2">name</a>
+#     </div>
+#     <div class="tab-content">
+#     <div class="ui divided inbox selection list active tab" data-tab="tab_item_1_1">
+#     <BLANKLINE>
+#     <ul>
+#     <li>a</li>
+#     <li>b</li>
+#     </ul>
+#     <BLANKLINE>
+#     </div>
+#     <div class="ui divided inbox selection list tab" data-tab="tab_item_1_2">
+#     <BLANKLINE>
+#     <ol>
+#     <li>c</li>
+#     <li>d</li>
+#     </ol>
+#     <BLANKLINE>
+#     </div>
+#     </div>
+#     </div>
+#     """
+
+# def test_block_1():
+#     r"""
+#     >>> text = '''
+#     ... {% tabs %}
+#     ... -- index.html --
+#     ... ```    
+#     ... This is hello
+#     ... ```
+#     ... -- hello.html --
+#     ... ```
+#     ... This is hello
+#     ... ```
+#     ... {% endtabs %}
+#     ... '''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="tabbable">
+#     <ul class="nav nav-tabs">
+#     <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
+#     <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
+#     </ul>
+#     <div class="tab-content">
+#     <div class="tab-pane active" id="tab_item_1_1">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     <div class="tab-pane" id="tab_item_1_2">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     </div>
+#     </div>
+#     """
+    
+# def test_block_2():
+#     r"""
+#     >>> text = '''
+#     ... {%alert class=info, close%}
+#     ...     This is an alert.
+#     ... {%endalert%}'''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="alert alert-info">
+#     <button class="close" data-dismiss="alert">&times;</button>
+#     <p>This is an alert.</p>
+#     <BLANKLINE>
+#     </div>
+#     """
+
+# def test_block_1():
+#     r"""
+#     >>> text = '''
+#     ... {% tabs %}
+#     ... -- index.html --
+#     ... ```    
+#     ... This is hello
+#     ... ```
+#     ... -- hello.html --
+#     ... ```
+#     ... This is hello
+#     ... ```
+#     ... {% endtabs %}
+#     ... '''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="tabbable">
+#     <ul class="nav nav-tabs">
+#     <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
+#     <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
+#     </ul>
+#     <div class="tab-content">
+#     <div class="tab-pane active" id="tab_item_1_1">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     <div class="tab-pane" id="tab_item_1_2">
+#     <BLANKLINE>
+#     <pre><code>This is hello</code></pre>
+#     <BLANKLINE>
+#     </div>
+#     </div>
+#     </div>
+#     """
+    
+# def test_block_2():
+#     r"""
+#     >>> text = '''
+#     ... {%alert class=info, close%}
+#     ...     This is an alert.
+#     ... {%endalert%}'''
+#     >>> from par.bootstrap_ext import blocks
+#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
+#     <BLANKLINE>
+#     <div class="alert alert-info">
+#     <button class="close" data-dismiss="alert">&times;</button>
+#     <p>This is an alert.</p>
+#     <BLANKLINE>
+#     """
 
 from par.md import parseHtml
 
@@ -400,58 +561,6 @@ def test_table_0():
     </tbody></table>
     <BLANKLINE>
     """
-    
-# def test_block_1():
-#     r"""
-#     >>> text = '''
-#     ... {% tabs %}
-#     ... -- index.html --
-#     ... ```    
-#     ... This is hello
-#     ... ```
-#     ... -- hello.html --
-#     ... ```
-#     ... This is hello
-#     ... ```
-#     ... {% endtabs %}
-#     ... '''
-#     >>> from par.bootstrap_ext import blocks
-#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
-#     <BLANKLINE>
-#     <div class="tabbable">
-#     <ul class="nav nav-tabs">
-#     <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
-#     <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
-#     </ul>
-#     <div class="tab-content">
-#     <div class="tab-pane active" id="tab_item_1_1">
-#     <BLANKLINE>
-#     <pre><code>This is hello</code></pre>
-#     <BLANKLINE>
-#     </div>
-#     <div class="tab-pane" id="tab_item_1_2">
-#     <BLANKLINE>
-#     <pre><code>This is hello</code></pre>
-#     <BLANKLINE>
-#     </div>
-#     </div>
-#     </div>
-#     """
-    
-# def test_block_2():
-#     r"""
-#     >>> text = '''
-#     ... {%alert class=info, close%}
-#     ...     This is an alert.
-#     ... {%endalert%}'''
-#     >>> from par.bootstrap_ext import blocks
-#     >>> print (parseHtml(text, '%(body)s', block_callback=blocks))
-#     <BLANKLINE>
-#     <div class="alert alert-info">
-#     <button class="close" data-dismiss="alert">&times;</button>
-#     <p>This is an alert.</p>
-#     <BLANKLINE>
-#     """
 
 def test_star_rating_invalid():
     r"""
@@ -497,59 +606,6 @@ def list_nest_1():
     <BLANKLINE>
     """
 
-# def test_block_1():
-#     r"""
-#     >>> text = '''
-#     ... {% tabs %}
-#     ... -- index.html --
-#     ... ```    
-#     ... This is hello
-#     ... ```
-#     ... -- hello.html --
-#     ... ```
-#     ... This is hello
-#     ... ```
-#     ... {% endtabs %}
-#     ... '''
-#     >>> from par.bootstrap_ext import blocks
-#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
-#     <BLANKLINE>
-#     <div class="tabbable">
-#     <ul class="nav nav-tabs">
-#     <li class="active"><a href="#tab_item_1_1" data-toggle="tab">index.html</a></li>
-#     <li><a href="#tab_item_1_2" data-toggle="tab">hello.html</a></li>
-#     </ul>
-#     <div class="tab-content">
-#     <div class="tab-pane active" id="tab_item_1_1">
-#     <BLANKLINE>
-#     <pre><code>This is hello</code></pre>
-#     <BLANKLINE>
-#     </div>
-#     <div class="tab-pane" id="tab_item_1_2">
-#     <BLANKLINE>
-#     <pre><code>This is hello</code></pre>
-#     <BLANKLINE>
-#     </div>
-#     </div>
-#     </div>
-#     """
-    
-# def test_block_2():
-#     r"""
-#     >>> text = '''
-#     ... {%alert class=info, close%}
-#     ...     This is an alert.
-#     ... {%endalert%}'''
-#     >>> from par.bootstrap_ext import blocks
-#     >>> print(parseHtml(text, '%(body)s', block_callback=blocks))
-#     <BLANKLINE>
-#     <div class="alert alert-info">
-#     <button class="close" data-dismiss="alert">&times;</button>
-#     <p>This is an alert.</p>
-#     <BLANKLINE>
-#     </div>
-#     """
-    
 def test_pre_1():
     r"""
     >>> text = '''
@@ -969,60 +1025,7 @@ def test_list_pre_2():
     </ol>
     <BLANKLINE>
     """
-    
-# def test_semantic_alert():
-#     r"""
-#     >>> text = '''
-#     ... {% alert %}
-#     ... This is a test.
-#     ... {% endalert %}
-#     ... '''
-#     >>> print(parseHtml(text, '%(body)s', block_callback=semantic_blocks))
-#     <BLANKLINE>
-#     <div class="ui  message">
-#     <p>This is a test.</p>
-#     <BLANKLINE>
-#     </div>
-#     """
-    
-# def test_semantic_tabs():
-#     r"""
-#     >>> text = '''
-#     ... {% tabs %}
-#     ... -- name --
-#     ... * a
-#     ... * b
-#     ... -- name --
-#     ... 1. c
-#     ... 1. d
-#     ... {% endtabs %}
-#     ... '''
-#     >>> print(parseHtml(text, '%(body)s', block_callback=semantic_blocks))
-#     <BLANKLINE>
-#     <div class="ui tabular filter menu">
-#     <a class=" class="active"item" data-tab="tab_item_1_1">name</a>
-#     <a class="item" data-tab="tab_item_1_2">name</a>
-#     </div>
-#     <div class="tab-content">
-#     <div class="ui divided inbox selection list active tab" data-tab="tab_item_1_1">
-#     <BLANKLINE>
-#     <ul>
-#     <li>a</li>
-#     <li>b</li>
-#     </ul>
-#     <BLANKLINE>
-#     </div>
-#     <div class="ui divided inbox selection list tab" data-tab="tab_item_1_2">
-#     <BLANKLINE>
-#     <ol>
-#     <li>c</li>
-#     <li>d</li>
-#     </ol>
-#     <BLANKLINE>
-#     </div>
-#     </div>
-#     </div>
-#     """
+
 
 def test_list_check_radio():
     r"""
