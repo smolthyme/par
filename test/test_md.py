@@ -459,7 +459,6 @@ def test_star_rating_invalid():
     ... ★★★★ / wombat wontparse
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <p>★★★★ / wombat wontparse</p>
     <BLANKLINE>
