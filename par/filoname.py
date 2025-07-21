@@ -90,7 +90,7 @@ class FilonameGrammar(dict):
 
         # Sort prefix: e.g. 01., 3.0, 3, ^., ^, 1.Lantè's
         def sort_order():
-            # Capture ^ or number (with optional . or .0), but don't include trailing dot in group
+            # Capture ^_ special chars or number (with optional . or .0), but don't include trailing dot in group
             return rx(r'((?:[\^_])|(?:\d+(?:\.\d+)?))\.?'), 0, ws
 
         # Prefix: date and/or sort
@@ -169,5 +169,7 @@ def file_sort_init(sort_var:Optional[None|str], title:str, sort_default=1.0) -> 
     elif sort_var[0] in firstchars : return first
     elif sort_var[0] in lastchars  : return last
     else:
-        try:                         return float(sort_var)
+        try:
+            floaty = float(sort_var)
+            return floaty / 10
         except ValueError:           return sort_default
