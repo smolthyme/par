@@ -91,15 +91,16 @@ class FilonameGrammar(dict):
         # Sort prefix: e.g. 01., 3.0, 3, ^., ^, 1.Lantè's
         def sort_order():
             # Capture ^_ special chars or number (with optional . or .0), but don't include trailing dot in group
-            return rx(r'((?:[\^_])|(?:\d+(?:\.\d+)?))\.?'), 0, ws
+            return rx(r'((?:[\^_])|(?:\d+(?:\.\d+)?))\.?'), ws
 
         # Prefix: date and/or sort
         def prefix(): return 0, date_prefix, 0, sort_order
 
         # Title: everything up to group, meta, extension, or end
         def title():
-            # Stop at: {, [, #, ., /, or end (NOTE: hash removed for now for long css expressions, check tags)
-            return rx(r"[^\{\[]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|[\[\{]|/|$)"), 0, ws
+            # File title or CSS selector expression
+            # Stop at: {, [, # which signify group, meta, tag
+            return [rx(r'[#\.][\w\-# ,\.]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|[\[\{]|/|$)'), rx(r"[^\{\[]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|[\[\{\#]|/|$)")], 0, ws
 
         # Tag: #tag
         def tag(): return word

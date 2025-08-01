@@ -7,7 +7,7 @@ test_cases = {
         'meta' : {'cool': 'yes'},
         'exts' : 'html' },
     'Hats on Top of Heads.jpg':    {'title': 'Hats on Top of Heads', 'exts': 'jpg'},
-    'moved-to-archive':            {'title': 'moved-to-archive'},
+    'moved-to-archive':            {'title': 'moved-to-archive', 'sort': None},
     '2000.01.01-HARRY_PARROT.jpg': {'title': 'HARRY_PARROT', 'exts': 'jpg'}, # Shows the date should be ignored 
     '01. Small':     {'title': 'Small', 'sort': '01.'},
     '01. Small.jpg': {'title': 'Small', 'sort': '01.'  , 'exts': 'jpg'},
@@ -16,6 +16,9 @@ test_cases = {
     '3.0 Large/':    {'title': 'Large', 'sort': '3.0'},
     '3 Large/':      {'title': 'Large', 'sort': '3'},
     '3. Large':      {'title': 'Large', 'sort': '3.'},
+    'small_wall #carousel.jpg': {'title': 'small_wall', 'tags': ['carousel'], 'exts': 'jpg'},
+    '001.jpg': {'title': '001', 'exts': 'jpg', 'sort': None},
+    '002. Bork.jpg': { 'sort': '002.', 'title': 'Bork', 'exts': 'jpg'},
     '17. Liz Of & Pho - CB.jpg': {'title': 'Liz Of & Pho - CB','sort': '17.', 'exts': 'jpg',},
     "1.Norms's Bio.md.txt": {'title': "Norms's Bio", 'sort': '1.', 'exts': 'md.txt'},
     '10.Windhoek 🇳🇦 🡒 Vic Falls (Fly).md.txt': {'title': 'Windhoek 🇳🇦 🡒 Vic Falls (Fly)', 'sort': '10.', 'exts': 'md.txt'},
