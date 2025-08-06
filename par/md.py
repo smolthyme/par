@@ -274,7 +274,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('hr', enclose=1)
 
     def visit_paragraph(self, node: Symbol) -> str:
-        return self.tag('p', self.visit(node).strip(), enclose=2)
+        if content := self.visit(node).strip():
+            return self.tag('p', content, enclose=2)
+        else:
+            return ''
 
     def visit_lists_begin(self, node: Symbol) -> str:
         self.lists = []
