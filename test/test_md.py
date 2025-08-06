@@ -1234,13 +1234,20 @@ def display_diff(sample, expected, result, term_width):
     pad_height = lambda lines: lines + [' ' * max_line_length] * (max_lines - len(lines))
 
     sample_lines = color_lines([pad_line(line) for line in pad_height(sample_lines)], color=termfont.fg_orange)
-    expected_lines = [pad_line(line) for line in pad_height(expected_lines)]
+    expected_lines = color_lines([pad_line(line) for line in pad_height(expected_lines)], color=termfont.fg_green)
     result_lines = [pad_line(line) for line in pad_height(result_lines)]
     diff_lines = color_lines([pad_line(line) for line in pad_height(diff_lines)], color='diff')
 
     # Calculate the total width of the blocks
     block_width = max_line_length + 2  # Add 2 for padding
     total_width = block_width * 4  # Four blocks side by side
+
+    if args.verbose:
+        # print headers padded to widths
+        headers = ['sample', 'expected', 'result', 'diff']
+        headerstr = '  '.join(f"{termfont.fg_cyan}{h.ljust(max_line_length)}{termfont.endc}" for h in headers)
+        print(headerstr)
+        print(f"-" * total_width)
 
     # Combine lines into blocks
     for s, e, r, d in zip(sample_lines, expected_lines, result_lines, diff_lines):
@@ -1305,6 +1312,7 @@ if __name__ == '__main__':
     def get_args():
         import argparse
         argz = argparse.ArgumentParser(description="Run tests for the Markdown parser.")
+        argz.add_argument('--verbose', '-v', action='store_true', help='Run tests in verbose mode.')
         argz.add_argument('-n', '--name', type=str, help='(start of-) Name of the test(s) to run.')
         return argz.parse_args()
 
