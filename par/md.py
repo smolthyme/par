@@ -149,23 +149,23 @@ class MarkdownGrammar(dict):
         ## lists
         def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
         def list_rest_of_line(): return _(r'.+'), blankline
-        def list_first_para()  : return 0, check_radio, list_rest_of_line, -1, (0, space, text), -1, blanklines
-        def list_line()        : return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
+        def list_first_para()  : return 0, check_radio, -1, (0, space, text), -1, blanklines
+        #def list_line()        : return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
         def list_lines()       : return list_norm_line, -1, [list_indent_lines, blankline]
         def list_indent_line() : return _(r' {4}|\t'), list_rest_of_line
-        def list_norm_line()   : return _(r' {1,3}'), text, -1, (0, space, text), -1, blanklines
-        def list_indent_lines(): return list_indent_line, -1, [list_indent_line, list_line], -1, blanklines
-        def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines, lists]
-        def bullet_list_item() : return 0, _(r' {1,3}'), _(r'\*|\+|-'), space, list_content
-        def number_list_item() : return 0, _(r' {1,3}'), _(r'\d+\.'), space, list_content
+        def list_norm_line()   : return _(r' {1,4}'), text, -1, (0, space, text), -1, blanklines
+        def list_indent_lines(): return list_indent_line, -1, list_indent_line, -1, blanklines
+        def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines]
+        def bullet_list_item() : return 0, _(r' {1,4}'), _(r'[\*\+\-]'), space, list_content
+        def number_list_item() : return 0, _(r' {1,4}'), _(r'\d+\.'), space, list_content
         def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
 
         ## Definition Lists
-        def dl_dt()            : return -2, words(ig='--'), 0, _(r'--'), blankline
-        def dl_dd_content()    : return [paragraph, lists, pre]
+        def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig='--'), 0, _(r'--'), blankline
+        def dl_dd_content()    : return 0, ignore(r"[ \t]+"), [lists, pre, paragraph]
         def dl_dd()            : return [space, _(r':\s*')], dl_dd_content
-        def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, [dl_dd, blankline]
-        def dl()               : return -2, dl_dt_n_dd, -1, blanklines
+        def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, dl_dd
+        def dl()               : return -2, dl_dt_n_dd
 
         ## quote
         def quote_text()       : return text, blankline
