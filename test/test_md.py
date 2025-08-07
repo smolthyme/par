@@ -1269,26 +1269,25 @@ def color_lines(lines: list[str], color) -> list[str]:
             lines[i] = color + lines[i] + termfont.endc
     return lines
 
-import doctest
+import doctest, difflib
 from doctest import DocTestFailure, DocTestRunner, DebugRunner
 
 def run_tests(test_name=None):
     """Run doctests and display formatted output for failed tests."""
     termfont.windows_enable_term_features()
 
-    # Capture test results
     finder = doctest.DocTestFinder()
-    #runner = CustomDocTestRunner()
     runner = DebugRunner()
     tests = finder.find(sys.modules[__name__])
     term_width = termfont.term_size()[0] or 80
 
-    # Filter tests by name if a test_name is provided
     if test_name:
         tests = [test for test in tests if test.name[9:].startswith(test_name)]
 
     n_failed = 0
     n_run = 0
+    total_line_delta = 0  # <-- Add this
+
     for test in tests:
         runner.test = test
         runner.test.globs = {'parseHtml': parseHtml}
@@ -1299,14 +1298,23 @@ def run_tests(test_name=None):
             expected = failed.example.want.strip()
             got = failed.got.strip()
 
+            # Calculate line delta for this failure
+            expected_lines = expected.splitlines()
+            got_lines = got.splitlines()
+            diff = list(difflib.ndiff(expected_lines, got_lines))
+            # Count lines that start with '+' or '-'
+            line_delta = sum(1 for line in diff if line.startswith('+ ') or line.startswith('- '))
+            total_line_delta += line_delta
+
             print(f"Name: {test.name[9:]}")
             display_diff(sample, expected, got, term_width)
-            print(f"{termfont.fg_cyan}{" - " * (term_width // 4)}{termfont.endc}")
+            print(f"{termfont.fg_cyan}{' - ' * (term_width // 4)}{termfont.endc}")
             n_failed += 1
         n_run += 1
-    
+
     print(f"{termfont.fg_red if n_failed > 0 else termfont.fg_green}Tests failed: {n_failed}{termfont.endc}")
     print(f"{termfont.fg_green}Tests run: {n_run}{termfont.endc}")
+    print(f"{termfont.fg_orange}Total line delta: {total_line_delta}{termfont.endc}")  # <-- Add this
 
 if __name__ == '__main__':
     def get_args():
