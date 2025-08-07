@@ -201,13 +201,10 @@ def test_list_2():
     ... 2. b
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <ol>
     <li>a</li>
     <li>b</li>
     </ol>
-    <BLANKLINE>
-    
     """
     
 def test_list_3():
@@ -267,7 +264,6 @@ def test_dl_1():
     ...     cde
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <dl>
     <dt>a</dt>
     <dd><p>abc</p>
@@ -288,7 +284,6 @@ def test_dl_2():
     ...     * li
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <dl>
     <dt>a_</dt>
     <dd><p>abc</p>
@@ -311,7 +306,6 @@ def test_dl_3():
     ... :   * li
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <dl>
     <dt>a</dt>
     <dd><p>abc</p>
@@ -336,7 +330,6 @@ def test_dl_4():
     ... 
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <dl>
     <dt>a</dt>
     <dd><p>abc</p>
@@ -357,7 +350,6 @@ def test_dl_5():
     ... 
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <dl>
     <dt>a</dt>
     <dd><p>abc</p>
@@ -379,7 +371,6 @@ def test_dl_6():
     ...         ```
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <ol>
     <li><p>aaa</p>
     <dl>
@@ -389,7 +380,6 @@ def test_dl_6():
     </dd>
     </dl></li>
     </ol>
-    <BLANKLINE>
     """
 
 def test_dl_7():
@@ -416,7 +406,6 @@ def test_dl_7():
     ...     test
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <dl>
     <dt>a</dt>
     <dd><p>abc</p>
@@ -441,10 +430,9 @@ def test_deflist_1():
     ... 
     ... Another Term
     ... : Its definition
-    ... : Can have multiple definitions
+    ... : Can have multiple defs
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <dl>
     <dt>Term</dt>
     <dd><p>Definition</p>
@@ -452,10 +440,9 @@ def test_deflist_1():
     <dt>Another Term</dt>
     <dd><p>Its definition</p>
     </dd>
-    <dd><p>Can have multiple definitions</p>
+    <dd><p>Can have multiple defs</p>
     </dd>
     </dl>
-    <BLANKLINE>
     """
 
 
@@ -573,6 +560,22 @@ def test_star_rating_invalid():
     <BLANKLINE>
     """
 
+def list_numbered_1():
+    r"""
+    >>> text = '''
+    ... 1. Abacus
+    ... 2. Bubbles
+    ... 3. Seals
+    ... 4. Cunning
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <ol>
+    <li><p>Abacus</p></li>
+    <li><p>Bubbles</p></li>
+    <li><p>Seals</p></li>
+    <li><p>Cunning</p></li>
+    </ol>"""
+
 def list_nest_1():
     r"""
     >>> text = '''
@@ -586,7 +589,6 @@ def list_nest_1():
     ... *   Cunning
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <ul>
     <li><p>Abacus</p>
     <ul>
@@ -603,7 +605,6 @@ def list_nest_1():
     </ol></li>
     <li><p>Cunning</p></li>
     </ul>
-    <BLANKLINE>
     """
 
 def test_pre_1():
@@ -997,12 +998,10 @@ def test_list_pre_1():
     ...         code
     ... '''
     >>> print(parseHtml(text, '%(body)s'))
-    <BLANKLINE>
     <ol>
     <li><p>abc</p>
     <pre><code>code</code></pre></li>
     </ol>
-    <BLANKLINE>
     """
     
 def test_list_pre_2():
