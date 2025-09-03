@@ -848,6 +848,23 @@ def test_attr_2():
     </section>
     """
 
+def test_tilde_list():
+    r"""
+    >>> text = '''
+    ... * 3 km (1.9 mi) ~5 min
+    ... * 5 km (3.1 mi) ~10 min
+    ... * 10 km (6.2 mi) ~20 min
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <BLANKLINE>
+    <ul>
+    <li>3 km (1.9 mi) ~5 min</li>
+    <li>5 km (3.1 mi) ~10 min</li>
+    <li>10 km (6.2 mi) ~20 min</li>
+    </ul>
+    <BLANKLINE>
+    """
+
 def test_link_1():
     r"""
     >>> text = '''
