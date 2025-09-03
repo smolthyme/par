@@ -43,7 +43,7 @@ class MarkdownGrammar(dict):
         ## basic
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'[^\*\_^`~\s\d\.]+') # Remove brackets maybe?
+        def wordlike()         : return _(r'[^\*\_\s\d\.`]+') # Remove brackets maybe?
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
 
@@ -56,7 +56,7 @@ class MarkdownGrammar(dict):
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
         def fmt_bold2()        : return _(r'__'),   words , _(r'__')
         #def fmt_underline()    : return _(r'_'),    words , _(r'_')
-        def fmt_italic2()      : return _(r'_'),   words , _(r'_')
+        def fmt_italic2()      : return _(r'_'),    words , _(r'_')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
         def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
