@@ -43,7 +43,7 @@ class MarkdownGrammar(dict):
         ## basic
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'[^\*\s\d\.`]+') # Remove brackets maybe?
+        def wordlike()         : return _(r'[^\*_\s\d\.`]+') # Remove brackets maybe?
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
 
