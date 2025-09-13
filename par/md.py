@@ -81,7 +81,7 @@ class MarkdownGrammar(dict):
             ]
         
         #def words()            : return word, -1, [space, word]
-        def words(ig='(?!)')   : return word, -1, [space, ignore(ig), word]
+        def words(ig='(?!)')   : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
         def text()             : return 0, space, -2, words
         def paragraph()        : return text, -1, [space, text], blanklines
 
