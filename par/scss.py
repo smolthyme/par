@@ -42,9 +42,7 @@ class SCSSGrammar(dict):
 
         def scss_doc()         : return -1, [ ws, css_block]
     
-        peg_rules = {}
-        for k, v in ((x, y) for (x, y) in list(locals().items()) if isinstance(y, types.FunctionType)):
-            peg_rules[k] = v
+        peg_rules = {(k, v) for (k, v) in locals().items() if isinstance(v, types.FunctionType)}
 
         return peg_rules, scss_doc
     
