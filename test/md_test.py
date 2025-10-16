@@ -845,8 +845,9 @@ def test_attr_2():
     </section>
     <section id="section-hello">
     <h2 class="hello class" id="title">hello<a class="anchor" href="#title"></a></h2>
-    </section>
+    </section> 
     """
+
 
 def test_tilde_list():
     r"""
@@ -863,6 +864,18 @@ def test_tilde_list():
     <li>10 km (6.2 mi) ~20 min</li>
     </ul>
     <BLANKLINE>
+    """
+
+
+def test_image_as_link():
+    r"""
+    >>> text = '''
+    ... [![Alt](https://example.com/image.png)](https://example.com/target)
+    ... [![Alt text](https://example.com/image.png)](https://example.com)
+    ... '''
+    >>> print(parseHtml(text, '%(body)s'))
+    <p><a href="https://example.com/target"><img src="https://example.com/image.png" alt="Alt"/></a></p>
+    <p><a href="https://example.com"><img src="https://example.com/image.png" alt="Alt text"/></a></p>
     """
 
 def test_link_1():
