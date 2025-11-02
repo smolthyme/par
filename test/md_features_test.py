@@ -5,7 +5,6 @@ class TestSimpleFormatHTML(unittest.TestCase):
     def test_single_para_with_bold_fmt(self):
         md_text = '''This is **a** bold **test**.'''
         expected = '''<p>This is <strong>a</strong> bold <strong>test</strong>.</p>'''
-
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_bold_text(self):
@@ -493,6 +492,31 @@ This is [foo][] .
         expected = '''<p>This is <a href="http://example.com/" title="Optional Title Here">foo</a> .</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_footnotes(self):
+        self.maxDiff = None
+        md_text = '''\
+This is the first topic. [^first]
+
+This is another topic. [^second]
+
+[^first]: This is the first footnote.
+[^second]: This is the second footnote.
+'''
+        expected = '''\
+<p>This is the first topic. <sup id="fnref-first"><a class="footnote-rel inner" href="#fn-first">1</a></sup></p>
+<p>This is another topic. <sup id="fnref-second"><a class="footnote-rel inner" href="#fn-second">2</a></sup></p>
+<div class="footnotes"><ol>
+<li id="fn-first">
+<p>This is the first footnote.</p>
+<a class="footnote-backref inner" href="#fnref-first">↩</a>
+</li>
+<li id="fn-second">
+<p>This is the second footnote.</p>
+<a class="footnote-backref inner" href="#fnref-second">↩</a>
+</li>
+</ol></div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
     def test_footnote_with_formatting(self):
         md_text = '''\
 That's some text with a footnote.[^1]
@@ -566,12 +590,6 @@ That's some text with a footnote.[^1]
         md_text = '''![](https://www.youtube.com/watch?v=iNiImDNtLpQ)'''
         expected = '''<p><object class="yt-embed" data="https://www.youtube.com/embed/iNiImDNtLpQ"></object></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-
-    def test_blockquote_with_attribution(self):
-        md_text = '''> "I have been using the AquaBoostAG liquefied polymer" -- Mystery Mountain Grove'''
-        expected = '''<blockquote><p>"I have been using the AquaBoostAG liquefied polymer" — Mystery Mountain Grove</p></blockquote>'''
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-
 
 class TestTablesHTML(unittest.TestCase):
     def test_table_with_empty_cells(self):
@@ -664,6 +682,13 @@ class TestMiscInlineHTML(unittest.TestCase):
     def test_star_rating_no_parse(self):
         md_text = '''★★★★ / wombat wontparse'''
         expected = '''<p>★★★★ / wombat wontparse</p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+
+class TestMiscBlocksHTML(unittest.TestCase):
+    def test_blockquote_with_attribution(self):
+        md_text = '''> "I have been using the AquaBoostAG liquefied polymer" -- Mystery Mountain Grove'''
+        expected = '''<blockquote><p>"I have been using the AquaBoostAG liquefied polymer" — Mystery Mountain Grove</p></blockquote>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 
