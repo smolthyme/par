@@ -693,10 +693,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def _extract_youtube_id(self, url: str) -> str | None:
         """Extract YouTube video ID from URL"""
         patterns = [
-            _(r'youtube\.com/watch\?v=([^&]+)'),
-            _(r'youtu\.be/([^?]+)'),
-            _(r'youtube\.com/embed/([^?]+)'),
-            _(r'youtube\.com/v/([^?]+)')
+            _(r'youtube\.com/watch\?v=([^&]{11})'),
+            _(r'youtu\.be/([^?]{11})'),
+            _(r'youtube\.com/embed/([^?]{11})'),
+            _(r'youtube\.com/v/([^?]{11})')
         ]
         for pattern in patterns:
             if match := pattern.search(url):
