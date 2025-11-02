@@ -821,29 +821,20 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         # Check for special media types
         if self._is_youtube_url(url):
-            video_id = self._extract_youtube_id(url)
-            if video_id:
+            if video_id := self._extract_youtube_id(url):
                 self.resources.add('videos', url)
                 embed_url = f'https://www.youtube.com/embed/{video_id}'
-                return self.tag('iframe', '', width='560', height='315', 
-                              src=embed_url, frameborder='0',
-                              allow='accelerometer; encrypted-media;', # ; autoplay
-                              allowfullscreen='allowfullscreen', title=alt or 'YouTube video', enclose=2)
-        
-        if self._is_video_file(url):
+                return self.tag('object', '', attrs=f' class="yt-embed" data="{embed_url}"', enclose=2)
+        elif self._is_video_file(url):
             self.resources.add('videos', url)
             prefixed_url = self._prefix_local_image(url)
-            return self.tag('video', 
-                          self.tag('source', '', src=prefixed_url, type=f'video/{url.split(".")[-1]}', enclose=2),
-                          controls='controls', title=title, enclose=2)
-        
-        if self._is_audio_file(url):
+            return self.tag('video', controls="yesplz", disablePictureInPicture="True", playsinline="True",
+                src=prefixed_url, type=f'video/mp4', enclose=1)
+        elif self._is_audio_file(url):
             self.resources.add('audios', url)
             prefixed_url = self._prefix_local_image(url)
-            return self.tag('audio', 
-                          self.tag('source', '', src=prefixed_url, type=f'audio/{url.split(".")[-1]}', enclose=2),
-                          controls='controls', title=title, enclose=2)
-        
+            return self.tag('audio', controls="yesplz", src=prefixed_url, type=f'audio/mpeg', enclose=1)
+
         # Regular image
         prefixed_url = self._prefix_local_image(url)
         self.resources.add('images', prefixed_url)
