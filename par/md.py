@@ -847,7 +847,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         # Regular image
         prefixed_url = self._prefix_local_image(url)
         self.resources.add('images', prefixed_url)
-        return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=2, newline=False)
+        return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=1, newline=False)
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt_node = node.find('image_alt')
