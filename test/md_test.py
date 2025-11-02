@@ -990,7 +990,7 @@ def test_table_4():
     ... |--|--|
     ... |asd||
     ... '''
-    >>> print(parseHtml(text, '%(body)s', tag_class={'table':'table'}))
+    >>> print(parseHtml(text, '%(body)s'))
     <BLANKLINE>
     <table>
     <thead>
@@ -1315,7 +1315,7 @@ def run_tests(test_name=None):
 
     n_failed = 0
     n_run = 0
-    total_line_delta = 0  # <-- Add this
+    total_line_delta = 0
 
     for test in tests:
         runner.test = test
