@@ -1,14 +1,10 @@
-# This version has some differences between Standard Markdown
-# Syntax according from http://daringfireball.net/projects/markdown/syntax
-
-import re
-import types
+import re, types
 from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
 from .__init__ import SimpleVisitor, MDHTMLVisitor
 
 class ResourceStore:
     def __init__(self, initial_data:dict|None=None):
-        self.store = {'link_refers': {}, 'tocitems': [], 'footnotes': [], 'images': []}
+        self.store = {'links_ext': [], 'links_int': [], 'toc_items': [], 'footnotes': [], 'images': [], 'videos': [], 'audios': []}
         if initial_data:
             self.store = {**self.store, **initial_data}
 
@@ -70,15 +66,6 @@ class MarkdownGrammar(dict):
         ## embedded html
         def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL)
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
-
-        def word()             : return [ # Tries to show parse-order
-                escape_string,
-                html_block, html_inline_block, inline_tag,
-                fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,# fmt_underline,
-                fmt_subscript, fmt_superscript, fmt_strikethrough,
-                footnote, link, longdash,
-                htmlentity, star_rating, string, wordlike
-            ]
         
         #def words()            : return word, -1, [space, word]
         def words(ig='(?!)')   : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
@@ -150,7 +137,6 @@ class MarkdownGrammar(dict):
         def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
         def list_rest_of_line(): return _(r'.+'), blankline
         def list_first_para()  : return 0, check_radio, -1, (0, space, text), -1, blanklines
-        #def list_line()        : return _(r'[ \t]+([\*+\-]\S+|\d+\.[\S$]*|\d+[^\.]*|[^\-\+\r\n#>]).*')
         def list_lines()       : return list_norm_line, -1, [list_indent_lines, blankline]
         def list_indent_line() : return _(r' {4}|\t'), list_rest_of_line
         def list_norm_line()   : return _(r' {1,4}'), text, -1, (0, space, text), -1, blanklines
@@ -177,40 +163,71 @@ class MarkdownGrammar(dict):
         def quote_lines()      : return [quote_blank_line, quote_line]
         def blockquote()       : return -2, quote_lines, 0, quote_attr, -1, blankline
 
-        def image_refer_alt()  : return _(r'!\['), inline_text, _(r'\]')
-        def image_refer_refer(): return _(r'[^\]]*')
-        def image_refer()      : return image_refer_alt, 0, space, _(r'\['), image_refer_refer, _(r'\]')
-
-        def inline_text()      : return _(r'[^\]\^]*')
-        def inline_href()      : return _(r'[^\s\)]+')
-        def inline_image_alt() : return _(r'!\['), inline_text, _(r'\]')
-        def inline_image_link(): return _(r'\('), inline_href, 0, space, 0, link_inline_title, 0, space, _(r'\)')
-        def inline_image()     : return inline_image_alt, inline_image_link
-
-        ## links
-        def link_raw()         : return _(r'(<)?(?:http://|https://|ftp://)[\w\d\-\.,@\?\^=%&:/~+#]+(?(1)>)')
-        def link_image_raw()   : return _(r'(<)?(?:http://|https://|ftp://).*?(?:\.png|\.jpg|\.gif|\.jpeg)(?(1)>)')
-        def link_mailto()      : return _(r'[a-zA-Z_0-9-/\.]+@[a-zA-Z_0-9-/\.]+')
-        def link_wiki()        : return _(r'\[\[[^\[\]]*\]\]')
-
-        def link_inline_capt() : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
-        def link_inline_title(): return literal
-        def link_inline_link() : return _(r'\('), _(r'[^\s\)]+'), 0, space, 0, link_inline_title, 0, space, _(r'\)')
-        def link_inline()      : return link_inline_capt, link_inline_link
-
-        def link_refer_capt()  : return _(r'\['), _(r'[^\]\^]*'), _(r'\]')
-        def link_refer_refer() : return _(r'[^\]]*')
-        def link_refer()       : return link_refer_capt, 0, space, _(r'\['), link_refer_refer, _(r'\]')
-        def link_refer_link()  : return 0, _(r'(<)?(\S+)(?(1)>)')
-        def link_refer_title() : return [_(r'\([^\)]*\)'), literal]
-        def link_refer_note()  : return 0, _(r' {1,3}'), link_inline_capt, _(
-            r':'), space, link_refer_link, 0, space, link_refer_title, -2, blankline
+        # Raw URLs
+        def raw_url()          : return _(r'(?<![\(\[])\b(?:https?|ftp)://[^\s\)<>]+(?:\([^\s\)<>]*\))?[^\s\)<>]*', re.I)
         
-        def link(): return [inline_image, image_refer, link_inline, link_refer, link_image_raw, link_raw, link_wiki, link_mailto]
+        # Email addresses
+        def email_address()    : return _(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
+        
+        # Link components
+        def link_text()        : return _(r'[^\]]+')
+        def link_url()         : return _(r'[^\s\)]+')
+        def link_title()       : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
+        def link_label()       : return _(r'[^\]]+')
+        
+        # Inline links
+        def inline_link()      : return _(r'\['), link_text, _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)')
+        
+        # Reference links
+        def reference_link()   : return _(r'\['), link_text, _(r'\]'), 0, space, _(r'\['), 0, link_label, _(r'\]')
+        
+        # Reference link definitions
+        def link_ref_label()   : return _(r'[^\]]+')
+        def link_ref_url()     : return _(r'[^\s]+')
+        def link_ref_title()   : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
+        def link_reference()   : return _(r'^\s*\['), link_ref_label, _(r'\]:'), space, link_ref_url, 0, (space, link_ref_title), 0, space, blankline
+        
+        # Images - inline
+        def image_alt()        : return _(r'[^\]]*')
+        def image_url()        : return _(r'[^\s\)]+')
+        def image_title()      : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
+        def inline_image()     : return _(r'!\['), image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)')
+        
+        # Images - reference
+        def image_ref_label()  : return _(r'[^\]]*')
+        def reference_image()  : return _(r'!\['), image_alt, _(r'\]'), 0, space, _(r'\['), 0, image_ref_label, _(r'\]')
+        
+        # Wiki-style links
+        def wiki_link_page()   : return _(r'[^\]#\|]+')
+        def wiki_link_anchor() : return _(r'#[^\]#\|]*')
+        def wiki_link_text()   : return _(r'[^\]]+')
+        def wiki_link()        : return _(r'\[\['), 0, wiki_link_page, 0, wiki_link_anchor, 0, (_(r'\|'), wiki_link_text), _(r'\]\]')
+        
+        # Wiki-style images
+        def wiki_image_file()  : return _(r'[^\|\]]+')
+        def wiki_image_align() : return _(r'left|center|right', re.I)
+        def wiki_image_width() : return _(r'\d+%?|\d+px|[\d\.]+(?:em|rem|vw)')
+        def wiki_image_height(): return _(r'\d+%?|\d+px|[\d\.]+(?:em|rem|vh)')
+        def wiki_image()       : return _(r'\[\[image:'), wiki_image_file, 0, (_(r'\|'), 0, wiki_image_align), 0, (_(r'\|'), 0, wiki_image_width), 0, (_(r'\|'), 0, wiki_image_height), _(r'\]\]')
+
+        def word()             : return [
+                escape_string,
+                html_block, html_inline_block, inline_tag,
+                # Links and images (before formatting)
+                inline_image, reference_image, wiki_image,
+                inline_link, reference_link, wiki_link,
+                raw_url, email_address,
+                # Formatting
+                fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,
+                fmt_subscript, fmt_superscript, fmt_strikethrough,
+                footnote, longdash,
+                htmlentity, star_rating, string, wordlike
+            ]
 
         ## article
         def content(): return -2, [blankline,
-                hr, link_refer_note, directive,
+                link_reference,
+                hr, directive,
                 pre, html_block, lists,
                 side_block, table, dl, blockquote, footnote_desc,
                 title, paragraph ]
@@ -240,10 +257,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.footnote_id = footnote_id or 1
         self.resources   = ResourceStore(resources)
         self._current_section_level = None
+        self.link_references = {}  # Store reference link definitions
+        self.image_references = {}  # Store reference image definitions
 
     def visit(self, nodes: Symbol, root=False) -> str:
-        if root:# Collect titles for use in ToC, global things
-            [self.visit_link_refer_note(obj) for obj in nodes[0].find_all('link_refer_note')]
+        if root:
+            # Collect link and image references first
+            [self._collect_link_reference(obj) for obj in nodes[0].find_all('link_reference')]
+            # Collect titles for ToC
             [self._alt_title(onk) for onk in nodes[0].find_all('title')]
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
@@ -303,7 +324,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_lists_end(self, node: Symbol) -> str:
         def process_node(n):
-            text = ''.join(self.visit(node) for node in n)
+            text = ''.join(self.visit(x) for x in n)
             t = self.parse_markdown(text, 'content').rstrip()
             return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
 
@@ -437,115 +458,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         else:
             return self.tag('pre', self.tag('code', node.text.strip("` \t\n"), newline=False, **cwargs), **kwargs)
 
-    def visit_link_inline(self, node: Symbol):
-        # FIXME: What is opaque? oh, this code
-        kwargs = {'href': node[1][1]}
-        if len(node[1]) > 3:
-            kwargs['title'] = node[1][3].text[1:-1]
-        caption = node[0].text[1:-1].strip() or kwargs['href']
-        
-        return self.tag('a', caption, **kwargs, newline=False)
-
-    def visit_inline_image(self, node: Symbol) -> str:
-        kwargs = {}
-        if (location := node.find('inline_href')):
-            location = location.text
-
-            if (scheme := re.search(r'^(\w{3,5})://.+', location)):
-                if scheme.group(1).lower() in ['javascript', 'vbscript', 'data']: #Just be safe
-                    return ""
-                if ( yt_id := re.search(r"""youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed|v\/)([^\?&"'>]+)""", location)):
-                    return self.tag('object', _class='yt-embed', data=f"https://www.youtube.com/embed/{yt_id.group(1)}", newline=False, enclose=2)
-
-            src = f"images/{location}" if not location.strip().startswith('http') else location.strip('<>')
-            kwargs['src'] = src
-            if (title := node.find('link_inline_title')):
-                kwargs['title'] = title.text[1:-1]
-            if (alt := node.find('inline_text')):
-                kwargs['alt'] = alt.text
-
-            # controls disablePictureInPicture playsinline
-            if src.endswith(".mp4") or src.endswith(".m4v") or src.endswith(".mkv") or src.endswith(".webm"):
-                return self.tag('video', enclose=1, type="video/mp4", controls="yesplz", disablePictureInPicture=True,
-                                playsinline="True", **kwargs)
-            elif src.endswith(".m4a") or src.endswith(".aac") or src.endswith(".ogg") or src.endswith(".oga") or src.endswith(".opus"):
-                return self.tag('audio', enclose=1, type="video/mp4", controls="yesplz", **kwargs)
-            elif src.endswith(".mp3"):
-                return self.tag('audio', enclose=1, type="video/mp3", controls="yesplz", **kwargs)
-
-        self.resources.add('images', src)
-        return self.tag('img', enclose=1, **kwargs, newline=False)
-
-    def visit_link_refer(self, node: Symbol) -> str:
-        caption = noder[1] if (noder := node.find('link_refer_capt')) else ''
-        key = node.find('link_refer_refer')
-        key = key.text if key else caption
-        
-        return self.tag('a', caption, **self.resources.get('link_refers').get(key.upper(), {}), newline=False)
-
-    def visit_image_refer(self, node: Symbol) -> str:
-        alt = node.find('image_refer_alt')
-        alt_text = noder.text if alt and (noder := alt.find('inline_text')) else ''
-
-        key = node.find('image_refer_refer')
-        key_text = key.text if key else alt_text
-
-        d = self.resources.get('link_refers').get(key_text.upper(), {})
-        kwargs = {'src': d.get('href', ''), 'title': d.get('title', '')}
-
-        self.resources.add('images', kwargs['src'])
-        return self.tag('img', enclose=1, **kwargs, newline=False)
-
-    def visit_link_refer_note(self, node: Symbol) -> str:
-        key = noder.text.strip("][").upper() if (noder := node.find('link_inline_capt')) else ''
-        self.resources.set('link_refers', key, {'href': noder.text if (noder := node.find('link_refer_link')) else ''})
-
-        if (r := node.find('link_refer_title')):
-            self.resources.get('link_refers')[key]['title'] = r.text.strip(r")(\"'")
-        return ''
-
-    def visit_link_raw(self, node: Symbol) -> str:
-        href = node.text.strip('<>')
-        return self.tag('a', href, href=href, newline=False)
-
-    def visit_link_wiki(self, node: Symbol) -> str:
-        """ # TODO: Needs a resource store to validate, path etc.
-        [[(type:)name(#anchor)(|alter name)]] / [[(image:)filelink(|align|width|height)]]"""
-        t = node.text.strip(r" \]\[")
-        type, begin = ('image', 6) if t[:6].lower() == 'image:'\
-                else (  'wiki', 5) if t[:5].lower() == 'wiki:' else ('wiki', 0)
-        t = t[begin:]
-        
-        if type == 'wiki':
-            _v,  caption = ( t.split('|', 1) + [''])[:2]
-            name, anchor = (_v.split('#', 1) + [''])[:2]
-            return self.tag('a', caption or name, href=f"{name}.html#{anchor}" if anchor else f"{name}.html", newline=False) \
-                if name else self.tag('a', caption, href=f"#{anchor}", newline=False)
-        
-        filename, align, width, height = (t.split('|') + ['', '', ''])[:4]
-        href = f"images/{filename}" if not filename.strip().startswith('http') else filename.strip()
-        cls = []
-        if width:
-            cls.append( f'width="{width}px"'  if width.isdigit()  else f'width="{width}"')
-        if height:
-            cls.append(f'height="{height}px"' if height.isdigit() else f'height="{height}"')
-        
-        self.resources.add('images', href)
-        img_tag = self.tag('img', '', src=href, attrs=' '.join(cls), enclose=1, newline=False)
-        return    self.tag('div', img_tag, _class=f"float{align}", enclose=1, newline=False) if align else img_tag
-
-    def visit_image_link(self, node: Symbol) -> str:
-        # If the image is a link, just use that for href, else it's a local link
-        href = f"images/{node.text.strip('<>')}" if not node.text.strip().startswith('http') else node.text.strip('<>')
-        self.resources.add('images', href)
-        return self.tag('img', src=href, enclose=1, newline=False)
-
-    def visit_link_mailto(self, node: Symbol) -> str:
-        import random
-        shuffle = lambda text: ''.join(f'&#x{ord(x):X};' if random.choice('01') == '1' else x for x in text)
-        
-        href = node.text
-        return self.tag('a', shuffle(href), href=shuffle("mailto:" + href), newline=False)
 
     def visit_quote_line(self, node: Symbol) -> str:
         return node.text[2:]
@@ -570,7 +482,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def get_title_id(self, level:int, begin=1) -> str:
         self.titles_ids[level] = self.titles_ids.get(level, 0) + 1
         _ids = [self.titles_ids.get(x, 0) for x in range(begin, level + 1)]
-        return f'title_{'-'.join(map(str, _ids))}'
+        return f"title_{'-'.join(map(str, _ids))}"
 
     def _alt_title(self, node: Symbol):
         node  = node.what[0]
@@ -587,7 +499,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         _id_node = node.find('attr_def_id')
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
         title = (title_node := node.find('title_text')) and title_node.text.strip()
-        self.resources.add('tocitems', (level, _id, title))
+        self.resources.add('toc_items', (level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
         _id_node = node.find('attr_def_id')
@@ -673,10 +585,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''.join(s)
     
     def visit_directive(self, node: Symbol):
-        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.get('tocitems'):
+        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.get('toc_items'):
             toc = [self.tag('section', _class='toc')]
             count = 1; hi = 0
-            for lvl, anchor, title in self.resources.get('tocitems'):
+            for lvl, anchor, title in self.resources.get('toc_items'):
                 if lvl > hi:
                     toc.append(self.tag('ul'))
                 elif lvl < hi:
@@ -722,6 +634,311 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             self._current_section_level = None
             return self.tag('section', enclose=3)
         return ''
+
+    def _collect_link_reference(self, node: Symbol):
+        """Collect reference link definitions during initial pass"""
+        label_node = node.find('link_ref_label')
+        url_node = node.find('link_ref_url')
+        title_node = node.find('link_ref_title')
+        
+        if label_node and url_node:
+            label = label_node.text.strip().lower()
+            url = url_node.text.strip()
+            title = self._extract_title(title_node.text) if title_node else None
+            
+            # Store both as link reference and image reference
+            self.link_references[label] = {'url': url, 'title': title}
+            self.image_references[label] = {'url': url, 'title': title}
+
+    def _extract_title(self, text: str) -> str:
+        """Extract title from quoted or parenthesized text"""
+        if not text:
+            return ""
+        text = text.strip()
+        if (text.startswith('"') and text.endswith('"')) or \
+           (text.startswith("'") and text.endswith("'")):
+            return text[1:-1]
+        elif text.startswith('(') and text.endswith(')'):
+            return text[1:-1]
+        return text
+
+    def _is_safe_url(self, url: str) -> bool:
+        """Check if URL is safe (not javascript:, vbscript:, data:)"""
+        if not url:
+            return False
+        url_lower = url.lower().strip()
+        dangerous = ['javascript:', 'vbscript:', 'data:']
+        return not any(url_lower.startswith(d) for d in dangerous)
+
+    def _is_video_file(self, url: str) -> bool:
+        """Check if URL points to a video file"""
+        video_exts = ['.mp4', '.m4v', '.mkv', '.webm']
+        return any(url.lower().endswith(ext) for ext in video_exts)
+
+    def _is_audio_file(self, url: str) -> bool:
+        """Check if URL points to an audio file"""
+        audio_exts = ['.mp3', '.m4a', '.aac', '.ogg', '.oga', '.opus']
+        return any(url.lower().endswith(ext) for ext in audio_exts)
+
+    def _is_youtube_url(self, url: str) -> bool:
+        """Check if URL is a YouTube link"""
+        youtube_patterns = [
+            'youtube.com/watch',
+            'youtu.be/',
+            'youtube.com/embed/',
+            'youtube.com/v/'
+        ]
+        return any(pattern in url.lower() for pattern in youtube_patterns)
+
+    def _extract_youtube_id(self, url: str) -> str | None:
+        """Extract YouTube video ID from URL"""
+        patterns = [
+            _(r'youtube\.com/watch\?v=([^&]+)'),
+            _(r'youtu\.be/([^?]+)'),
+            _(r'youtube\.com/embed/([^?]+)'),
+            _(r'youtube\.com/v/([^?]+)')
+        ]
+        for pattern in patterns:
+            if match := pattern.search(url):
+                return match.group(1)
+        return None
+
+    def _obfuscate_email(self, email: str) -> str:
+        """Obfuscate email address for spam protection"""
+        result = []
+        for char in email:
+            if char == '@':
+                result.append('&#64;')
+            elif char == '.':
+                result.append('&#46;')
+            else:
+                # Random mix of decimal and hex encoding
+                import random
+                if random.choice([True, False]):
+                    result.append(f'&#x{ord(char):x};')
+                else:
+                    result.append(f'&#{ord(char)};')
+        return ''.join(result)
+
+    def _prefix_local_image(self, url: str) -> str:
+        """Prefix local images with images/ directory if not already prefixed"""
+        if url.startswith(('http://', 'https://', 'ftp://', '/')):
+            return url
+        if not url.startswith('images/'):
+            return f'images/{url}'
+        return url
+
+    # Link visitors
+    def visit_raw_url(self, node: Symbol) -> str:
+        url = node.text
+        if self._is_safe_url(url):
+            self.resources.add('links_ext', url)
+            return self.tag('a', url, href=url, newline=False)
+        return url
+
+    def visit_email_address(self, node: Symbol) -> str:
+        email = node.text
+        obfuscated = self._obfuscate_email(email)
+        return self.tag('a', obfuscated, href=f'mailto:{email}', newline=False)
+
+    def visit_inline_link(self, node: Symbol) -> str:
+        text_node = node.find('link_text')
+        url_node = node.find('link_url')
+        title_node = node.find('link_title')
+        
+        if not text_node or not url_node:
+            return node.text
+        
+        text = text_node.text.strip()
+        url = url_node.text.strip()
+        title = self._extract_title(title_node.text) if title_node else None
+        
+        if not self._is_safe_url(url):
+            return text
+        
+        self.resources.add('links_ext', url)
+        return self.tag('a', text, href=url, title=title, newline=False)
+
+    def visit_reference_link(self, node: Symbol) -> str:
+        text_node = node.find('link_text')
+        label_node = node.find('link_label')
+        
+        if not text_node:
+            return node.text
+        
+        text = text_node.text.strip()
+        # If no label, use text as label (implicit reference)
+        label = label_node.text.strip().lower() if label_node and label_node.text.strip() else text.lower()
+        
+        ref = self.link_references.get(label)
+        if not ref:
+            return node.text
+        
+        url = ref['url']
+        if not self._is_safe_url(url):
+            return text
+        
+        self.resources.add('links_ext', url)
+        return self.tag('a', text, href=url, title=ref.get('title'), newline=False)
+
+    def visit_link_reference(self, node: Symbol) -> str:
+        # Reference definitions don't produce output, they're collected in visit()
+        return ''
+
+    def visit_wiki_link(self, node: Symbol) -> str:
+        page_node = node.find('wiki_link_page')
+        anchor_node = node.find('wiki_link_anchor')
+        text_node = node.find('wiki_link_text')
+        
+        page = page_node.text.strip() if page_node else ''
+        anchor = anchor_node.text.strip() if anchor_node else ''
+        text = text_node.text.strip() if text_node else page
+        
+        # Build URL: convert spaces to dashes, add .html
+        if page:
+            url = page.lower().replace(' ', '-') + '.html' + anchor
+        else:
+            url = anchor  # Anchor-only link
+        
+        self.resources.add('links_int', url)
+        return self.tag('a', text or page, href=url, newline=False)
+
+    # Image visitors
+    def visit_inline_image(self, node: Symbol) -> str:
+        alt_node = node.find('image_alt')
+        url_node = node.find('image_url')
+        title_node = node.find('image_title')
+        
+        if not url_node:
+            return node.text
+        
+        alt = alt_node.text.strip() if alt_node else ''
+        url = url_node.text.strip()
+        title = self._extract_title(title_node.text) if title_node else None
+        
+        if not self._is_safe_url(url):
+            return node.text
+        
+        # Check for special media types
+        if self._is_youtube_url(url):
+            video_id = self._extract_youtube_id(url)
+            if video_id:
+                self.resources.add('videos', url)
+                embed_url = f'https://www.youtube.com/embed/{video_id}'
+                return self.tag('iframe', '', width='560', height='315', 
+                              src=embed_url, frameborder='0',
+                              allow='accelerometer; encrypted-media;', # ; autoplay
+                              allowfullscreen='allowfullscreen', title=alt or 'YouTube video', enclose=2)
+        
+        if self._is_video_file(url):
+            self.resources.add('videos', url)
+            prefixed_url = self._prefix_local_image(url)
+            return self.tag('video', 
+                          self.tag('source', '', src=prefixed_url, type=f'video/{url.split(".")[-1]}', enclose=2),
+                          controls='controls', title=title, enclose=2)
+        
+        if self._is_audio_file(url):
+            self.resources.add('audios', url)
+            prefixed_url = self._prefix_local_image(url)
+            return self.tag('audio', 
+                          self.tag('source', '', src=prefixed_url, type=f'audio/{url.split(".")[-1]}', enclose=2),
+                          controls='controls', title=title, enclose=2)
+        
+        # Regular image
+        prefixed_url = self._prefix_local_image(url)
+        self.resources.add('images', prefixed_url)
+        return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=2, newline=False)
+
+    def visit_reference_image(self, node: Symbol) -> str:
+        alt_node = node.find('image_alt')
+        label_node = node.find('image_ref_label')
+        
+        alt = alt_node.text.strip() if alt_node else ''
+        # If no label, use alt as label (implicit reference)
+        label = label_node.text.strip().lower() if label_node and label_node.text.strip() else alt.lower()
+        
+        ref = self.image_references.get(label)
+        if not ref:
+            return node.text
+        
+        url = ref['url']
+        title = ref.get('title')
+        
+        if not self._is_safe_url(url):
+            return node.text
+        
+        # Check for special media types (same as inline_image)
+        if self._is_youtube_url(url):
+            video_id = self._extract_youtube_id(url)
+            if video_id:
+                self.resources.add('videos', url)
+                embed_url = f'https://www.youtube.com/embed/{video_id}'
+                return self.tag('iframe', '', width='560', height='315',
+                              src=embed_url, frameborder='0',
+                              allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+                              allowfullscreen='allowfullscreen', title=alt or 'YouTube video', enclose=2)
+        
+        if self._is_video_file(url):
+            self.resources.add('videos', url)
+            prefixed_url = self._prefix_local_image(url)
+            return self.tag('video',
+                          self.tag('source', '', src=prefixed_url, type=f'video/{url.split(".")[-1]}', enclose=2),
+                          controls='controls', title=title, enclose=2)
+        
+        if self._is_audio_file(url):
+            self.resources.add('audios', url)
+            prefixed_url = self._prefix_local_image(url)
+            return self.tag('audio',
+                          self.tag('source', '', src=prefixed_url, type=f'audio/{url.split(".")[-1]}', enclose=2),
+                          controls='controls', title=title, enclose=2)
+        
+        # Regular image
+        prefixed_url = self._prefix_local_image(url)
+        self.resources.add('images', prefixed_url)
+        return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=2, newline=False)
+
+    def visit_wiki_image(self, node: Symbol) -> str:
+        file_node = node.find('wiki_image_file')
+        align_node = node.find('wiki_image_align')
+        width_node = node.find('wiki_image_width')
+        height_node = node.find('wiki_image_height')
+        
+        if not file_node:
+            return node.text
+        
+        url = file_node.text.strip()
+        align = align_node.text.strip().lower() if align_node else None
+        width = width_node.text.strip() if width_node else None
+        height = height_node.text.strip() if height_node else None
+        
+        if not self._is_safe_url(url):
+            return node.text
+        
+        # Build style attributes
+        styles = []
+        if align:
+            if align == 'left':
+                styles.append('float: left; margin-right: 1em;')
+            elif align == 'right':
+                styles.append('float: right; margin-left: 1em;')
+            elif align == 'center':
+                styles.append('display: block; margin-left: auto; margin-right: auto;')
+        
+        if width:
+            if not any(unit in width for unit in ['%', 'px', 'em', 'rem', 'vw']):
+                width = f'{width}px'
+            styles.append(f'width: {width};')
+        
+        if height:
+            if not any(unit in height for unit in ['%', 'px', 'em', 'rem', 'vh']):
+                height = f'{height}px'
+            styles.append(f'height: {height};')
+        
+        style = ' '.join(styles) if styles else None
+        
+        prefixed_url = self._prefix_local_image(url)
+        self.resources.add('images', prefixed_url)
+        return self.tag('img', '', src=prefixed_url, alt='', style=style, enclose=2, newline=False)
 
     def __end__(self):
         s = []; 
