@@ -508,10 +508,12 @@ This is another topic. [^second]
 <div class="footnotes"><ol>
 <li id="fn-first">
 <p>This is the first footnote.</p>
+
 <a class="footnote-backref inner" href="#fnref-first">↩</a>
 </li>
 <li id="fn-second">
 <p>This is the second footnote.</p>
+
 <a class="footnote-backref inner" href="#fnref-second">↩</a>
 </li>
 </ol></div>'''
