@@ -474,7 +474,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             result = f"{result} &mdash; {self.tag('i', attrib.text, _class='quote-attrib')}"
         if atrdat:
             result = result + self.tag('span', self.tag("span", atrdat.text, _class='text-date'), _class='quote-timeplace')
-        return self.tag('blockquote', result)
+        return self.tag('blockquote', result.strip())
 
     def visit_table_sep(self, node: Symbol) -> str:
         return ''
