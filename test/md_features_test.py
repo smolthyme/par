@@ -339,7 +339,8 @@ a --
 <dl>
 <dt>a</dt>
 <dd><p>abc</p>
-<pre><code>code</code></pre>
+</dd>
+<dd><pre><code>code</code></pre>
 </dd>
 </dl>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
@@ -357,7 +358,8 @@ a
 <dl>
 <dt>a</dt>
 <dd><p>abc</p>
-<pre><code>code</code></pre>
+</dd>
+<dd><pre><code>code</code></pre>
 </dd>
 </dl>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
@@ -366,37 +368,41 @@ a
         md_text = '''\
 a --
     abc
-
+    
     ```
     code
     abcd
     ```
-
+    
     test
 
 b --c --
     abc
-
+    
     ```
     code
     abcd
     ```
-
+    
     test
 '''
         expected = '''\
 <dl>
 <dt>a</dt>
 <dd><p>abc</p>
-<pre><code>code
+</dd>
+<dd><pre><code>code
 abcd</code></pre>
-<p>test</p>
+</dd>
+<dd><p>test</p>
 </dd>
 <dt>b --c</dt>
 <dd><p>abc</p>
-<pre><code>code
+</dd>
+<dd><pre><code>code
 abcd</code></pre>
-<p>test</p>
+</dd>
+<dd><p>test</p>
 </dd>
 </dl>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())

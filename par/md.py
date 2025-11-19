@@ -68,7 +68,7 @@ class MarkdownGrammar(dict):
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
         
         #def words()            : return word, -1, [space, word]
-        def words(ig='(?!)')   : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
+        def words(ig=r'(?!)')  : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
         def text()             : return 0, space, -2, words
         def paragraph()        : return text, -1, [space, text], blanklines
 
@@ -147,7 +147,7 @@ class MarkdownGrammar(dict):
         def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
 
         ## Definition Lists
-        def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig='--'), 0, _(r'--'), blankline
+        def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig=r'--'), 0, _(r'--'), blankline
         def dl_dd_content()    : return 0, ignore(r"[ \t]+"), [lists, pre, paragraph]
         def dl_dd()            : return [space, _(r':\s*')], dl_dd_content
         def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, dl_dd
