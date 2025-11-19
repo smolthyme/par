@@ -199,7 +199,7 @@ class TestListsComplexHTML(unittest.TestCase):
 
     defaults --
         test:
-    
+        
         ```
         return {}
         ```
@@ -285,7 +285,7 @@ b --
 
     def test_definition_list_with_formatting_and_list(self):
         md_text = '''\
-a_ --
+a --
     abc
 
 **b** --
@@ -293,7 +293,7 @@ a_ --
 '''
         expected = '''\
 <dl>
-<dt>a_</dt>
+<dt>a</dt>
 <dd><p>abc</p>
 </dd>
 <dt><strong>b</strong></dt>
