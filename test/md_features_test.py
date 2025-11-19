@@ -1,7 +1,7 @@
 import unittest
 from par.md import parseHtml
 
-class TestSimpleFormatHTML(unittest.TestCase):
+class TestFormattingSimpleHTML(unittest.TestCase):
     def test_single_para_with_bold_fmt(self):
         md_text = '''This is **a** bold **test**.'''
         expected = '''<p>This is <strong>a</strong> bold <strong>test</strong>.</p>'''
@@ -37,7 +37,7 @@ class TestSimpleFormatHTML(unittest.TestCase):
         expected = '''<p>This is <strong>bold</strong>, <em>italic</em>, and <code>code</code> in one sentence.</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
-class TestSimpleListsHTML(unittest.TestCase):
+class TestListsSimpleHTML(unittest.TestCase):
     def test_two_item_unordered_list(self):
         md_text = '''\
 * a
@@ -118,6 +118,22 @@ class TestSimpleListsHTML(unittest.TestCase):
 </ol>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_list_with_tilde_characters(self):
+        md_text = '''\
+* 3 km (1.9 mi) ~5 min
+* 5 km (3.1 mi) ~10 min
+* 10 km (6.2 mi) ~20 min
+'''
+        expected = '''\
+<ul>
+<li>3 km (1.9 mi) ~5 min</li>
+<li>5 km (3.1 mi) ~10 min</li>
+<li>10 km (6.2 mi) ~20 min</li>
+</ul>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+
+class TestListsComplexHTML(unittest.TestCase):
     def test_complex_nested_lists(self):
         md_text = '''\
 *   Abacus
@@ -148,22 +164,7 @@ class TestSimpleListsHTML(unittest.TestCase):
 </ul>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
-    def test_list_with_tilde_characters(self):
-        md_text = '''\
-* 3 km (1.9 mi) ~5 min
-* 5 km (3.1 mi) ~10 min
-* 10 km (6.2 mi) ~20 min
-'''
-        expected = '''\
-<ul>
-<li>3 km (1.9 mi) ~5 min</li>
-<li>5 km (3.1 mi) ~10 min</li>
-<li>10 km (6.2 mi) ~20 min</li>
-</ul>'''
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
-
-class TestComplexListsHTML(unittest.TestCase):
     def test_ordered_list_with_code_block(self):
         md_text = '''\
 1. abc
@@ -455,7 +456,7 @@ class TestLinksHTML(unittest.TestCase):
         expected = '''<p><img alt="Alt text" src="http://example.com/image.jpg"/></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
-class TestCompexLinksHTML(unittest.TestCase):
+class TestLinksComplexHTML(unittest.TestCase):
     def test_reference_link_double_quotes(self):
         md_text = '''\
 This is [Test][foo] .
