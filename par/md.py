@@ -92,8 +92,7 @@ class MarkdownGrammar(dict):
         def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
 
         ## pre
-        def indent_line_text() : return text
-        def indent_line()      : return _(r' {4}|\t'), indent_line_text, blankline
+        def indent_line()      : return _(r' {4}|\t'), text, blankline
         def indent_block()     : return -2, indent_line, -1, [indent_line, blankline]
         def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
         def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
@@ -435,9 +434,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
         return self.tag('span', enclose=3, newline=False)
-
-    # def visit_indent_line(self, node: Symbol):
-    #     return (text_node := node.find('indent_line_text')) and text_node.text + '\n'
 
     def visit_pre(self, node: Symbol) -> str:
         cwargs = {}; kwargs = {}
