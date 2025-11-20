@@ -176,7 +176,7 @@ class MarkdownGrammar(dict):
         def link_label()       : return _(r'[^\]]+')
         
         # Inline links
-        def inline_link()      : return _(r'\['), link_text, _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)')
+        def inline_link()      : return _(r'\['), 0, link_text, _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)')
         
         # Reference links
         def reference_link()   : return _(r'\['), link_text, _(r'\]'), 0, space, _(r'\['), 0, link_label, _(r'\]')
@@ -188,14 +188,14 @@ class MarkdownGrammar(dict):
         def link_reference()   : return _(r'^\s*\['), link_ref_label, _(r'\]:'), space, link_ref_url, 0, (space, link_ref_title), 0, space, blankline
         
         # Images - inline
-        def image_alt()        : return _(r'[^\]]*')
+        def image_alt()        : return _(r'[^\]]+')
         def image_url()        : return _(r'[^\s\)]+')
         def image_title()      : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
-        def inline_image()     : return _(r'!\['), image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)')
+        def inline_image()     : return _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)')
         
         # Images - reference
         def image_ref_label()  : return _(r'[^\]]*')
-        def reference_image()  : return _(r'!\['), image_alt, _(r'\]'), 0, space, _(r'\['), 0, image_ref_label, _(r'\]')
+        def reference_image()  : return _(r'!\['), 0, image_alt, _(r'\]'), 0, space, _(r'\['), 0, image_ref_label, _(r'\]')
         
         # Wiki-style links
         def wiki_link_page()   : return _(r'[^\]#\|]+')
@@ -746,18 +746,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         url_node = node.find('link_url')
         title_node = node.find('link_title')
         
-        if not text_node or not url_node:
-            return node.text
-        
-        text = text_node.text.strip()
-        url = url_node.text.strip()
-        title = self._extract_title(title_node.text) if title_node else None
-        
-        if not self._is_safe_url(url):
-            return text
-        
-        self.resources.add('links_ext', url)
-        return self.tag('a', text, href=url, title=title, newline=False)
+        if url_node:
+            text = text_node.text.strip() if text_node else url_node.text.strip()
+            url = url_node.text.strip() 
+            title = self._extract_title(title_node.text) if title_node else None
+            
+            if not self._is_safe_url(url):
+                return text
+            
+            self.resources.add('links_ext', url)
+            return self.tag('a', text, href=url, title=title, newline=False)
+        else:
+            return self.tag('a', "Malformed link")
 
     def visit_reference_link(self, node: Symbol) -> str:
         text_node = node.find('link_text')
