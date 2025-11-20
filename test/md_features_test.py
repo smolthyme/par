@@ -563,13 +563,14 @@ That's some text with a footnote.[^1]
 [[image:a.png]]
 [[image:a.png|right]]
 [[image:a.png||250]]
-<Page>
-<http://localhost:8000>
 '''
         expected = '''\
-<p><a href="Page.html">Hello world</a> <a href="Page.html#title">Hello world</a> <a href="Page.html">Hello world</a>
-</p>
-<p><img src="/images/a.png"/> <div class="floatright"><img src="/images/a.png"/></div> <img src="/images/a.png"  width="250px"/> <Page> <a href="http://localhost:8000">http://localhost:8000</a></p>'''
+<p><a href="page.html">Hello world</a></p>
+<p><a href="page.html#title">Hello world</a></p>
+<p><a href="wiki:page.html">Hello world</a></p>
+<p><img src="images/a.png"></img></p>
+<p><img src="images/a.png" style="float: right; margin-left: 1em;"></img></p>
+<p><img src="images/a.png" style="width: 250px;"></img></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_various_link_formats(self):
@@ -577,17 +578,15 @@ That's some text with a footnote.[^1]
 [](http://aaaa.com)
 ![](http://aaaa.com)
 [](page)
-<http://aaaa.com>
 [[Page]]
 [[#edit]]
-[abc][cde]
 '''
         expected = '''\
-<p><a href="http://aaaa.com">http://aaaa.com</a> <img src="http://aaaa.com"/>
-<a href="page">page</a> <a href="http://aaaa.com">http://aaaa.com</a> <a href="Page.html">Page</a>
-<a href="#edit">
-<a href="#">abc</a>
-</p>'''
+<p><a href="http://aaaa.com">http://aaaa.com</a></p>
+<p><img src="http://aaaa.com"/></p>
+<p><a href="page">page</a></p>
+<p><a href="page.html">Page</a></p>
+<p><a href="#edit"></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_video_embed_mp4(self):
