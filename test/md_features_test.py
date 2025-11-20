@@ -531,13 +531,13 @@ This is another topic. [^second]
         md_text = '''\
 That's some text with a footnote.[^1]
 
-[^1]: **aaaa**
+[^1]: Cats **aaaa**
 '''
         expected = '''\
 <p>That's some text with a footnote.<sup id="fnref-1"><a class="footnote-rel inner" href="#fn-1">1</a></sup></p>
 <div class="footnotes"><ol>
 <li id="fn-1">
-<p><strong>aaaa</strong></p>
+<p>Cats <strong>aaaa</strong></p>
 
 <a class="footnote-backref inner" href="#fnref-1">↩</a>
 </li>
@@ -545,7 +545,7 @@ That's some text with a footnote.[^1]
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 
-    def test_image_wrapped_in_link(self):
+    def test_image_as_link(self):
         md_text = '''\
 [![Alt](https://example.com/image.png)](https://example.com/target)
 [![Alt text](https://example.com/image.png)](https://example.com)
