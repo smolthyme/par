@@ -365,6 +365,7 @@ a
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_definition_list_with_complex_content(self):
+        known_failure = "The padding before the code block is kept"
         md_text = '''\
 a --
     abc
