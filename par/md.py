@@ -86,10 +86,10 @@ class MarkdownGrammar(dict):
         def footnote_desc()    : return footnote, _(r':'), footnote_text
     
         ## custom inline tag
-        def inline_tag_name()  : return _(r'[^\}:]*')
-        def inline_tag_index() : return _(r'[^\]]*')
-        def inline_tag_class() : return _(r'[^\}:]*')
-        def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
+        # def inline_tag_name()  : return _(r'[^\}:]*')
+        # def inline_tag_index() : return _(r'[^\]]*')
+        # def inline_tag_class() : return _(r'[^\}:]*')
+        # def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
 
         ## pre
         def indent_line()      : return _(r' {4}|\t'), text, blankline
@@ -211,7 +211,7 @@ class MarkdownGrammar(dict):
 
         def word()             : return [
                 escape_string,
-                html_block, html_inline_block, inline_tag,
+                html_block, html_inline_block, #inline_tag,
                 # Links and images (before formatting)
                 inline_image, reference_image, wiki_image,
                 inline_link, reference_link, wiki_link,
@@ -529,13 +529,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         else:
             return self.tag('span', '⭐'*5, _class='star-rating')
 
-    def visit_inline_tag(self, node: Symbol) -> str:
-        if ( rel := node.find('inline_tag_index')):
-            if (name := node.find('inline_tag_name')):
-                _c = node.find('inline_tag_class')
-                cls = ' ' + _c.text.strip() if _c is not None else ''
-                return self.tag('span', name.text.strip(), _class=f"inline-tag{cls}", attrs=f'data-rel="{rel.text.strip()}"')
-        return self.tag('span', node.text, _class='inline-tag')
+    # def visit_inline_tag(self, node: Symbol) -> str:
+    #     if ( rel := node.find('inline_tag_index')):
+    #         if (name := node.find('inline_tag_name')):
+    #             _c = node.find('inline_tag_class')
+    #             cls = ' ' + _c.text.strip() if _c is not None else ''
+    #             return self.tag('span', name.text.strip(), _class=f"inline-tag{cls}", attrs=f'data-rel="{rel.text.strip()}"')
+    #     return self.tag('span', node.text, _class='inline-tag')
 
     def visit_side_block(self, node: Symbol) -> str:
         content = [self.parse_markdown(thing.text, 'content').strip()
