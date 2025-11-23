@@ -547,12 +547,12 @@ That's some text with a footnote.[^1]
 
     def test_image_as_link(self):
         md_text = '''\
-[![Alt](https://example.com/image.png)](https://example.com/target)
-[![Alt text](https://example.com/image.png)](https://example.com)
+[![Alt text](https://example.com/image.png)](https://example.com/target)
+[![](https://example.com/image.png)](https://example.com/target)
 '''
         expected = '''\
-<p><a href="https://example.com/target"><img src="https://example.com/image.png" alt="Alt"/></a></p>
-<p><a href="https://example.com"><img src="https://example.com/image.png" alt="Alt text"/></a></p>'''
+<p><a href="https://example.com/target"><img alt="Alt text" src="https://example.com/image.png">Alt text</img></a></p>
+<p><a href="https://example.com/target"><img src="https://example.com/image.png"></a></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_wiki_style_links_and_images(self):

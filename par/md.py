@@ -190,6 +190,9 @@ class MarkdownGrammar(dict):
         def image_ref_label()  : return _(r'[^\]]*')
         def reference_image()  : return _(r'!\['), 0, image_alt, _(r'\]'), 0, space, _(r'\['), 0, image_ref_label, _(r'\]')
         
+        # Clickable images (inline image wrapped in inline link)
+        def image_link()       : return _(r'\['), _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)')
+        
         # Wiki-style links
         def wiki_link_page()   : return _(r'[^\]#\|]+')
         def wiki_link_anchor() : return _(r'#[^\]#\|]*')
@@ -207,7 +210,7 @@ class MarkdownGrammar(dict):
                 escape_string,
                 html_block, html_inline_block,
                 # Links and images (before formatting)
-                inline_image, reference_image, wiki_image,
+                image_link, inline_image, reference_image, wiki_image,
                 inline_link, reference_link, wiki_link,
                 raw_url, email_address,
                 # Formatting
@@ -767,6 +770,38 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         self.resources.add('links_int', url)
         return self.tag('a', text or page, href=url, newline=False)
+
+    def visit_image_link(self, node: Symbol) -> str:
+        """Handle [![alt](image-url)](link-url) syntax - generates <a><img/></a>"""
+        alt = (alt_node.text.strip() if (alt_node := node.find('image_alt')) else None)
+        
+        # Extract image URL and title
+        image_url = (image_url_node.text.strip() if (image_url_node := node.find('image_url')) else '')
+        image_title_nodes = list(node.find_all('image_title'))
+        image_title = self._extract_title(image_title_nodes[0].text) if image_title_nodes else None
+        
+        # Extract link URL and title
+        link_url = (link_url_node.text.strip() if (link_url_node := node.find('link_url')) else '')
+        link_title_nodes = list(node.find_all('link_title'))
+        link_title = None
+        if link_title_nodes:
+            idx = 1 if image_title else 0
+            if len(link_title_nodes) > idx:
+                link_title = self._extract_title(link_title_nodes[idx].text)
+        
+        # Safety checks
+        if not self._is_safe_url(image_url) or not self._is_safe_url(link_url):
+            return node.text
+        
+        # Prefix local image URLs and track resources
+        prefixed_image_url = self._prefix_local_image(image_url)
+        self.resources.add('images', prefixed_image_url)
+        self.resources.add('links_ext', link_url)
+        
+        # Build nested tags: <a><img/></a>
+        img_tag = self.tag('img', alt or "", src=prefixed_image_url, alt=alt, 
+                            title=image_title, newline=False)
+        return self.tag('a', img_tag, href=link_url, title=link_title, newline=False)
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
