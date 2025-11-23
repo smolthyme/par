@@ -7,7 +7,7 @@ class ResourceStore:
         self.store = {'links_ext': [], 'links_int': [], 'toc_items': [], 'footnotes': [], 'images': [], 'videos': [], 'audios': []}
         if initial_data:
             self.store = {**self.store, **initial_data}
-
+    
     def add(self, key, value):
         if key not in self.store:
             self.store[key] = []
@@ -35,19 +35,19 @@ class MarkdownGrammar(dict):
     def _get_rules(self):
         ## Cheats for return value repeats
         #  0 = ? = Optional ; -1 = * = Zero or more ; -2 = + = One or more ; n = n matches
-
+        
         ## basic
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
         def wordlike()         : return _(r'[^\*_\s\d\.`]+') # Remove brackets maybe?
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
-
+        
         def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
         def htmlentity()       : return _(r'&\w+;')
         def escape_string()    : return _(r'\\'), _(r'.')
         def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[\]]+')
-
+        
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
         def fmt_bold2()        : return _(r'__'),   words , _(r'__')
@@ -57,12 +57,12 @@ class MarkdownGrammar(dict):
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
         def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
         def fmt_strikethrough(): return _(r'~~'),   words , _(r'~~')
-
+        
         ## inline
         def longdash()         : return _(r"--\B")
         def hr()               : return _(r'(?:([-_*])[ \t]*\1*){3,}'), blankline
         def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
-
+        
         ## embedded html
         def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL)
         def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
@@ -71,11 +71,11 @@ class MarkdownGrammar(dict):
         def words(ig=r'(?!)')  : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
         def text()             : return 0, space, -2, words
         def paragraph()        : return text, -1, [space, text], blanklines
-
+        
         def directive_name()   : return _(r'\w+')
         def directive_title()  : return _(r'[^\n\r]+')
         def directive()        : return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
-    
+        
         def block_kwargs_key() : return _(r'[^=,\)\n]+')
         def block_kwargs_val() : return _(r'[^\),\n]+')
         def block_kwargs()     : return block_kwargs_key, 0, (_(r'='), block_kwargs_val)
@@ -84,13 +84,7 @@ class MarkdownGrammar(dict):
         def footnote()         : return _(r'\[\^\w+\]')
         def footnote_text()    : return list_first_para, -1, [list_indent_lines, list_lines]
         def footnote_desc()    : return footnote, _(r':'), footnote_text
-    
-        ## custom inline tag
-        # def inline_tag_name()  : return _(r'[^\}:]*')
-        # def inline_tag_index() : return _(r'[^\]]*')
-        # def inline_tag_class() : return _(r'[^\}:]*')
-        # def inline_tag()       : return _(r'\{'), inline_tag_name, 0, (_(r':'), inline_tag_class), _(r'\}'), 0, space, _(r'\['), inline_tag_index, _(r'\]')
-
+        
         ## pre
         def indent_line()      : return _(r' {4}|\t'), text, blankline
         def indent_block()     : return -2, indent_line, -1, [indent_line, blankline]
@@ -100,7 +94,7 @@ class MarkdownGrammar(dict):
         def pre_extra1()       : return _(r'```|~{3,}'), 0, pre_lang, blankline, pre_text1, _(r'```|~{3,}'), -2, blankline
         def pre_extra2()       : return _(r'<code>'), 0, pre_lang, blankline, pre_text2, _(r'</code>'), -2, blankline
         def pre()              : return [indent_block, pre_extra1, pre_extra2]
-    
+        
         ## class and id definition
         def attr_def_id()      : return _(r'#[^\s\}]+')
         def attr_def_class()   : return _(r'\.[^\s\}]+')
@@ -114,7 +108,7 @@ class MarkdownGrammar(dict):
         def setext_underline() : return _(r'[ \t]*[-=]+[ \t]*')
         def setext_title()     : return title_text, 0, space, 0, attr_def, blankline, setext_underline, -2, blankline
         def title()            : return [atx_title, setext_title]
-    
+        
         ## table
         def table_sep()        : return _(r'\|')
         def table_td()         : return _(r'[^\|\r\n]*'), table_sep
@@ -125,13 +119,13 @@ class MarkdownGrammar(dict):
         def table_body_line()  : return 0, table_sep, -2, table_td, -1, table_other, blankline
         def table_body()       : return -2, table_body_line
         def table()            : return table_head, table_separator, table_body
-
+        
         # Horizontal items
         def side_block_head()  : return _(r'\|\|\|'), blankline
         def side_block_cont()  : return [text, lists, paragraph], blankline
         def side_block_item()  : return side_block_head, -2, side_block_cont
         def side_block()       : return -2, side_block_item, -1, blankline
-
+        
         ## lists
         def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
         def list_rest_of_line(): return _(r'.+'), blankline
@@ -144,14 +138,14 @@ class MarkdownGrammar(dict):
         def bullet_list_item() : return 0, _(r' {1,4}'), _(r'[\*\+\-]'), space, list_content
         def number_list_item() : return 0, _(r' {1,4}'), _(r'\d+\.'), space, list_content
         def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
-
+        
         ## Definition Lists
         def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig=r'--'), 0, _(r'--'), blankline
         def dl_dd_content()    : return 0, ignore(r"[ \t]+"), [lists, pre, paragraph]
         def dl_dd()            : return [space, _(r':\s*')], dl_dd_content
         def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, dl_dd
         def dl()               : return -2, dl_dt_n_dd
-
+        
         ## quote
         def quote_text()       : return text, blankline
         def quote_blank_line() : return _(r'>[ \t]*'), blankline
@@ -161,7 +155,7 @@ class MarkdownGrammar(dict):
         def quote_attr()       : return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), blankline
         def quote_lines()      : return [quote_blank_line, quote_line]
         def blockquote()       : return -2, quote_lines, 0, quote_attr, -1, blankline
-
+        
         # Raw URLs
         def raw_url()          : return _(r'(?<![\(\[])\b(?:https?|ftp)://[^\s\)<>]+(?:\([^\s\)<>]*\))?[^\s\)<>]*', re.I)
         
@@ -208,10 +202,10 @@ class MarkdownGrammar(dict):
         def wiki_image_width() : return _(r'\d+%?|\d+px|[\d\.]+(?:em|rem|vw)')
         def wiki_image_height(): return _(r'\d+%?|\d+px|[\d\.]+(?:em|rem|vh)')
         def wiki_image()       : return _(r'\[\[image:'), wiki_image_file, 0, (_(r'\|'), 0, wiki_image_align), 0, (_(r'\|'), 0, wiki_image_width), 0, (_(r'\|'), 0, wiki_image_height), _(r'\]\]')
-
+        
         def word()             : return [
                 escape_string,
-                html_block, html_inline_block, #inline_tag,
+                html_block, html_inline_block,
                 # Links and images (before formatting)
                 inline_image, reference_image, wiki_image,
                 inline_link, reference_link, wiki_link,
@@ -222,7 +216,7 @@ class MarkdownGrammar(dict):
                 footnote, longdash,
                 htmlentity, star_rating, string, wordlike
             ]
-
+        
         ## article
         def content(): return -2, [blankline,
                 link_reference,
@@ -230,9 +224,9 @@ class MarkdownGrammar(dict):
                 pre, html_block, lists,
                 side_block, table, dl, blockquote, footnote_desc,
                 title, paragraph ]
-
+        
         def article(): return content
-
+        
         # Finish up _get_rules() by returning the peg_rules and the 'root'
         peg_rules = {}
         for k, v in ((x, y) for (x, y) in list(locals().items()) if isinstance(y, types.FunctionType)):
@@ -247,7 +241,7 @@ class MarkdownGrammar(dict):
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):
     tag_class = {}
-
+    
     def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled', footnote_id=None, filename=None, resources=None):
         super().__init__(grammar, filename)
         
@@ -258,7 +252,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self._current_section_level = None
         self.link_references = {}  # Store reference link definitions
         self.image_references = {}  # Store reference image definitions
-
+    
     def visit(self, nodes: Symbol, root=False) -> str:
         if root:
             # Collect link and image references first
@@ -267,7 +261,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             [self._alt_title(onk) for onk in nodes[0].find_all('title')]
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
-
+    
     def parse_markdown(self, text, peg=None):
         g = self.grammar or MarkdownGrammar()
         if isinstance(peg, str):
@@ -528,14 +522,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return self.tag('span', '⭐'*len(m.group('stars')), _class='star-rating', title=f"{len(m.group('stars'))} stars out of {m.group('outta')}")
         else:
             return self.tag('span', '⭐'*5, _class='star-rating')
-
-    # def visit_inline_tag(self, node: Symbol) -> str:
-    #     if ( rel := node.find('inline_tag_index')):
-    #         if (name := node.find('inline_tag_name')):
-    #             _c = node.find('inline_tag_class')
-    #             cls = ' ' + _c.text.strip() if _c is not None else ''
-    #             return self.tag('span', name.text.strip(), _class=f"inline-tag{cls}", attrs=f'data-rel="{rel.text.strip()}"')
-    #     return self.tag('span', node.text, _class='inline-tag')
 
     def visit_side_block(self, node: Symbol) -> str:
         content = [self.parse_markdown(thing.text, 'content').strip()
