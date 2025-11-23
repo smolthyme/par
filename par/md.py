@@ -738,98 +738,76 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('a', obfuscated, href=f'mailto:{email}', newline=False)
 
     def visit_inline_link(self, node: Symbol) -> str:
-        text_node = node.find('link_text')
-        url_node = node.find('link_url')
-        title_node = node.find('link_title')
-        
-        if url_node:
-            text = text_node.text.strip() if text_node else url_node.text.strip()
-            url = url_node.text.strip() 
-            title = self._extract_title(title_node.text) if title_node else None
-            
-            if not self._is_safe_url(url):
-                return text
-            
-            self.resources.add('links_ext', url)
-            return self.tag('a', text, href=url, title=title, newline=False)
-        else:
+        if not (url_node := node.find('link_url')):
             return self.tag('a', "Malformed link")
+        
+        text = (text_node.text.strip() if (text_node := node.find('link_text')) else url_node.text.strip())
+        url = url_node.text.strip()
+        title = (self._extract_title(title_node.text) if (title_node := node.find('link_title')) else None)
+        
+        if not self._is_safe_url(url):
+            return text
+        
+        self.resources.add('links_ext', url)
+        return self.tag('a', text, href=url, title=title, newline=False)
 
     def visit_reference_link(self, node: Symbol) -> str:
-        text_node = node.find('link_text')
-        label_node = node.find('link_label')
-        
-        if not text_node:
+        if not (text_node := node.find('link_text')):
             return node.text
         
         text = text_node.text.strip()
-        # If no label, use text as label (implicit reference)
-        label = label_node.text.strip().lower() if label_node and label_node.text.strip() else text.lower()
+        label = (label_node.text.strip().lower() 
+                if (label_node := node.find('link_label')) and label_node.text.strip() 
+                else text.lower())
         
-        ref = self.link_references.get(label)
-        if not ref:
+        if not (ref := self.link_references.get(label)):
             return node.text
         
-        url = ref['url']
-        if not self._is_safe_url(url):
+        if not self._is_safe_url(url := ref['url']):
             return text
         
         self.resources.add('links_ext', url)
         return self.tag('a', text, href=url, title=ref.get('title'), newline=False)
 
     def visit_link_reference(self, node: Symbol) -> str:
-        # Reference definitions don't produce output, they're collected in visit()
         return ''
 
     def visit_wiki_link(self, node: Symbol) -> str:
-        page_node = node.find('wiki_link_page')
-        anchor_node = node.find('wiki_link_anchor')
-        text_node = node.find('wiki_link_text')
+        page   = (page_node.text.strip()   if   (page_node := node.find('wiki_link_page')) else '')
+        anchor = (anchor_node.text.strip() if (anchor_node := node.find('wiki_link_anchor')) else '')
+        text   = (text_node.text.strip()   if   (text_node := node.find('wiki_link_text')) else page)
         
-        page = page_node.text.strip() if page_node else ''
-        anchor = anchor_node.text.strip() if anchor_node else ''
-        text = text_node.text.strip() if text_node else page
-        
-        # Build URL: convert spaces to dashes, add .html
-        if page:
-            url = page.lower().replace(' ', '-') + '.html' + anchor
-        else:
-            url = anchor  # Anchor-only link
+        url = (page.lower().replace(' ', '-') + '.html' + anchor) if page else anchor
         
         self.resources.add('links_int', url)
         return self.tag('a', text or page, href=url, newline=False)
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
-        alt_node = node.find('image_alt')
-        url_node = node.find('image_url')
-        title_node = node.find('image_title')
-        
-        if not url_node:
+        if not (url_node := node.find('image_url')):
             return node.text
         
-        alt = alt_node.text.strip() if alt_node else ''
+        alt = (alt_node.text.strip() if (alt_node := node.find('image_alt')) else '')
         url = url_node.text.strip()
-        title = self._extract_title(title_node.text) if title_node else None
+        title = (self._extract_title(title_node.text) 
+                if (title_node := node.find('image_title')) else None)
         
         if not self._is_safe_url(url):
             return node.text
         
         # Check for special media types
-        if self._is_youtube_url(url):
-            if video_id := self._extract_youtube_id(url):
-                self.resources.add('videos', url)
-                embed_url = f'https://www.youtube.com/embed/{video_id}'
-                return self.tag('object', '', attrs=f' class="yt-embed" data="{embed_url}"', enclose=2)
+        if self._is_youtube_url(url) and (video_id := self._extract_youtube_id(url)):
+            self.resources.add('videos', url)
+            return self.tag('object', '', attrs=f' class="yt-embed" data="https://www.youtube.com/embed/{video_id}"', enclose=2)
         elif self._is_video_file(url):
             self.resources.add('videos', url)
             prefixed_url = self._prefix_local_image(url)
-            return self.tag('video', controls="yesplz", disablePictureInPicture="True", playsinline="True",
-                src=prefixed_url, type=f'video/mp4', enclose=1)
+            return self.tag('video', controls="yesplz", disablePictureInPicture="True", 
+                            playsinline="True", src=prefixed_url, type='video/mp4', enclose=1)
         elif self._is_audio_file(url):
             self.resources.add('audios', url)
             prefixed_url = self._prefix_local_image(url)
-            return self.tag('audio', controls="yesplz", src=prefixed_url, type=f'audio/mpeg', enclose=1)
+            return self.tag('audio', controls="yesplz", src=prefixed_url, type='audio/mpeg', enclose=1)
 
         # Regular image
         prefixed_url = self._prefix_local_image(url)
@@ -837,15 +815,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=1, newline=False)
 
     def visit_reference_image(self, node: Symbol) -> str:
-        alt_node = node.find('image_alt')
-        label_node = node.find('image_ref_label')
+        alt = (alt_node.text.strip() if (alt_node := node.find('image_alt')) else '')
+        label = (label_node.text.strip().lower() 
+                if (label_node := node.find('image_ref_label')) and label_node.text.strip() 
+                else alt.lower())
         
-        alt = alt_node.text.strip() if alt_node else ''
-        # If no label, use alt as label (implicit reference)
-        label = label_node.text.strip().lower() if label_node and label_node.text.strip() else alt.lower()
-        
-        ref = self.image_references.get(label)
-        if not ref:
+        if not (ref := self.image_references.get(label)):
             return node.text
         
         url = ref['url']
@@ -854,30 +829,27 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return node.text
         
-        # Check for special media types (same as inline_image)
-        if self._is_youtube_url(url):
-            video_id = self._extract_youtube_id(url)
-            if video_id:
-                self.resources.add('videos', url)
-                embed_url = f'https://www.youtube.com/embed/{video_id}'
-                return self.tag('iframe', '', width='560', height='315',
-                              src=embed_url, frameborder='0',
-                              allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
-                              allowfullscreen='allowfullscreen', title=alt or 'YouTube video', enclose=2)
+        # Check for special media types
+        if self._is_youtube_url(url) and (video_id := self._extract_youtube_id(url)):
+            self.resources.add('videos', url)
+            return self.tag('iframe', '', width='560', height='315',
+                            src=f'https://www.youtube.com/embed/{video_id}', frameborder='0',
+                            allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+                            allowfullscreen='allowfullscreen', title=alt or 'YouTube video', enclose=2)
         
-        if self._is_video_file(url):
+        elif self._is_video_file(url):
             self.resources.add('videos', url)
             prefixed_url = self._prefix_local_image(url)
             return self.tag('video',
-                          self.tag('source', '', src=prefixed_url, type=f'video/{url.split(".")[-1]}', enclose=2),
-                          controls='controls', title=title, enclose=2)
+                            self.tag('source', '', src=prefixed_url, type=f'video/{url.split(".")[-1]}', enclose=2),
+                            controls='controls', title=title, enclose=2)
         
-        if self._is_audio_file(url):
+        elif self._is_audio_file(url):
             self.resources.add('audios', url)
             prefixed_url = self._prefix_local_image(url)
             return self.tag('audio',
-                          self.tag('source', '', src=prefixed_url, type=f'audio/{url.split(".")[-1]}', enclose=2),
-                          controls='controls', title=title, enclose=2)
+                            self.tag('source', '', src=prefixed_url, type=f'audio/{url.split(".")[-1]}', enclose=2),
+                            controls='controls', title=title, enclose=2)
         
         # Regular image
         prefixed_url = self._prefix_local_image(url)
@@ -885,30 +857,26 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=2, newline=False)
 
     def visit_wiki_image(self, node: Symbol) -> str:
-        file_node = node.find('wiki_image_file')
-        align_node = node.find('wiki_image_align')
-        width_node = node.find('wiki_image_width')
-        height_node = node.find('wiki_image_height')
-        
-        if not file_node:
+        if not (file_node := node.find('wiki_image_file')):
             return node.text
         
         url = file_node.text.strip()
-        align = align_node.text.strip().lower() if align_node else None
-        width = width_node.text.strip() if width_node else None
-        height = height_node.text.strip() if height_node else None
+        align  = ( align_node.text.strip() if  (align_node := node.find('wiki_image_align')) else "")
+        width  = ( width_node.text.strip() if  (width_node := node.find('wiki_image_width')) else None)
+        height = (height_node.text.strip() if (height_node := node.find('wiki_image_height')) else None)
         
         if not self._is_safe_url(url):
             return node.text
         
         # Build style attributes
         styles = []
-        if align:
-            if align == 'left':
+
+        match align.lower():
+            case 'left':
                 styles.append('float: left; margin-right: 1em;')
-            elif align == 'right':
+            case 'right':
                 styles.append('float: right; margin-left: 1em;')
-            elif align == 'center':
+            case 'center':
                 styles.append('display: block; margin-left: auto; margin-right: auto;')
         
         if width:
