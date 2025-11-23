@@ -242,15 +242,12 @@ class MarkdownGrammar(dict):
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
 
-class MarkdownHtmlVisitor(MDHTMLVisitor):
-    tag_class = {}
-    
-    def __init__(self, template=None, tag_class=None, grammar=None, title='Untitled', footnote_id=None, filename=None, resources=None):
+class MarkdownHtmlVisitor(MDHTMLVisitor):    
+    def __init__(self, tag_class={}, grammar=None, footnote_id=1, filename=None, resources=None):
         super().__init__(grammar, filename)
         
-        self.title       = title
-        self.tag_class   = tag_class or self.__class__.tag_class
-        self.footnote_id = footnote_id or 1
+        self.tag_class   = tag_class
+        self.footnote_id = footnote_id
         self.resources   = ResourceStore(resources)
         self._current_section_level = None
         self.link_references = {}  # Store reference link definitions
@@ -271,7 +268,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
-        v = self.__class__('', self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id)
+        v = self.__class__(self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id)
         v.resources = self.resources
         parsed_output = v.visit(result[0])
         self.footnote_id = v.footnote_id
@@ -934,37 +931,24 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return '\n'.join(s).strip()
 
 
-    def template(self, node: Symbol):
-        if self.grammar is None:
-            raise ValueError("Grammar is not defined.")
-        body = self.visit(node, self.grammar.root)
-        if self._template:
-            return self._template.format_map({'title':self.title, 'body':body})
-        else:
-            return body
-
-
-def parseHtml(text, template=None, tag_class=None, filename=None, grammer=None, visitor=None):
-    g = (grammer or MarkdownGrammar)()
-    resultSoFar = []
-    result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
-    v = (visitor or MarkdownHtmlVisitor)( # args below
-            template or '{body}', tag_class or {}, g,
-            filename=filename)
-    out = v.template(result[0])
-    return out
+def parseHtml(text, tag_class=None, filename=None, grammar=None, visitor=None):
+    """Parse markdown text and return HTML"""
+    g = (grammar or MarkdownGrammar)()
+    result, rest = g.parse(text, resultSoFar=[], skipWS=False)
+    v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g, filename=filename)
+    return v.visit(result[0], root=True)
 
 def parseEmbeddedHtml(text):
+    """Parse markdown and strip outer <p> tags if only one paragraph"""
     parsed = parseHtml(text)
     clean = re.compile(r"</?p\b[^>]*>", re.I | re.MULTILINE)
     if len(_("<p>").findall(parsed)) == 1:
         parsed = re.sub(clean, "", parsed)
     return parsed
 
-def parseText(text, filename=None, grammer=None, visitor=None):
-    g = (grammer or MarkdownGrammar)()
-    resultSoFar = []
-    result, rest = g.parse(text, resultSoFar=resultSoFar, skipWS=False)
+def parseText(text, filename=None, grammar=None, visitor=None):
+    """Parse markdown text and return plain text representation"""
+    g = (grammar or MarkdownGrammar)()
+    result, rest = g.parse(text, resultSoFar=[], skipWS=False)
     v = (visitor or SimpleVisitor)(g, filename=filename)
-
     return v.visit(result, root=True)
