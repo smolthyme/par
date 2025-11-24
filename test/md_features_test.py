@@ -210,7 +210,8 @@ class TestListsComplexHTML(unittest.TestCase):
 <dl>
 <dt>defaults</dt>
 <dd><p>test:</p>
-<pre><code>return {}</code></pre>
+</dd>
+<dd><pre><code>return {}</code></pre>
 </dd>
 </dl></li>
 </ol>'''
@@ -693,6 +694,10 @@ class TestMiscInlineHTML(unittest.TestCase):
         expected = '''<p>★★★★ / wombat wontparse</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_button_link(self):
+        md_text = '''((Click Me|http://example.com|btn-primary))'''
+        expected = '''<p><button onclick="location.href='http://example.com'" class="btn-primary">Click Me</button></p>'''
+        #self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 class TestMiscBlocksHTML(unittest.TestCase):
     def test_blockquote_with_attribution(self):
