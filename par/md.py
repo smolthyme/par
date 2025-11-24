@@ -1,9 +1,13 @@
-import re, types
-from dataclasses import dataclass, field, asdict
-from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
-from .__init__ import SimpleVisitor, MDHTMLVisitor
 
-@dataclass
+"""Advanced Markdown parsing and HTML conversion."""
+from .__init__ import SimpleVisitor, MDHTMLVisitor # Visits parsed nodes and converts to HTML/text etc.
+
+import re, types
+from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
+
+from dataclasses import dataclass, field, asdict
+
+@dataclass(slots=True)
 class ResourceStore:
     """Centralized storage for all resources tracked during markdown parsing."""
     
@@ -219,7 +223,6 @@ class MarkdownGrammar(dict):
                 htmlentity, star_rating, string, wordlike
             ]
         
-        ## article
         def content(): return -2, [blankline,
                 link_reference,
                 hr, directive,
@@ -229,11 +232,7 @@ class MarkdownGrammar(dict):
         
         def article(): return content
         
-        # Finish up _get_rules() by returning the peg_rules and the 'root'
-        peg_rules = {}
-        for k, v in ((x, y) for (x, y) in list(locals().items()) if isinstance(y, types.FunctionType)):
-            peg_rules[k] = v
-        return peg_rules, article
+        return {k: v for k, v in locals().items() if isinstance(v, types.FunctionType)}, article
     
     def parse(self, text:str, root=None, skipWS=False, **kwargs):
         # Normalise on unix-style line ending and we end with a newline
