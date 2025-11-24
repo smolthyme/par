@@ -1,5 +1,7 @@
-# YPL parser 1.5
-# written by VB.
+# 
+# Based on YPL parser 1.5 by 'VB' -- Thanks!
+# Hacked on by serpn subsequently
+
 
 import sys, re
 from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional, Dict, Iterator
@@ -193,50 +195,43 @@ class parser(object):
                 pattern = (pattern,)
 
         text = skip(self.skipper, textline, skipWS, skipComments)
-        pattern_type = type(pattern)
 
-        if type(pattern) is str:
+        if isinstance(pattern, str):
             if text[:len(pattern)] == pattern:
                 text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
                 return Result(None, text)
             else:
                 syntaxError()
-
-        elif type(pattern) is keyword:
+        
+        elif isinstance(pattern, keyword):
             if m := word_regex.match(text):
-                if m.group(0) == pattern and isinstance(pattern, str):
+                if m.group(0) == pattern:
                     text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
                     return Result(None, text)
                 else:
                     syntaxError()
             else:
                 syntaxError(word_regex.pattern)
-
-        elif type(pattern) is _not:
+        
+        elif isinstance(pattern, _not):
             try:
                 r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
             except:
                 return resultSoFar, textline
             syntaxError()
-
-        elif type(pattern) is _and:
+        
+        elif isinstance(pattern, _and):
             r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
             return resultSoFar, textline
-
-        elif type(pattern) in (type(word_regex), ignore):
-            if type(pattern) is ignore and hasattr(pattern, "regex"):
-                    pattern = pattern.regex
-            if isinstance(pattern, Pattern) and (m := pattern.match(text)):
+        
+        elif isinstance(pattern, ignore):
+            if m := pattern.regex.match(text):
                 text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
-                if pattern_type is ignore:
-                    return Result(None, text)
-                else:
-                    return Result(m.group(0), text)
+                return Result(None, text)
             else:
-                #syntaxError(pattern.pattern+' text='+repr(text))
                 syntaxError()
-
-        elif type(pattern) is tuple:
+        
+        elif isinstance(pattern, tuple):
             n = 1; result = []
             for p in pattern:
                 if type(p) is type(0):
@@ -266,8 +261,8 @@ class parser(object):
                             syntaxError(f"{text} function={p}")
                     n = 1
             return Result(result, text)
-
-        elif type(pattern) is list:
+        
+        elif isinstance(pattern, list):
             result = []
             found = False
             for p in pattern:
@@ -282,12 +277,20 @@ class parser(object):
                 return Result(result, text)
             else:
                 syntaxError()
-
+        
+        elif isinstance(pattern, re.Pattern):
+            # Handle compiled regex patterns
+            if m := pattern.match(text):
+                text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
+                return Result(m.group(0), text)
+            else:
+                syntaxError()
+        
         else:
-            raise SyntaxError(f"illegal type in grammar: {pattern_type}")
+            raise SyntaxError(f"illegal type in grammar: {type(pattern)}")
         
         return resultSoFar, textline # Should never reach this point
-
+    
     def lineNo(self) -> int:
         # NOTE TEST: This is a re-write of a function that was clearly broken. It... partially works?
         if not self.lines or self.restlen == -1:
