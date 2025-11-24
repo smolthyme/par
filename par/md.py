@@ -294,7 +294,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def visit_list_line(self, node: Symbol) -> str:
-        return node.text.strip()
+        return node.text
 
     def visit_list_indent_line(self, node: Symbol):
         return (text_node := node.find('list_rest_of_line')) and text_node.text
@@ -430,8 +430,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if (lang := node.find('pre_lang')):
             for n in lang.find_all('block_kwargs'):
                 if (k := n.find('block_kwargs_key')):
-                    key = k.text.strip()
-                    val = v_node.text.strip() if (v_node := n.find('block_kwargs_val')) else None
+                    key = k.text
+                    val = v_node.text if (v_node := n.find('block_kwargs_val')) else None
 
                     if key == 'lang' or val is None:
                         cwargs['class'] = 'language-' + (val or key)
@@ -484,7 +484,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         _id_node = node.find('attr_def_id')
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
-        title = (title_node := node.find('title_text')) and title_node.text.strip()
+        title = (title_node := node.find('title_text')) and title_node.text
         self.resources.toc_items.append((level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
@@ -493,10 +493,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
         _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
-        #section_s = self._open_section(f"{title}".lower().replace(' ', '-'))
         section_s = self._open_section(self.slug(f"{title}"))
-
-        # Combine section opening with title tag
+        
         return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
 
     def visit_atx_title(self, node: Symbol) -> str:
@@ -620,12 +618,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         title_node = node.find('link_ref_title')
         
         if label_node and url_node:
-            label = label_node.text.strip().lower()
-            url = url_node.text.strip()
+            label = label_node.text.lower()
+            url = url_node.text
             title = self._extract_title(title_node.text) if title_node else None
             
             # Store both as link reference and image reference
-            self.resources.link_references[label] = {'url': url, 'title': title}
+            self.resources.link_references[label]  = {'url': url, 'title': title}
             self.resources.image_references[label] = {'url': url, 'title': title}
 
     def _extract_title(self, text: str) -> str:
@@ -723,8 +721,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (url_node := node.find('link_url')):
             return self.tag('a', "Malformed link")
         
-        text = (text_node.text.strip() if (text_node := node.find('link_text')) else url_node.text.strip())
-        url = url_node.text.strip()
+        text = (text_node.text if (text_node := node.find('link_text')) else url_node.text)
+        url = url_node.text
         title = (self._extract_title(title_node.text) if (title_node := node.find('link_title')) else None)
         
         if not self._is_safe_url(url):
@@ -737,9 +735,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (text_node := node.find('link_text')):
             return node.text
         
-        text = text_node.text.strip()
-        label = (label_node.text.strip().lower() 
-                if (label_node := node.find('link_label')) and label_node.text.strip() 
+        text = text_node.text
+        label = (label_node.text.lower() 
+                if (label_node := node.find('link_label')) and label_node.text 
                 else text.lower())
         
         if not (ref := self.resources.link_references.get(label)):
@@ -755,9 +753,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def visit_wiki_link(self, node: Symbol) -> str:
-        page   = (page_node.text.strip()   if   (page_node := node.find('wiki_link_page')) else '')
-        anchor = (anchor_node.text.strip() if (anchor_node := node.find('wiki_link_anchor')) else '')
-        text   = (text_node.text.strip()   if   (text_node := node.find('wiki_link_text')) else page)
+        page   = (page_node.text   if   (page_node := node.find('wiki_link_page')) else '')
+        anchor = (anchor_node.text if (anchor_node := node.find('wiki_link_anchor')) else '')
+        text   = (text_node.text   if   (text_node := node.find('wiki_link_text')) else page)
         
         url = (page.lower().replace(' ', '-') + '.html' + anchor) if page else anchor
         
@@ -766,15 +764,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_image_link(self, node: Symbol) -> str:
         """Handle [![alt](image-url)](link-url) syntax - generates <a><img/></a>"""
-        alt = (alt_node.text.strip() if (alt_node := node.find('image_alt')) else None)
+        alt = (alt_node.text if (alt_node := node.find('image_alt')) else None)
         
         # Extract image URL and title
-        image_url = (image_url_node.text.strip() if (image_url_node := node.find('image_url')) else '')
+        image_url = (image_url_node.text if (image_url_node := node.find('image_url')) else '')
         image_title_nodes = list(node.find_all('image_title'))
         image_title = self._extract_title(image_title_nodes[0].text) if image_title_nodes else None
         
         # Extract link URL and title
-        link_url = (link_url_node.text.strip() if (link_url_node := node.find('link_url')) else '')
+        link_url = (link_url_node.text if (link_url_node := node.find('link_url')) else '')
         link_title_nodes = list(node.find_all('link_title'))
         link_title = None
         if link_title_nodes:
@@ -801,8 +799,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (url_node := node.find('image_url')):
             return node.text
         
-        alt = (alt_node.text.strip() if (alt_node := node.find('image_alt')) else '')
-        url = url_node.text.strip()
+        alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
+        url = url_node.text
         title = (self._extract_title(title_node.text) 
                 if (title_node := node.find('image_title')) else None)
         
@@ -829,9 +827,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=1, newline=False)
 
     def visit_reference_image(self, node: Symbol) -> str:
-        alt = (alt_node.text.strip() if (alt_node := node.find('image_alt')) else '')
-        label = (label_node.text.strip().lower() 
-                if (label_node := node.find('image_ref_label')) and label_node.text.strip() 
+        alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
+        label = (label_node.text.lower() 
+                if (label_node := node.find('image_ref_label')) and label_node.text 
                 else alt.lower())
         
         if not (ref := self.resources.image_references.get(label)):
@@ -874,10 +872,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (file_node := node.find('wiki_image_file')):
             return node.text
         
-        url = file_node.text.strip()
-        align  = ( align_node.text.strip() if  (align_node := node.find('wiki_image_align')) else "")
-        width  = ( width_node.text.strip() if  (width_node := node.find('wiki_image_width')) else None)
-        height = (height_node.text.strip() if (height_node := node.find('wiki_image_height')) else None)
+        url = file_node.text
+        align  = ( align_node.text if  (align_node := node.find('wiki_image_align')) else "")
+        width  = ( width_node.text if  (width_node := node.find('wiki_image_width')) else None)
+        height = (height_node.text if (height_node := node.find('wiki_image_height')) else None)
         
         if not self._is_safe_url(url):
             return node.text
@@ -885,7 +883,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         # Build style attributes
         styles = []
 
-        match align.lower():
+        match align.strip().lower():
             case 'left':
                 styles.append('float: left; margin-right: 1em;')
             case 'right':
