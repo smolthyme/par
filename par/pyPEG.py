@@ -4,6 +4,11 @@
 import sys, re
 from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional, Dict, Iterator
 
+print_trace = False # For debugging
+
+word_regex = re.compile(r"\w+")
+rest_regex = re.compile(r".*")
+
 class keyword(str): pass
 
 class ignore(object):
@@ -91,12 +96,6 @@ class Symbol(list):
     def text(self) -> str:
         return ''.join(node if isinstance(node, str) else node.text for node in self.what)
 
-
-word_regex = re.compile(r"\w+")
-rest_regex = re.compile(r".*")
-
-print_trace = False
-
 def skip(skipper, text: str, skipWS: bool, skipComments: Union[Callable, None]) -> str:
     t = text.lstrip() if skipWS else text
     while skipComments:
@@ -123,17 +122,21 @@ class parser(object):
 
     def parseLine(self, textline, pattern:ParsePattern, resultSoFar=[], skipWS=True, skipComments: Union[Callable, None]=None) -> Tuple[list, str]:
         """\
-* textline:     text to parse
-* pattern:      pyPEG language description
-* resultSoFar:  parsing result so far (default: blank list [])
-* skipWS:       Flag if whitespace should be skipped (default: True)
-* skipComments: Python functions returning pyPEG for matching comments
+* textline     : text to parse
+* pattern      : pyPEG language description
+* resultSoFar  : parsing result so far (default: blank list [])
+* skipWS       : should whitespace be skipped (default: True)
+* skipComments : function which returns pyPEG for matching comments
 
 - returns:    pyAST, textrest"""
-
         name = None
         _textline = textline
         _pattern = pattern
+
+        def syntaxError(error=None):
+            if self.packrat:
+                self.memory[(len(_textline), id(_pattern))] = False
+            raise SyntaxError(error)
 
         def Result(result: object, text: str) -> tuple:
             if __debug__ and print_trace:
@@ -163,14 +166,8 @@ class parser(object):
             if self.packrat:
                 self.memory[(len(_textline), id(_pattern))] = (results, text)
             
-            return results, text
-
-        def syntaxError(error=None):
-            if self.packrat:
-                self.memory[(len(_textline), id(_pattern))] = False
-            raise SyntaxError(error)
-
-
+            return results, text        
+        
         if self.packrat:
             try:
                 result = self.memory[(len(textline), id(pattern))]
@@ -267,7 +264,6 @@ class parser(object):
                                 break
                         if n == -2 and not(found):
                             syntaxError(f"{text} function={p}")
-                            #syntaxError()
                     n = 1
             return Result(result, text)
 
@@ -311,8 +307,6 @@ class parser(object):
 
         return -1  # Return -1 if no valid line number is found
 
-# plain module API
-
 def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments = None, packrat = False) -> Tuple[List[Any], str]:
     p = parser(p=packrat)
     text = skip(p.skipper, textline, skipWS, skipComments)
@@ -320,26 +314,21 @@ def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments =
 
 def parse(language, lineSource, skipWS = True, skipComments = None, packrat = False, lineCount = True):
     lines, lineNo = [], 0
-
     """\
 * language     : pyPEG language description
 * lineSource   : a fileinput.FileInput object
-* skipWS:      :  Flag if whitespace should be skipped (default: True)
-* skipComments : Python function which returns pyPEG for matching comments
-* packrat      : use memoization
+* skipWS:      : should whitespace be skipped (default: True)
+* skipComments : function which returns pyPEG for matching comments
+* packrat      : cache parse results at each position to avoid redundant work (packrat)
 * lineCount    : add line number information to AST
-    
-- returns   pyAST"""
-    # while callable(language):    # Fairly sure this is handled in the parser anyway.
-        # language = language()    # Remove: Late 2025
 
+- returns   pyAST"""
+    
     orig = ""
     for line in lineSource:
         lines.append((len(orig), lineSource.filename(), lineSource.lineno() - 1))
         orig += line
-
-    textlen = len(orig)
-
+    
     try:
         p = parser(p=packrat)
         p.textlen = len(orig)
@@ -351,8 +340,9 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
         result, text = p.parseLine(text, language, [], skipWS, skipComments)
         if text:
             raise SyntaxError()
-
+    
     except SyntaxError as msg:
+        textlen = len(orig)
         parsed = textlen - p.restlen
         textlen = 0
         nn, lineNo, file = 0, 0, ""
@@ -363,7 +353,7 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
                 lineNo = l
                 nn    += 1
                 file   = ld
-
+        
         lineNo += 1
         nn -= 1
         lineCont = orig.splitlines()[nn]
