@@ -64,7 +64,7 @@ class MarkdownGrammar(dict):
         
         ## embedded html
         def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL)
-        def html_inline_block(): return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
+        def html_inline()      : return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
         
         #def words()            : return word, -1, [space, word]
         def words(ig=r'(?!)')  : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
@@ -207,7 +207,7 @@ class MarkdownGrammar(dict):
         
         def word()             : return [
                 escape_string,
-                html_block, html_inline_block,
+                html_block, html_inline,
                 # Links and images (before formatting)
                 image_link, inline_image, reference_image, wiki_image,
                 inline_link, reference_link, wiki_link,
