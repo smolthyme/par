@@ -1,29 +1,28 @@
 import re, types
+from dataclasses import dataclass, field, asdict
 from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
 from .__init__ import SimpleVisitor, MDHTMLVisitor
 
+@dataclass
 class ResourceStore:
-    def __init__(self, initial_data:dict|None=None):
-        self.store = {'links_ext': [], 'links_int': [], 'toc_items': [], 'footnotes': [], 'images': [], 'videos': [], 'audios': []}
-        if initial_data:
-            self.store = {**self.store, **initial_data}
+    """Centralized storage for all resources tracked during markdown parsing."""
     
-    def add(self, key, value):
-        if key not in self.store:
-            self.store[key] = []
-        if isinstance(self.store[key], list):
-            self.store[key].append(value)
-        else:
-            raise TypeError(f"Cannot add to key '{key}' as it is not a list.")
+    links_ext: list = field(default_factory=list)
+    links_int: list = field(default_factory=list)
+    toc_items: list = field(default_factory=list)
+    footnotes: list = field(default_factory=list)
+    images:    list = field(default_factory=list)
+    videos:    list = field(default_factory=list)
+    audios:    list = field(default_factory=list)
     
-    def get(self, key):
-        return self.store[key]
+    titles_ids: dict = field(default_factory=dict)
+    link_references:  dict = field(default_factory=dict)
+    image_references: dict = field(default_factory=dict)
     
-    def set(self, key, subkey, value):
-        if isinstance(self.store[key], dict):
-            self.store[key][subkey] = value
-        else:
-            raise TypeError(f"Cannot set subkey '{subkey}' for key '{key}' as it is not a dict.")
+    
+    def to_dict(self):
+        """Return all resources as a dictionary for external access."""
+        return asdict(self)
 
 _ = re.compile
 
@@ -248,10 +247,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         self.tag_class   = tag_class
         self.footnote_id = footnote_id
-        self.resources   = ResourceStore(resources)
+        self.resources   = resources if resources is not None else ResourceStore()
         self._current_section_level = None
-        self.link_references = {}  # Store reference link definitions
-        self.image_references = {}  # Store reference image definitions
     
     def visit(self, nodes: Symbol, root=False) -> str:
         if root:
@@ -268,8 +265,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
-        v = self.__class__(self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id)
-        v.resources = self.resources
+        v = self.__class__(self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id, resources=self.resources)
         parsed_output = v.visit(result[0])
         self.footnote_id = v.footnote_id
         
@@ -470,8 +466,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def get_title_id(self, level:int, begin=1) -> str:
-        self.titles_ids[level] = self.titles_ids.get(level, 0) + 1
-        _ids = [self.titles_ids.get(x, 0) for x in range(begin, level + 1)]
+        self.resources.titles_ids[level] = self.resources.titles_ids.get(level, 0) + 1
+        _ids = [self.resources.titles_ids.get(x, 0) for x in range(begin, level + 1)]
         return f"title_{'-'.join(map(str, _ids))}"
 
     def _alt_title(self, node: Symbol):
@@ -489,7 +485,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         _id_node = node.find('attr_def_id')
         _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
         title = (title_node := node.find('title_text')) and title_node.text.strip()
-        self.resources.add('toc_items', (level, _id, title))
+        self.resources.toc_items.append((level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
         _id_node = node.find('attr_def_id')
@@ -567,10 +563,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''.join(s)
     
     def visit_directive(self, node: Symbol):
-        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.get('toc_items'):
+        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.toc_items:
             toc = [self.tag('section', _class='toc')]
             count = 1; hi = 0
-            for lvl, anchor, title in self.resources.get('toc_items'):
+            for lvl, anchor, title in self.resources.toc_items:
                 if lvl > hi:
                     toc.append(self.tag('ul'))
                 elif lvl < hi:
@@ -581,7 +577,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             toc.append(self.tag('ul', enclose=3))
             toc.append(self.tag('section', enclose=3, newline=False))
             # Since we visited these before generating, reset the dict to make sure headings get correct id's
-            self.titles_ids = {}
+            self.resources.titles_ids.clear()
             return ''.join(toc)
 
     def visit_footnote(self, node: Symbol) -> str:
@@ -592,12 +588,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_footnote_desc(self, node):
         name = node.find('footnote').text.strip('[^]')
-        if name in [fn['name'] for fn in self.resources.get('footnotes')]:
+        if name in [fn['name'] for fn in self.resources.footnotes]:
             raise Exception("The footnote %s is already existed" % name)
 
         txt = self.visit(node.find('footnote_text')).rstrip()
         text = self.parse_markdown(txt, 'content').rstrip()
-        self.resources.add('footnotes', {'name': name, 'text': text})
+        self.resources.footnotes.append({'name': name, 'text': text})
         return ''
 
     visit_blanklines = visit_blankline
@@ -629,16 +625,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             title = self._extract_title(title_node.text) if title_node else None
             
             # Store both as link reference and image reference
-            self.link_references[label] = {'url': url, 'title': title}
-            self.image_references[label] = {'url': url, 'title': title}
+            self.resources.link_references[label] = {'url': url, 'title': title}
+            self.resources.image_references[label] = {'url': url, 'title': title}
 
     def _extract_title(self, text: str) -> str:
         """Extract title from quoted or parenthesized text"""
         if not text:
             return ""
         text = text.strip()
-        if (text.startswith('"') and text.endswith('"')) or \
-           (text.startswith("'") and text.endswith("'")):
+        if  (text.startswith('"') and text.endswith('"')) or \
+            (text.startswith("'") and text.endswith("'")):
             return text[1:-1]
         elif text.startswith('(') and text.endswith(')'):
             return text[1:-1]
@@ -714,7 +710,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_raw_url(self, node: Symbol) -> str:
         url = node.text
         if self._is_safe_url(url):
-            self.resources.add('links_ext', url)
+            self.resources.links_ext.append(url)
             return self.tag('a', url, href=url, newline=False)
         return url
 
@@ -734,7 +730,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return text
         
-        self.resources.add('links_ext', url)
+        self.resources.links_ext.append(url)
         return self.tag('a', text, href=url, title=title, newline=False)
 
     def visit_reference_link(self, node: Symbol) -> str:
@@ -746,13 +742,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (label_node := node.find('link_label')) and label_node.text.strip() 
                 else text.lower())
         
-        if not (ref := self.link_references.get(label)):
+        if not (ref := self.resources.link_references.get(label)):
             return node.text
         
         if not self._is_safe_url(url := ref['url']):
             return text
         
-        self.resources.add('links_ext', url)
+        self.resources.links_ext.append(url)
         return self.tag('a', text, href=url, title=ref.get('title'), newline=False)
 
     def visit_link_reference(self, node: Symbol) -> str:
@@ -765,7 +761,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         url = (page.lower().replace(' ', '-') + '.html' + anchor) if page else anchor
         
-        self.resources.add('links_int', url)
+        self.resources.links_int.append(url)
         return self.tag('a', text or page, href=url, newline=False)
 
     def visit_image_link(self, node: Symbol) -> str:
@@ -792,8 +788,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         # Prefix local image URLs and track resources
         prefixed_image_url = self._prefix_local_image(image_url)
-        self.resources.add('images', prefixed_image_url)
-        self.resources.add('links_ext', link_url)
+        self.resources.images.append(prefixed_image_url)
+        self.resources.links_ext.append(link_url)
         
         # Build nested tags: <a><img/></a>
         img_tag = self.tag('img', alt or "", src=prefixed_image_url, alt=alt, 
@@ -815,21 +811,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         # Check for special media types
         if self._is_youtube_url(url) and (video_id := self._extract_youtube_id(url)):
-            self.resources.add('videos', url)
+            self.resources.videos.append(url)
             return self.tag('object', '', attrs=f' class="yt-embed" data="https://www.youtube.com/embed/{video_id}"', enclose=2)
         elif self._is_video_file(url):
-            self.resources.add('videos', url)
+            self.resources.videos.append(url)
             prefixed_url = self._prefix_local_image(url)
             return self.tag('video', controls="yesplz", disablePictureInPicture="True", 
                             playsinline="True", src=prefixed_url, type='video/mp4', enclose=1)
         elif self._is_audio_file(url):
-            self.resources.add('audios', url)
+            self.resources.audios.append(url)
             prefixed_url = self._prefix_local_image(url)
             return self.tag('audio', controls="yesplz", src=prefixed_url, type='audio/mpeg', enclose=1)
 
         # Regular image
         prefixed_url = self._prefix_local_image(url)
-        self.resources.add('images', prefixed_url)
+        self.resources.images.append(prefixed_url)
         return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=1, newline=False)
 
     def visit_reference_image(self, node: Symbol) -> str:
@@ -838,7 +834,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (label_node := node.find('image_ref_label')) and label_node.text.strip() 
                 else alt.lower())
         
-        if not (ref := self.image_references.get(label)):
+        if not (ref := self.resources.image_references.get(label)):
             return node.text
         
         url = ref['url']
@@ -849,21 +845,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         # Check for special media types
         if self._is_youtube_url(url) and (video_id := self._extract_youtube_id(url)):
-            self.resources.add('videos', url)
+            self.resources.videos.append(url)
             return self.tag('iframe', '', width='560', height='315',
                             src=f'https://www.youtube.com/embed/{video_id}', frameborder='0',
                             allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
                             allowfullscreen='allowfullscreen', title=alt or 'YouTube video', enclose=2)
         
         elif self._is_video_file(url):
-            self.resources.add('videos', url)
+            self.resources.videos.append(url)
             prefixed_url = self._prefix_local_image(url)
             return self.tag('video',
                             self.tag('source', '', src=prefixed_url, type=f'video/{url.split(".")[-1]}', enclose=2),
                             controls='controls', title=title, enclose=2)
         
         elif self._is_audio_file(url):
-            self.resources.add('audios', url)
+            self.resources.audios.append(url)
             prefixed_url = self._prefix_local_image(url)
             return self.tag('audio',
                             self.tag('source', '', src=prefixed_url, type=f'audio/{url.split(".")[-1]}', enclose=2),
@@ -871,7 +867,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         # Regular image
         prefixed_url = self._prefix_local_image(url)
-        self.resources.add('images', prefixed_url)
+        self.resources.images.append(prefixed_url)
         return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=2, newline=False)
 
     def visit_wiki_image(self, node: Symbol) -> str:
@@ -910,7 +906,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         style = ' '.join(styles) if styles else None
         
         prefixed_url = self._prefix_local_image(url)
-        self.resources.add('images', prefixed_url)
+        self.resources.images.append(prefixed_url)
         return self.tag('img', '', src=prefixed_url, alt='', style=style, enclose=2, newline=False)
 
     def __end__(self):
@@ -919,10 +915,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             s.append(self._close_section())
             self._current_section_level = None
 
-        footnotes = self.resources.get('footnotes')
-        if len(footnotes) > 0:
+        if self.resources.footnotes:
             s.append(self.tag('div', _class='footnotes', newline=False) + self.tag('ol', newline=False))
-            for note in footnotes:
+            for note in self.resources.footnotes:
                 s.append(self.tag('li', id=f"fn-{note['name']}", newline=False, enclose=0))
                 s.append(note['text'] + "\n")
                 s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner', newline=False))
@@ -930,6 +925,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             s.append(self.tag('ol', enclose=3, newline=False) + self.tag('div', enclose=3, newline=False))
         return '\n'.join(s).strip()
 
+def parseText(text, filename=None, grammar=None, visitor=None):
+    """Parse markdown text and return plain text representation"""
+    g = (grammar or MarkdownGrammar)()
+    result, rest = g.parse(text, resultSoFar=[], skipWS=False)
+    v = (visitor or SimpleVisitor)(g, filename=filename)
+    return v.visit(result, root=True)
 
 def parseHtml(text, tag_class=None, filename=None, grammar=None, visitor=None):
     """Parse markdown text and return HTML"""
@@ -946,9 +947,12 @@ def parseEmbeddedHtml(text):
         parsed = re.sub(clean, "", parsed)
     return parsed
 
-def parseText(text, filename=None, grammar=None, visitor=None):
-    """Parse markdown text and return plain text representation"""
+def parseHtmlDebug(text, tag_class=None, filename=None, grammar=None, visitor=None):
+    """Parse markdown text and return tuple of (HTML, resources_dict)
+       * resources_dict contains all tracked resources including links, images, videos, etc.
+    """
     g = (grammar or MarkdownGrammar)()
     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
-    v = (visitor or SimpleVisitor)(g, filename=filename)
-    return v.visit(result, root=True)
+    v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g, filename=filename)
+    html = v.visit(result[0], root=True)
+    return (html, v.resources.to_dict())
