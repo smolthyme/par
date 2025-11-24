@@ -124,7 +124,7 @@ class MarkdownGrammar(dict):
         def table()            : return table_head, table_separator, table_body
         
         # Horizontal items
-        def side_block_head()  : return _(r'\|\|\|'), blankline
+        def side_block_head()  : return _(r'\|\|\|'), blankline # TODO Add class/etc support
         def side_block_cont()  : return [text, lists, paragraph], blankline
         def side_block_item()  : return side_block_head, -2, side_block_cont
         def side_block()       : return -2, side_block_item, -1, blankline
