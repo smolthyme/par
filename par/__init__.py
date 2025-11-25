@@ -28,49 +28,49 @@ __version__ = '1.3.4'
 _ = re.compile
 
 class SimpleVisitor(object):
-    def __init__(self, grammar=None, filename=None):
+    def __init__(self, grammar=None):
         self.grammar = grammar
-        self.filename = filename
     
     def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
         buf = []
         if not isinstance(nodes, (list, tuple)):
             nodes = [nodes]
-        if root:
-            if (method := getattr(self, '__begin__', None)):
-                buf.append(method())
+        
+        # Cache class dict for faster method lookups
+        methods = self.__class__.__dict__
+        
+        if root and (method := methods.get('__begin__')):
+            buf.append(method(self))
+        
         for node in nodes:
             if isinstance(node, str):
                 buf.append(node)
             else:
-                if (method := getattr(self, 'before_visit', None)):
-                    buf.append(method(node))
-                if (method := getattr(self, f'visit_{node.__name__}_begin', None)):
-                    buf.append(method(node))
-                if (method := getattr(self, f'visit_{node.__name__}', None)):
-                    buf.append(method(node))
+                node_name = node.__name__
+                
+                if (method := methods.get('before_visit')):
+                    buf.append(method(self, node))
+                if (method := methods.get(f'visit_{node_name}_begin')):
+                    buf.append(method(self, node))
+                if (method := methods.get(f'visit_{node_name}')):
+                    buf.append(method(self, node))
                 else:
-                    if isinstance(node.what, str):
-                        buf.append(node.what)
-                    else:
-                        buf.append(self.visit(node.what))
-                if (method := getattr(self, f'visit_{node.__name__}_end', None)):
-                    buf.append(method(node))
-                if (method := getattr(self, 'after_visit', None)):
-                    buf.append(method(node))
-        if root:
-            if (method := getattr(self, '__end__', None)):
-                buf.append(method())
+                    buf.append(node.what if isinstance(node.what, str) else self.visit(node.what))
+                if (method := methods.get(f'visit_{node_name}_end')):
+                    buf.append(method(self, node))
+                if (method := methods.get('after_visit')):
+                    buf.append(method(self, node))
+        
+        if root and (method := methods.get('__end__')):
+            buf.append(method(self))
+        
         return ''.join(buf)
 
 class HTMLVisitor(SimpleVisitor):
     tag_class = {}
     
-    # Pretty sure filename can be removed
-    def __init__(self, grammar=None, filename=None, tag_class=None):
-        super(HTMLVisitor, self).__init__(grammar, filename)
-        #self.tag_class = tag_class or self.__class__.tag_class
-        self._template = '<html><head><title>{title}</title></head><body>{body}</body></html>'
+    def __init__(self, grammar=None, tag_class=None):
+        super(HTMLVisitor, self).__init__(grammar)
     
     def tag(self, tag: str, child='', attrs='', enclose=0, newline=True, **kwargs) -> str:
         """HTML tag generator
@@ -132,20 +132,10 @@ class HTMLVisitor(SimpleVisitor):
         return text[:max_length] if max_length > 0 else text
 
     def to_html_charcodes(self, text: str) -> str:
-        text = text.replace('&', '&amp;')
-        text = text.replace('<', '&lt;')
-        text = text.replace('>', '&gt;')
-        return text
+        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 class MDHTMLVisitor(HTMLVisitor):
-    # Pretty sure filename can be removed
-    def __init__(self, grammar=None, filename=None, title="", tag_class=None):
-        super(MDHTMLVisitor, self).__init__(grammar, filename)
-        self.title = title
+    def __init__(self, grammar=None, tag_class=None):
+        super(MDHTMLVisitor, self).__init__(grammar)
         self.titles_ids = {}
         self.tag_class = tag_class or self.__class__.tag_class
-        self._template = '{body}'
-    
-
-
-

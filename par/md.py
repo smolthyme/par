@@ -241,8 +241,8 @@ class MarkdownGrammar(dict):
 
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):    
-    def __init__(self, tag_class={}, grammar=None, footnote_id=1, filename=None, resources=None):
-        super().__init__(grammar, filename)
+    def __init__(self, tag_class={}, grammar=None, footnote_id=1, resources=None):
+        super().__init__(grammar)
         
         self.tag_class   = tag_class
         self.footnote_id = footnote_id
@@ -264,7 +264,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
-        v = self.__class__(self.tag_class, g, filename=self.filename, footnote_id=self.footnote_id, resources=self.resources)
+        v = self.__class__(self.tag_class, g, footnote_id=self.footnote_id, resources=self.resources)
         parsed_output = v.visit(result[0])
         self.footnote_id = v.footnote_id
         
@@ -922,18 +922,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             s.append(self.tag('ol', enclose=3, newline=False) + self.tag('div', enclose=3, newline=False))
         return '\n'.join(s).strip()
 
-def parseText(text, filename=None, grammar=None, visitor=None):
+def parseText(text, grammar=None, visitor=None):
     """Parse markdown text and return plain text representation"""
     g = (grammar or MarkdownGrammar)()
     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
-    v = (visitor or SimpleVisitor)(g, filename=filename)
+    v = (visitor or SimpleVisitor)(g)
     return v.visit(result, root=True)
 
-def parseHtml(text, tag_class=None, filename=None, grammar=None, visitor=None):
+def parseHtml(text, tag_class=None, grammar=None, visitor=None):
     """Parse markdown text and return HTML"""
     g = (grammar or MarkdownGrammar)()
     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
-    v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g, filename=filename)
+    v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g)
     return v.visit(result[0], root=True)
 
 def parseEmbeddedHtml(text):
@@ -944,12 +944,12 @@ def parseEmbeddedHtml(text):
         parsed = re.sub(clean, "", parsed)
     return parsed
 
-def parseHtmlDebug(text, tag_class=None, filename=None, grammar=None, visitor=None):
+def parseHtmlDebug(text, tag_class=None, grammar=None, visitor=None):
     """Parse markdown text and return tuple of (HTML, resources_dict)
        * resources_dict contains all tracked resources including links, images, videos, etc.
     """
     g = (grammar or MarkdownGrammar)()
     result, rest = g.parse(text, resultSoFar=[], skipWS=False)
-    v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g, filename=filename)
+    v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g)
     html = v.visit(result[0], root=True)
     return (html, v.resources.to_dict())

@@ -58,8 +58,8 @@ class SCSSGrammar(dict):
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
 class SCSSVisitor(SimpleVisitor):
-    def __init__(self, grammar=None, filename=None):
-        super().__init__(grammar, filename)
+    def __init__(self, grammar=None):
+        super().__init__(grammar)
 
     def visit_css_selectors(self, node):
         return ", ".join([self.visit(n) for n in node])
