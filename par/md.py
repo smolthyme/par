@@ -508,7 +508,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_indent_block_line(self, node: Symbol) -> str:
         return node[1].text
 
-
     def visit_star_rating(self, node: Symbol) -> str:
         r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
         if (m := r.match(node.text)):
@@ -528,9 +527,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 t = x.text.strip("| \t")
                 self.table_align[i] = 'center' if t.startswith(':') and t.endswith(':') else 'left' if t.startswith(':') else 'right' if t.endswith(':') else ''
         return self.tag('table')
-
-    def visit_table_end(self, node: Symbol) -> str:
-        return self.tag('table', enclose=3)
 
     def visit_table_head(self, node: Symbol) -> str:
         s = [self.tag('thead')+self.tag('tr', newline=False)]
@@ -558,7 +554,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 s.append(self.tag("td", "", newline=False, enclose=2))
         s.append(self.tag('tr', enclose=3))
         return ''.join(s)
-    
+
+    def visit_table_end(self, node: Symbol) -> str:
+        return self.tag('table', enclose=3)
+
     def visit_directive(self, node: Symbol):
         if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.toc_items:
             toc = [self.tag('section', _class='toc')]
@@ -610,6 +609,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return self.tag('section', enclose=3)
         return ''
 
+    def _extract_title(self, text: str) -> str:
+        """Extract title from quoted or parenthesized text"""
+        if not text:
+            return ""
+        text = text.strip()
+        if  (text.startswith('"') and text.endswith('"')) or \
+            (text.startswith("'") and text.endswith("'")):
+            return text[1:-1]
+        elif text.startswith('(') and text.endswith(')'):
+            return text[1:-1]
+        return text
+
     def _collect_link_reference(self, node: Symbol):
         """Collect reference link definitions during initial pass"""
         label_node = node.find('link_ref_label')
@@ -625,17 +636,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             self.resources.link_references[label]  = {'url': url, 'title': title}
             self.resources.image_references[label] = {'url': url, 'title': title}
 
-    def _extract_title(self, text: str) -> str:
-        """Extract title from quoted or parenthesized text"""
-        if not text:
-            return ""
-        text = text.strip()
-        if  (text.startswith('"') and text.endswith('"')) or \
-            (text.startswith("'") and text.endswith("'")):
-            return text[1:-1]
-        elif text.startswith('(') and text.endswith(')'):
-            return text[1:-1]
-        return text
+
 
     def _is_safe_url(self, url: str) -> bool:
         """Check if URL is safe (not javascript:, vbscript:, data:)"""
@@ -644,64 +645,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         url_lower = url.lower().strip()
         dangerous = ['javascript:', 'vbscript:', 'data:']
         return not any(url_lower.startswith(d) for d in dangerous)
-
-    def _is_video_file(self, url: str) -> bool:
-        """Check if URL points to a video file"""
-        video_exts = ['.mp4', '.m4v', '.mkv', '.webm']
-        return any(url.lower().endswith(ext) for ext in video_exts)
-
-    def _is_audio_file(self, url: str) -> bool:
-        """Check if URL points to an audio file"""
-        audio_exts = ['.mp3', '.m4a', '.aac', '.ogg', '.oga', '.opus']
-        return any(url.lower().endswith(ext) for ext in audio_exts)
-
-    def _is_youtube_url(self, url: str) -> bool:
-        """Check if URL is a YouTube link"""
-        youtube_patterns = [
-            'youtube.com/watch',
-            'youtu.be/',
-            'youtube.com/embed/',
-            'youtube.com/v/'
-        ]
-        return any(pattern in url.lower() for pattern in youtube_patterns)
-
-    def _extract_youtube_id(self, url: str) -> str | None:
-        """Extract YouTube video ID from URL"""
-        patterns = [
-            _(r'youtube\.com/watch\?v=([^&]{11})'),
-            _(r'youtu\.be/([^?]{11})'),
-            _(r'youtube\.com/embed/([^?]{11})'),
-            _(r'youtube\.com/v/([^?]{11})')
-        ]
-        for pattern in patterns:
-            if match := pattern.search(url):
-                return match.group(1)
-        return None
-
-    def _obfuscate_email(self, email: str) -> str:
-        """Obfuscate email address for spam protection"""
-        result = []
-        for char in email:
-            if char == '@':
-                result.append('&#64;')
-            elif char == '.':
-                result.append('&#46;')
-            else:
-                # Random mix of decimal and hex encoding
-                import random
-                if random.choice([True, False]):
-                    result.append(f'&#x{ord(char):x};')
-                else:
-                    result.append(f'&#{ord(char)};')
-        return ''.join(result)
-
-    def _prefix_local_image(self, url: str) -> str:
-        """Prefix local images with images/ directory if not already prefixed"""
-        if url.startswith(('http://', 'https://', 'ftp://', '/')):
-            return url
-        if not url.startswith('images/'):
-            return f'images/{url}'
-        return url
 
     # Link visitors
     def visit_raw_url(self, node: Symbol) -> str:
@@ -761,6 +704,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.resources.links_int.append(url)
         return self.tag('a', text or page, href=url, newline=False)
 
+    def _prefix_local_image(self, url: str) -> str:
+        """Prefix local images with images/ directory if not already prefixed"""
+        if url.startswith(('http://', 'https://', 'ftp://', '/')):
+            return url
+        if not url.startswith('images/'):
+            return f'images/{url}'
+        return url
+
     def visit_image_link(self, node: Symbol) -> str:
         """Handle [![alt](image-url)](link-url) syntax - generates <a><img/></a>"""
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else None)
@@ -792,6 +743,56 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         img_tag = self.tag('img', alt or "", src=prefixed_image_url, alt=alt, 
                             title=image_title, newline=False)
         return self.tag('a', img_tag, href=link_url, title=link_title, newline=False)
+
+    def _is_video_file(self, url: str) -> bool:
+        """Check if URL points to a video file"""
+        video_exts = ['.mp4', '.m4v', '.mkv', '.webm']
+        return any(url.lower().endswith(ext) for ext in video_exts)
+
+    def _is_audio_file(self, url: str) -> bool:
+        """Check if URL points to an audio file"""
+        audio_exts = ['.mp3', '.m4a', '.aac', '.ogg', '.oga', '.opus']
+        return any(url.lower().endswith(ext) for ext in audio_exts)
+
+    def _is_youtube_url(self, url: str) -> bool:
+        """Check if URL is a YouTube link"""
+        youtube_patterns = [
+            'youtube.com/watch',
+            'youtu.be/',
+            'youtube.com/embed/',
+            'youtube.com/v/'
+        ]
+        return any(pattern in url.lower() for pattern in youtube_patterns)
+
+    def _extract_youtube_id(self, url: str) -> str | None:
+        """Extract YouTube video ID from URL"""
+        patterns = [
+            _(r'youtube\.com/watch\?v=([^&]{11})'),
+            _(r'youtu\.be/([^?]{11})'),
+            _(r'youtube\.com/embed/([^?]{11})'),
+            _(r'youtube\.com/v/([^?]{11})')
+        ]
+        for pattern in patterns:
+            if match := pattern.search(url):
+                return match.group(1)
+        return None
+
+    def _obfuscate_email(self, email: str) -> str:
+        """Obfuscate email address for spam protection"""
+        result = []
+        for char in email:
+            if char == '@':
+                result.append('&#64;')
+            elif char == '.':
+                result.append('&#46;')
+            else:
+                # Random mix of decimal and hex encoding
+                import random
+                if random.choice([True, False]):
+                    result.append(f'&#x{ord(char):x};')
+                else:
+                    result.append(f'&#{ord(char)};')
+        return ''.join(result)
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
