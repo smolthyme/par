@@ -313,25 +313,31 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         def process_node(n):
             text = ''.join(self.visit(x) for x in n)
             t = self.parse_markdown(text, 'content').rstrip()
-            return t[3:-4].rstrip() if t.count('<p>') == 1 and t.startswith('<p>') and t.endswith('</p>') else t
+            
+            # If content starts with a single paragraph, unwrap it
+            if t.startswith('<p>') and t.count('<p>') == 1:
+                if (close_idx := t.find('</p>')) != -1:
+                    return t[3:close_idx] + t[close_idx+4:] # i.e. <p> and </p>
+            
+            return t
 
         def create_list(lists):
-            buf = []; old = None; parent = None
-
+            l_items = []; old = None; parent = None
+            
             for _type, _node in lists:
                 if _type == old:
-                    buf.append(self.tag('li', process_node(_node)))
+                    l_items.append(self.tag('li', process_node(_node)))
                 else:
                     if parent:
-                        buf.append(self.tag(parent, enclose=3))
+                        l_items.append(self.tag(parent, enclose=3))
                     parent = 'ul' if _type == 'b' else 'ol'
-                    buf.append(self.tag(parent))
-                    buf.append(self.tag('li', process_node(_node)))
+                    l_items.append(self.tag(parent))
+                    l_items.append(self.tag('li', process_node(_node)))
                     old = _type
-            if len(buf) > 0 and parent:
-                buf.append(self.tag(parent, enclose=3))
+            if len(l_items) > 0 and parent:
+                l_items.append(self.tag(parent, enclose=3))
             
-            return ''.join(buf)
+            return ''.join(l_items)
         return create_list(self.lists)
 
     def visit_dl_begin(self, node: Symbol) -> str:

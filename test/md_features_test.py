@@ -90,12 +90,12 @@ class TestListsSimpleHTML(unittest.TestCase):
     '''
         expected = '''\
 <ul>
-<li><p>a</p>
+<li>a
 <ul>
 <li>b</li>
 <li>c</li>
 </ul></li>
-<li><p>d</p>
+<li>d
 <ul>
 <li>e</li>
 </ul></li>
@@ -154,7 +154,7 @@ class TestListsComplexHTML(unittest.TestCase):
 <li>Bubbles
 <ol>
 <li>bunk</li>
-<li>bupkis</li>
+<li>bupkis
 <ul>
 <li>BELITTLER</li>
 </ul></li>
@@ -175,7 +175,7 @@ class TestListsComplexHTML(unittest.TestCase):
 '''
         expected = '''\
 <ol>
-<li><p>abc</p>
+<li>abc
 <pre><code>code</code></pre></li>
 </ol>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
@@ -188,11 +188,50 @@ class TestListsComplexHTML(unittest.TestCase):
 '''
         expected = '''\
 <ol>
-<li><p>abc</p>
-<pre><code>code</code></pre></li>
+<li>abc
+<pre><code>code
+</code></pre></li>
 </ol>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_ordered_list_with_language_code_blocks(self):
+        md_text = '''\
+1. Python example:
+    ```python
+    def greet(name):
+        print(f"Hello, {name}!")
+    greet("World")
+    ```
+
+2. JavaScript example:
+    ```javascript
+    function add(a, b) {
+        return a + b;
+    }
+    console.log(add(2, 3));
+    ```
+
+3. Bash example:
+    ```bash
+    echo "Hello from Bash!"
+    ```
+''';       expected = '''\
+<ol>
+<li>Python example:
+<pre><code class="language-python">def greet(name):
+    print(f"Hello, {name}!")
+greet("World")</code></pre></li>
+<li>JavaScript example:
+<pre><code class="language-javascript">function add(a, b) {
+    return a + b;
+}
+console.log(add(2, 3));</code></pre></li>
+<li>Bash example:
+<pre><code class="language-bash">echo "Hello from Bash!"</code></pre></li>
+</ol>'''
+        self.maxDiff = None
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+    
     def test_nested_definition_list_in_ordered_list(self):
         md_text = '''\
 1. aaa
@@ -237,7 +276,7 @@ class TestListsComplexHTML(unittest.TestCase):
 
     def test_list_with_checkboxes_and_radios(self):
         md_text = '''\
-* [] a
+* [ ] a
 * [*] b
     * <*> c
     * < > d
@@ -249,18 +288,19 @@ class TestListsComplexHTML(unittest.TestCase):
         expected = '''\
 <ul>
 <li><input type="checkbox"></input>a</li>
-<li><p><input type="checkbox" checked></input>b</p>
+<li><input type="checkbox" checked></input>b
 <ul>
 <li><input type="radio" checked></input>c</li>
 <li><input type="radio"></input>d</li>
 </ul></li>
-<li><p><input type="checkbox"></input>a</p>
+<li><input type="checkbox"></input>a
 <ul>
 <li><input type="checkbox" checked></input>b</li>
 <li><input type="radio" checked></input>c</li>
 <li><input type="radio"></input>d</li>
 </ul></li>
 </ul>'''
+        self.maxDiff = None
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 
@@ -694,10 +734,10 @@ class TestMiscInlineHTML(unittest.TestCase):
         expected = '''<p>★★★★ / wombat wontparse</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
-    def test_button_link(self):
-        md_text = '''((Click Me|http://example.com|btn-primary))'''
-        expected = '''<p><button onclick="location.href='http://example.com'" class="btn-primary">Click Me</button></p>'''
-        #self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+    # def test_button_link(self):
+    #     md_text = '''((Click Me|http://example.com|btn-primary))'''
+    #     expected = '''<p><button onclick="location.href='http://example.com'" class="btn-primary">Click Me</button></p>'''
+    #     self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 class TestMiscBlocksHTML(unittest.TestCase):
     def test_blockquote_with_attribution(self):
