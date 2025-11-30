@@ -614,10 +614,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.resources.footnotes.append({'name': name, 'text': text})
         return ''
 
-    visit_blanklines = visit_blankline
-    visit_quote_blank_line = visit_blankline
-
-
     def _open_section(self, id):
         stry = ""
         if self._current_section_level is not None:
