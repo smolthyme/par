@@ -185,12 +185,13 @@ class TestListsComplexHTML(unittest.TestCase):
 1. abc
 
         code
+        more code
 '''
         expected = '''\
 <ol>
 <li>abc
 <pre><code>code
-</code></pre></li>
+more code</code></pre></li>
 </ol>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
