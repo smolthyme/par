@@ -91,9 +91,9 @@ class MarkdownGrammar(dict):
         ## pre
         def pre_indent()       : return _(r' {4}|\t')
         def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
-        def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
+        def pre_text1()        : return _(r'.+?(?=```|~~~+)', re.M|re.DOTALL)
         def pre_text2()        : return _(r'.+?(?=</code>)', re.M|re.DOTALL)
-        def pre_extra1()       : return _(r'```|~~~'), 0, pre_lang, blankline, pre_text1, _(r'```|~~~'), -2, blankline
+        def pre_extra1()       : return _(r'```|~~~+'), 0, pre_lang, blankline, pre_text1, _(r'```|~~~+'), -2, blankline
         def pre_extra2()       : return _(r'<code>'), 0, pre_lang, blankline, pre_text2, _(r'</code>'), -2, blankline
         def pre()              : return 0, pre_indent, [pre_extra1, pre_extra2]
         
