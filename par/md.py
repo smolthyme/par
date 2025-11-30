@@ -89,14 +89,13 @@ class MarkdownGrammar(dict):
         def footnote_desc()    : return footnote, _(r':'), footnote_text
         
         ## pre
-        def indent_line()      : return _(r' {4}|\t'), text, blankline
-        def indent_block()     : return -2, indent_line, -1, [indent_line, blankline]
+        def pre_indent()       : return _(r' {4}|\t')
         def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
         def pre_text1()        : return _(r'.+?(?=```|~~~)', re.M|re.DOTALL)
         def pre_text2()        : return _(r'.+?(?=</code>)', re.M|re.DOTALL)
-        def pre_extra1()       : return _(r'```|~{3,}'), 0, pre_lang, blankline, pre_text1, _(r'```|~{3,}'), -2, blankline
+        def pre_extra1()       : return _(r'```|~~~'), 0, pre_lang, blankline, pre_text1, _(r'```|~~~'), -2, blankline
         def pre_extra2()       : return _(r'<code>'), 0, pre_lang, blankline, pre_text2, _(r'</code>'), -2, blankline
-        def pre()              : return [indent_block, pre_extra1, pre_extra2]
+        def pre()              : return 0, pre_indent, [pre_extra1, pre_extra2]
         
         ## class and id definition
         def attr_def_id()      : return _(r'#[^\s\}]+')
@@ -134,7 +133,7 @@ class MarkdownGrammar(dict):
         def list_rest_of_line(): return _(r'.+'), blankline
         def list_first_para()  : return 0, check_radio, -1, (0, space, text), -1, blanklines
         def list_lines()       : return list_norm_line, -1, [list_indent_lines, blankline]
-        def list_indent_line() : return _(r' {4}|\t'), list_rest_of_line
+        def list_indent_line() : return ignore(r' {4}|\t'), list_rest_of_line
         def list_norm_line()   : return _(r' {1,4}'), text, -1, (0, space, text), -1, blanklines
         def list_indent_lines(): return list_indent_line, -1, list_indent_line, -1, blanklines
         def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines]
@@ -143,8 +142,8 @@ class MarkdownGrammar(dict):
         def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
         
         ## Definition Lists
-        def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig=r'--'), 0, _(r'--'), blankline
-        def dl_dd_content()    : return 0, ignore(r"[ \t]+"), [lists, pre, paragraph]
+        def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig=r'--\B'), 0, _(r'--'), blankline
+        def dl_dd_content()    : return 0, _(r"[ \t]+"), [lists, pre, paragraph]
         def dl_dd()            : return [space, _(r':\s*')], dl_dd_content
         def dl_dt_n_dd()       : return dl_dt, dl_dd, -1, dl_dd
         def dl()               : return -2, dl_dt_n_dd
@@ -431,14 +430,31 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (k := n.find('block_kwargs_key')):
                     key = k.text
                     val = v_node.text if (v_node := n.find('block_kwargs_val')) else None
-
                     if key == 'lang' or val is None:
                         cwargs['class'] = 'language-' + (val or key)
                     else:
                         kwargs[key] = val or 'language-' + key
         
         if pre_text := node.find('pre_text1') or node.find('pre_text2'):
-            code_content = self.to_html_charcodes(pre_text.text.strip("` \t\n"))
+            # The code blocks may have a common indent that needs to be removed
+            pre_txt = pre_text.text
+            indent = node.find('pre_indent')
+            
+            # Use the pre_indent length if present, otherwise detect common indent
+            if indent:
+                indent_len = len(indent.text)
+            else:
+                # Find the minimum indent among non-empty lines
+                lines = pre_txt.splitlines()
+                indent_len = min((len(line) - len(line.lstrip(' \t')) for line in lines if line.strip()), default=0)
+            
+            # Remove the indent from all lines
+            if indent_len > 0:
+                lines = pre_txt.splitlines()
+                pre_txt = '\n'.join(line[indent_len:] if len(line) >= indent_len else line
+                                    for line in lines)
+            
+            code_content = self.to_html_charcodes(pre_txt.strip("` \t\n"))
             return self.tag('pre', self.tag('code', code_content, newline=False, **cwargs), **kwargs)
         else:
             return self.tag('pre', self.tag('code', node.text.strip("` \t\n"), newline=False, **cwargs), **kwargs)
