@@ -639,18 +639,69 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         """Check if URL is safe (not javascript:, vbscript:, data:)"""
         return not any(url.lower().strip().startswith(d) for d in ['javascript:', 'vbscript:', 'data:'])
 
-    # Link visitors
+    def _get_media_type(self, url: str) -> tuple[str, str | None]:
+        """Determine media type and metadata from URL."""
+        if 'youtube.com' in url or 'youtu.be' in url:
+            for pattern in [
+                _(r'youtube\.com/watch\?v=([^&]{11})'),
+                _(r'youtu\.be/([^?]{11})'),
+                _(r'youtube\.com/embed/([^?]{11})'),
+                _(r'youtube\.com/v/([^?]{11})')]:
+                if match := pattern.search(url):
+                    return 'youtube', match.group(1)
+        
+        ext = url.lower().split('.')[-1] if '.' in url else ''
+        if ext in {'mp4', 'm4v', 'mkv', 'webm'}:
+            return 'video', ext
+        if ext in {'mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus'}:
+            return 'audio', ext
+        
+        return 'image', None
+
+    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '') -> str:
+        """Unified media rendering logic"""
+        media_type, meta = self._get_media_type(url)
+        
+        if media_type == 'youtube':
+            self.resources.videos.append(url)
+            return self.tag('object', '', attrs=f' class="yt-embed" data="https://www.youtube.com/embed/{meta}"', enclose=2)
+        
+        elif media_type == 'video':
+            self.resources.videos.append(url)
+            src = self._prefix_local_image(url)
+            return self.tag('video', controls="yesplz", disablePictureInPicture="True", 
+                            playsinline="True", src=src, type=f'video/{meta}', enclose=enclose)
+        
+        elif media_type == 'audio':
+            self.resources.audios.append(url)
+            src = self._prefix_local_image(url)
+            mime = 'audio/mpeg' if meta == 'mp3' else f'audio/{meta}'
+            return self.tag('audio', controls="yesplz", src=src, type=mime, enclose=enclose)
+            
+        else: # Image
+            self.resources.images.append(url)
+            src = self._prefix_local_image(url)
+            return self.tag('img', content, src=src, alt=alt, title=title, style=style, enclose=enclose, newline=False)
+
+    def _render_link(self, url: str, text: str, title: str | None = None) -> str:
+        """Unified link rendering logic"""
+        if not self._is_safe_url(url):
+            return text
+            
+        self.resources.links_ext.append(url)
+        return self.tag('a', text, href=url, title=title, newline=False)
+
     def visit_raw_url(self, node: Symbol) -> str:
-        url = node.text
-        if self._is_safe_url(url):
-            self.resources.links_ext.append(url)
-            return self.tag('a', url, href=url, newline=False)
-        return url
+        return self._render_link(node.text, node.text)
 
     def visit_email_address(self, node: Symbol) -> str:
+        import random
         email = node.text
-        obfuscated = self._obfuscate_email(email)
-        return self.tag('a', obfuscated, href=f'mailto:{email}', newline=False)
+        result = [  '&#64;' if char == '@' else
+                    '&#46;' if char == '.' else
+                    (f'&#x{ord(char):x};' if random.choice([True, False]) else f'&#{ord(char)};')
+                    for char in email ]
+        return self.tag('a', ''.join(result), href=f'mailto:{email}', newline=False)
 
     def visit_inline_link(self, node: Symbol) -> str:
         if not (url_node := node.find('link_url')):
@@ -660,11 +711,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         url = url_node.text
         title = (self._extract_title(title_node.text) if (title_node := node.find('link_title')) else None)
         
-        if not self._is_safe_url(url):
-            return text
-        
-        self.resources.links_ext.append(url)
-        return self.tag('a', text, href=url, title=title, newline=False)
+        return self._render_link(url, text, title)
 
     def visit_reference_link(self, node: Symbol) -> str:
         if not (text_node := node.find('link_text')):
@@ -678,11 +725,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (ref := self.resources.link_references.get(label)):
             return node.text
         
-        if not self._is_safe_url(url := ref['url']):
-            return text
-        
-        self.resources.links_ext.append(url)
-        return self.tag('a', text, href=url, title=ref.get('title'), newline=False)
+        return self._render_link(ref['url'], text, ref.get('title'))
 
     def visit_link_reference(self, node: Symbol) -> str:
         return ''
@@ -726,65 +769,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(image_url) or not self._is_safe_url(link_url):
             return node.text
         
-        # Prefix local image URLs and track resources
-        prefixed_image_url = self._prefix_local_image(image_url)
-        self.resources.images.append(prefixed_image_url)
-        self.resources.links_ext.append(link_url)
+        img_tag = self._render_media(image_url, alt or "", image_title, enclose=0, content=alt or "")
         
-        # Build nested tags: <a><img/></a>
-        img_tag = self.tag('img', alt or "", src=prefixed_image_url, alt=alt, 
-                            title=image_title, newline=False)
+        self.resources.links_ext.append(link_url)
         return self.tag('a', img_tag, href=link_url, title=link_title, newline=False)
-
-    def _is_video_file(self, url: str) -> bool:
-        """Check if URL points to a video file"""
-        video_exts = ['.mp4', '.m4v', '.mkv', '.webm']
-        return any(url.lower().endswith(ext) for ext in video_exts)
-
-    def _is_audio_file(self, url: str) -> bool:
-        """Check if URL points to an audio file"""
-        audio_exts = ['.mp3', '.m4a', '.aac', '.ogg', '.oga', '.opus']
-        return any(url.lower().endswith(ext) for ext in audio_exts)
-
-    def _is_youtube_url(self, url: str) -> bool:
-        """Check if URL is a YouTube link"""
-        youtube_patterns = [
-            'youtube.com/watch',
-            'youtu.be/',
-            'youtube.com/embed/',
-            'youtube.com/v/'
-        ]
-        return any(pattern in url.lower() for pattern in youtube_patterns)
-
-    def _extract_youtube_id(self, url: str) -> str | None:
-        """Extract YouTube video ID from URL"""
-        patterns = [
-            _(r'youtube\.com/watch\?v=([^&]{11})'),
-            _(r'youtu\.be/([^?]{11})'),
-            _(r'youtube\.com/embed/([^?]{11})'),
-            _(r'youtube\.com/v/([^?]{11})')
-        ]
-        for pattern in patterns:
-            if match := pattern.search(url):
-                return match.group(1)
-        return None
-
-    def _obfuscate_email(self, email: str) -> str:
-        """Obfuscate email address for spam protection"""
-        result = []
-        for char in email:
-            if char == '@':
-                result.append('&#64;')
-            elif char == '.':
-                result.append('&#46;')
-            else:
-                # Random mix of decimal and hex encoding
-                import random
-                if random.choice([True, False]):
-                    result.append(f'&#x{ord(char):x};')
-                else:
-                    result.append(f'&#{ord(char)};')
-        return ''.join(result)
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
@@ -799,24 +787,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return node.text
         
-        # Check for special media types
-        if self._is_youtube_url(url) and (video_id := self._extract_youtube_id(url)):
-            self.resources.videos.append(url)
-            return self.tag('object', '', attrs=f' class="yt-embed" data="https://www.youtube.com/embed/{video_id}"', enclose=2)
-        elif self._is_video_file(url):
-            self.resources.videos.append(url)
-            prefixed_url = self._prefix_local_image(url)
-            return self.tag('video', controls="yesplz", disablePictureInPicture="True", 
-                            playsinline="True", src=prefixed_url, type='video/mp4', enclose=1)
-        elif self._is_audio_file(url):
-            self.resources.audios.append(url)
-            prefixed_url = self._prefix_local_image(url)
-            return self.tag('audio', controls="yesplz", src=prefixed_url, type='audio/mpeg', enclose=1)
-
-        # Regular image
-        prefixed_url = self._prefix_local_image(url)
-        self.resources.images.append(prefixed_url)
-        return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=1, newline=False)
+        return self._render_media(url, alt, title, enclose=1)
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
@@ -832,33 +803,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         if not self._is_safe_url(url):
             return node.text
-        
-        # Check for special media types
-        if self._is_youtube_url(url) and (video_id := self._extract_youtube_id(url)):
-            self.resources.videos.append(url)
-            return self.tag('iframe', '', width='560', height='315',
-                            src=f'https://www.youtube.com/embed/{video_id}', frameborder='0',
-                            allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
-                            allowfullscreen='allowfullscreen', title=alt or 'YouTube video', enclose=2)
-        
-        elif self._is_video_file(url):
-            self.resources.videos.append(url)
-            prefixed_url = self._prefix_local_image(url)
-            return self.tag('video',
-                            self.tag('source', '', src=prefixed_url, type=f'video/{url.split(".")[-1]}', enclose=2),
-                            controls='controls', title=title, enclose=2)
-        
-        elif self._is_audio_file(url):
-            self.resources.audios.append(url)
-            prefixed_url = self._prefix_local_image(url)
-            return self.tag('audio',
-                            self.tag('source', '', src=prefixed_url, type=f'audio/{url.split(".")[-1]}', enclose=2),
-                            controls='controls', title=title, enclose=2)
-        
-        # Regular image
-        prefixed_url = self._prefix_local_image(url)
-        self.resources.images.append(prefixed_url)
-        return self.tag('img', '', src=prefixed_url, alt=alt, title=title, enclose=2, newline=False)
+            
+        return self._render_media(url, alt, title, enclose=2)
 
     def visit_wiki_image(self, node: Symbol) -> str:
         if not (file_node := node.find('wiki_image_file')):
@@ -895,9 +841,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         style = ' '.join(styles) if styles else None
         
-        prefixed_url = self._prefix_local_image(url)
-        self.resources.images.append(prefixed_url)
-        return self.tag('img', '', src=prefixed_url, alt='', style=style, enclose=2, newline=False)
+        return self._render_media(url, '', None, enclose=2, style=style)
 
     def __end__(self):
         s = []; 
