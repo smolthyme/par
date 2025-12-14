@@ -184,14 +184,14 @@ class MarkdownGrammar(dict):
         def image_alt()        : return _(r'[^\]]+')
         def image_url()        : return _(r'[^\s\)]+')
         def image_title()      : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
-        def inline_image()     : return _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)')
+        def inline_image()     : return _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), 0, attr_def
         
         # Images - reference
         def image_ref_label()  : return _(r'[^\]]*')
-        def reference_image()  : return _(r'!\['), 0, image_alt, _(r'\]'), 0, space, _(r'\['), 0, image_ref_label, _(r'\]')
+        def reference_image()  : return _(r'!\['), 0, image_alt, _(r'\]'), 0, space, _(r'\['), 0, image_ref_label, _(r'\]'), 0, attr_def
         
         # Clickable images (inline image wrapped in inline link)
-        def image_link()       : return _(r'\['), _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)')
+        def image_link()       : return _(r'\['), _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)'), 0, attr_def
         
         # Wiki-style links
         def wiki_link_page()   : return _(r'[^\]#\|]+')
@@ -490,20 +490,19 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (marker := node.find('setext_underline')) and marker.text:
                     level = 1 if marker.text[0] == '=' else 2
         
-        _id_node = node.find('attr_def_id')
-        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        _cls, _id = self._extract_attrs(node)
+        _id = _id or self.get_title_id(level)
         title = (title_node := node.find('title_text')) and title_node.text
         self.resources.toc_items.append((level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
-        _id_node = node.find('attr_def_id')
-        _id = self.get_title_id(level) if not _id_node else (_id_node.text[1:] if _id_node.text else '')
+        _cls, _id = self._extract_attrs(node)
+        _id = _id or self.get_title_id(level)
         title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
-        _cls = [x.text[1:].strip() for x in node.find_all('attr_def_class')]
         section_s = self._open_section(self.slug(f"{title}"))
         
-        return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=(' '.join(_cls)))
+        return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=_cls)
 
     def visit_atx_title(self, node: Symbol) -> str:
         level = len(level.text) if (level := node.find('hashes')) and level.text else 1
@@ -658,30 +657,31 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return 'image', None
 
-    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '') -> str:
+    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '', _class: str = '', _id: str = '') -> str:
         """Unified media rendering logic"""
         media_type, meta = self._get_media_type(url)
         
         if media_type == 'youtube':
             self.resources.videos.append(url)
-            return self.tag('object', '', attrs=f' class="yt-embed" data="https://www.youtube.com/embed/{meta}"', enclose=2)
+            yt_class = f'yt-embed {_class}'.strip() if _class else 'yt-embed'
+            return self.tag('object', '', attrs=f' class="{yt_class}" data="https://www.youtube.com/embed/{meta}"', enclose=2)
         
         elif media_type == 'video':
             self.resources.videos.append(url)
             src = self._prefix_local_image(url)
             return self.tag('video', controls="yesplz", disablePictureInPicture="True", 
-                            playsinline="True", src=src, type=f'video/{meta}', enclose=enclose)
+                            playsinline="True", src=src, type=f'video/{meta}', enclose=enclose, _class=_class, id=_id or None)
         
         elif media_type == 'audio':
             self.resources.audios.append(url)
             src = self._prefix_local_image(url)
             mime = 'audio/mpeg' if meta == 'mp3' else f'audio/{meta}'
-            return self.tag('audio', controls="yesplz", src=src, type=mime, enclose=enclose)
+            return self.tag('audio', controls="yesplz", src=src, type=mime, enclose=enclose, _class=_class, id=_id or None)
             
         else: # Image
             self.resources.images.append(url)
             src = self._prefix_local_image(url)
-            return self.tag('img', content, src=src, alt=alt, title=title, style=style, enclose=enclose, newline=False)
+            return self.tag('img', content, src=src, alt=alt, title=title, style=style, enclose=enclose, newline=False, _class=_class, id=_id or None)
 
     def _render_link(self, url: str, text: str, title: str | None = None) -> str:
         """Unified link rendering logic"""
@@ -771,8 +771,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         img_tag = self._render_media(image_url, alt or "", image_title, enclose=0, content=alt or "")
         
+        _cls, _id = self._extract_attrs(node)
         self.resources.links_ext.append(link_url)
-        return self.tag('a', img_tag, href=link_url, title=link_title, newline=False)
+        return self.tag('a', img_tag, href=link_url, title=link_title, newline=False, _class=_cls, id=_id or None)
+
+    def _extract_attrs(self, node: Symbol) -> tuple[str, str]:
+        """Extract class and id attributes from attr_def nodes"""
+        _id = (id_node.text[1:] if (id_node := node.find('attr_def_id')) else '')
+        _cls = ' '.join(x.text[1:].strip() for x in node.find_all('attr_def_class'))
+        return _cls, _id
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
@@ -787,7 +794,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return node.text
         
-        return self._render_media(url, alt, title, enclose=1)
+        _cls, _id = self._extract_attrs(node)
+        return self._render_media(url, alt, title, enclose=1, _class=_cls, _id=_id)
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
@@ -803,8 +811,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         if not self._is_safe_url(url):
             return node.text
-            
-        return self._render_media(url, alt, title, enclose=2)
+        
+        _cls, _id = self._extract_attrs(node)
+        return self._render_media(url, alt, title, enclose=2, _class=_cls, _id=_id)
 
     def visit_wiki_image(self, node: Symbol) -> str:
         if not (file_node := node.find('wiki_image_file')):
