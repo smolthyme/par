@@ -642,6 +642,75 @@ That's some text with a footnote.[^1]
         expected = '''<p><object class="yt-embed" data="https://www.youtube.com/embed/iNiImDNtLpQ"></object></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+
+class TestImageAttributesHTML(unittest.TestCase):
+    def test_inline_image_with_class(self):
+        md_text = '''![Alt text](image.png){.hero}'''
+        expected = '''<p><img alt="Alt text" class="hero" src="images/image.png"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_inline_image_with_id(self):
+        md_text = '''![Alt text](image.png){#my-id}'''
+        expected = '''<p><img alt="Alt text" id="my-id" src="images/image.png"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_inline_image_with_class_and_id(self):
+        md_text = '''![Alt text](image.png){.my-class #my-id}'''
+        expected = '''<p><img alt="Alt text" class="my-class" id="my-id" src="images/image.png"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_inline_image_with_multiple_classes(self):
+        md_text = '''![Alt text](image.png){.class1 .class2}'''
+        expected = '''<p><img alt="Alt text" class="class1 class2" src="images/image.png"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_inline_image_with_title_and_class(self):
+        md_text = '''![Alt text](image.png "Image Title"){.styled}'''
+        expected = '''<p><img alt="Alt text" class="styled" src="images/image.png" title="Image Title"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_reference_image_with_class(self):
+        md_text = '''![Alt][ref]{.my-class}
+
+[ref]: image.png
+'''
+        expected = '''<p><img alt="Alt" class="my-class" src="images/image.png"></img></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_reference_image_with_class_and_id(self):
+        md_text = '''![Alt][ref]{.my-class #img-id}
+
+[ref]: image.png "Ref Title"
+'''
+        expected = '''<p><img alt="Alt" class="my-class" id="img-id" src="images/image.png" title="Ref Title"></img></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_image_link_with_class(self):
+        md_text = '''[![Alt](image.png)](https://example.com){.clickable}'''
+        expected = '''<p><a class="clickable" href="https://example.com"><img alt="Alt" src="images/image.png">Alt</img></a></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_image_link_with_class_and_id(self):
+        md_text = '''[![Alt](image.png)](https://example.com){.clickable #hero-img}'''
+        expected = '''<p><a class="clickable" href="https://example.com" id="hero-img"><img alt="Alt" src="images/image.png">Alt</img></a></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_video_with_class(self):
+        md_text = '''![](video.mp4){.video-player}'''
+        expected = '''<p><video class="video-player" controls="yesplz" disablePictureInPicture="True" playsinline="True" src="images/video.mp4" type="video/mp4"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_audio_with_class(self):
+        md_text = '''![](audio.mp3){.audio-player #main-audio}'''
+        expected = '''<p><audio class="audio-player" controls="yesplz" id="main-audio" src="images/audio.mp3" type="audio/mpeg"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_youtube_with_class(self):
+        md_text = '''![](https://www.youtube.com/watch?v=iNiImDNtLpQ){.yt-player}'''
+        expected = '''<p><object class="yt-embed yt-player" data="https://www.youtube.com/embed/iNiImDNtLpQ"></object></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+
 class TestTablesHTML(unittest.TestCase):
     def test_table_with_empty_cells(self):
         md_text = '''\
