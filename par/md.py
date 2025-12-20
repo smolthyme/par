@@ -121,7 +121,7 @@ class MarkdownGrammar(dict):
         def table()            : return table_head, table_separator, table_body
         
         # Horizontal items
-        def side_block_head()  : return _(r'\|\|\|'), blankline # TODO Add class/etc support
+        def side_block_head()  : return _(r'\|\|\|'), 0, space, 0, attr_def, blankline
         def side_block_cont()  : return [text, lists, paragraph], blankline
         def side_block_item()  : return side_block_head, -2, side_block_cont
         def side_block()       : return -2, side_block_item, -1, blankline
@@ -246,7 +246,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.resources   = resources if resources is not None else ResourceStore()
         self._current_section_level = None
     
-    def visit(self, nodes: Symbol, root=False) -> str:
+    def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
         if root:
             # Collect link and image references first
             [self._collect_link_reference(obj) for obj in nodes[0].find_all('link_reference')]
@@ -524,9 +524,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return self.tag('span', '⭐'*5, _class='star-rating')
 
     def visit_side_block(self, node: Symbol) -> str:
+        _cls, _id = self._extract_attrs(node)
         content = [self.parse_markdown(thing.text, 'content').strip()
                 for thing in node.find_all('side_block_cont')]
-        return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz") # node[kwargs]
+        return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {_cls or ''}", id=_id)
 
     def visit_table_begin(self, node: Symbol) -> str:
         self.table_align = {}

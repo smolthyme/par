@@ -711,6 +711,33 @@ class TestImageAttributesHTML(unittest.TestCase):
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 
+class TestSideBySideBlocksHTML(unittest.TestCase):
+    def test_sidebyside_blocks(self):
+        md_text = '''\
+|||
+Content for the first block.
+Second block
+Third one
+'''
+        expected = '''<div class="collection-horiz">
+<p>Content for the first block.</p>
+<p>Second block</p>
+<p>Third one</p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+    
+    def test_sidebyside_with_class_and_formatting(self):
+        md_text = '''\
+|||{.custom-class}
+**Bold text** in first block.
+[Link for second block](http://example.com)
+'''
+        expected = '''<div class="collection-horiz custom-class">
+<p><strong>Bold text</strong> in first block.</p>
+<p><a href="http://example.com">Link for second block</a></p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
 class TestTablesHTML(unittest.TestCase):
     def test_table_with_empty_cells(self):
         md_text = '''\
