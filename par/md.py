@@ -778,9 +778,20 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def _extract_attrs(self, node: Symbol) -> tuple[str, str]:
         """Extract class and id attributes from attr_def nodes"""
-        _id = (id_node.text[1:] if (id_node := node.find('attr_def_id')) else '')
-        _cls = ' '.join(x.text[1:].strip() for x in node.find_all('attr_def_class'))
-        return _cls, _id
+        _id = ''
+        _class = ''
+        
+        if attr_def := node.find('attr_def'):
+            classes = []
+            for class_node in attr_def.find_all('attr_def_class'):
+                classes.append(class_node.text[1:])  # Skip the leading '.'
+            
+            if id_node := attr_def.find('attr_def_id'):
+                _id = id_node.text[1:]  # Skip the leading '#'
+            
+            _class = ' '.join(classes) if classes else ''
+        
+        return _class, _id
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:

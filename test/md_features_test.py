@@ -730,11 +730,11 @@ Third one
         md_text = '''\
 |||{.custom-class}
 **Bold text** in first block.
-[Link for second block](http://example.com)
+![Cool background](http://example.com/image.png){.cool-pix}
 '''
         expected = '''<div class="collection-horiz custom-class">
 <p><strong>Bold text</strong> in first block.</p>
-<p><a href="http://example.com">Link for second block</a></p>
+<p><img alt="Cool background" class="cool-pix" src="http://example.com/image.png"/></p>
 </div>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
