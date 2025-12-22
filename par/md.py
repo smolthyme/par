@@ -524,10 +524,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return self.tag('span', '⭐'*5, _class='star-rating')
 
     def visit_side_block(self, node: Symbol) -> str:
-        _cls, _id = self._extract_attrs(node)
         content = [self.parse_markdown(thing.text, 'content').strip()
                 for thing in node.find_all('side_block_cont')]
-        return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {_cls or ''}", id=_id)
+        
+        if head := node.find('side_block_head'):
+            _cls, _id = self._extract_attrs(head)
+            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {_cls or ''}", id=_id)
+        else:
+            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz")
 
     def visit_table_begin(self, node: Symbol) -> str:
         self.table_align = {}
@@ -780,7 +784,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         """Extract class and id attributes from attr_def nodes"""
         _id = _class = ''
         
-        if (attr_def := node.find('attr_def')):
+        if (attr_def := next((n for n in node.find_all_here('attr_def')), None)):
             for class_node in attr_def.find_all('attr_def_class'):
                 _class += (class_node.text[1:] + ' ')  # Skip the leading '.'
             

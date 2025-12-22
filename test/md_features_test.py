@@ -738,6 +738,18 @@ Third one
 </div>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_sidebyside_without_class_but_with_classed_blocks(self):
+        md_text = '''\
+|||
+![A Picture with Class](http://example.com/pic.jpg){.fancy-pic}
+![Another Picture with Class](http://example.com/pic.jpg){.fancy-pic}
+'''
+        expected = '''<div class="collection-horiz">
+<p><img alt="A Picture with Class" class="fancy-pic" src="http://example.com/pic.jpg"/></p>
+<p><img alt="Another Picture with Class" class="fancy-pic" src="http://example.com/pic.jpg"/></p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
 class TestTablesHTML(unittest.TestCase):
     def test_table_with_empty_cells(self):
         md_text = '''\
