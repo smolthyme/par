@@ -728,7 +728,7 @@ Third one
     
     def test_sidebyside_with_class_and_formatting(self):
         md_text = '''\
-|||{.custom-class}
+||| {.custom-class}
 **Bold text** in first block.
 ![Cool background](http://example.com/image.png){.cool-pix}
 '''
