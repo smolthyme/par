@@ -2,7 +2,7 @@
 # Based on YPL parser 1.5 by 'VB' -- Thanks!
 # Hacked on by serpn subsequently
 
-
+from __future__ import annotations
 import sys, re
 from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional, Dict, Iterator
 
@@ -22,15 +22,16 @@ class ignore(object):
         return self._regex
 
 class _and(object):
-    def __init__(self, something: 'ParsePattern'):
+    def __init__(self, something: ParsePattern):
         self._obj = something
 
     @property
-    def obj(self) -> 'ParsePattern':
+    def obj(self) -> ParsePattern:
         return self._obj
 
 class _not(_and): pass
 
+# Type alias for parse patterns
 ParsePattern = Union[
     Pattern[str],                      # compiled regex
     str,                               # literal text 
@@ -39,9 +40,9 @@ ParsePattern = Union[
     _not,                              # negative lookahead
     _and,                              # positive lookahead
     int,                               # integer repetition count
-    List["ParsePattern"],              # alternatives (OR)
-    Tuple["int | ParsePattern", ...],  # tuple with order and optional repetition
-    Callable[[], "ParsePattern"]       # callable returning another pattern
+    list,                              # alternatives (OR) - list of ParsePatterns
+    tuple,                             # sequence - tuple of ParsePatterns and/or ints
+    Callable[[], 'ParsePattern']       # callable returning another pattern
 ]
 
 class Name(str):
@@ -58,19 +59,22 @@ class Symbol(list):
     def __call__(self) -> Any:
         return self.what
     
-    def __repr__(self) -> str:
-        return f"Symbol<{self.__name__}>: {self.what}"
+    def __str__(self) -> str:
+        return self.text
     
-    def render(self, index: int = 0) -> str:
-        indent = f"{' ' * 2 * index}"
-        if isinstance(self.what, str):
-            return f"{indent}{self.__name__}:{self.what}\n"
-        buf = [f"{indent}{self.__name__}:\n"]
-        buf.extend(
-            f"{' ' * 2 * (index + 1)}:{x}\n" if isinstance(x, str) else x.render(index + 1)
-            for x in self.what
-        )
-        return ''.join(buf)
+    def __repr__(self) -> str:
+        return f"Symbol<{self.__name__}, {self.what[:16]}{'...' if len(self.what) > 40 else ''}>"
+    
+    def utf8_tree_str(self, prefix: str = "", connector: str = "") -> str:
+        val = f": {self.what[:60]!r}..." if isinstance(self.what, str) and len(self.what) > 60 \
+                else f": {self.what!r}" if isinstance(self.what, str) else ""
+        kids = [n for n in self.what if isinstance(n, Symbol)] if isinstance(self.what, list) else []
+        result = f"{prefix}{connector}{self.__name__}{val}\n"
+        for i, c in enumerate(kids):
+            is_last = (i == len(kids) - 1)
+            new_prefix = prefix + ("" if not connector else ("    " if connector == "└── " else "│   "))
+            result += c.utf8_tree_str(new_prefix, "└── " if is_last else "├── ")
+        return result
     
     def find(self, name: str) -> Optional['Symbol']:
         """Find the first node with the given name."""
@@ -80,7 +84,6 @@ class Symbol(list):
                     return node
                 elif (r := node.find(name)):
                     return r
-        return None
     
     def find_all(self, name: str) -> Generator['Symbol', None, None]:
         """Find all nodes with matching name anywhere in the decendants."""
@@ -332,13 +335,11 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
         lines.append((len(orig), lineSource.filename(), lineSource.lineno() - 1))
         orig += line
     
+    p = parser(p=packrat)
+    p.textlen = len(orig)
+    p.lines = [] if not lineCount else lines 
+    
     try:
-        p = parser(p=packrat)
-        p.textlen = len(orig)
-        if lineCount:
-            p.lines = lines
-        else:
-            p.lines = []
         text = skip(p.skipper, orig, skipWS, skipComments)
         result, text = p.parseLine(text, language, [], skipWS, skipComments)
         if text:
