@@ -27,6 +27,21 @@ class ResourceStore:
     def to_dict(self):
         """Return all resources as a dictionary for external access."""
         return asdict(self)
+    
+    #Create isolated context for visitor with fresh title IDs
+    def nested_store(self):
+        return ResourceStore(
+            links_ext=self.links_ext,
+            links_int=self.links_int,
+            toc_items=[],  # Don't share ToC items for nested parsing
+            footnotes=self.footnotes,
+            images=self.images,
+            videos=self.videos,
+            audios=self.audios,
+            titles_ids={},  # Fresh title IDs for nested content
+            link_references=self.link_references,
+            image_references=self.image_references,
+        )
 
 _ = re.compile
 
@@ -127,11 +142,14 @@ class MarkdownGrammar(dict):
         def table_body()       : return -2, table_body_line
         def table()            : return table_head, table_separator, table_body
         
+        # Cards
+        def card_content()     : return _(r'(?:(?!\|\]).)+', re.DOTALL)
+        def card()             : return _(r'\[\|'), 0, space, 0, card_content, 0, space, _(r'\|\]'), 0, attr_def
+        
         # Horizontal items
         def side_block_head()  : return _(r'\|\|\|'), 0, space, 0, attr_def, blankline
-        def side_block_cont()  : return [text, lists, paragraph], blankline
-        def side_block_item()  : return side_block_head, -2, side_block_cont
-        def side_block()       : return -2, side_block_item, -1, blankline
+        def side_block_cont()  : return _not(_(r'\|\|\|')), [card, text, lists, paragraph], blankline
+        def side_block()       : return side_block_head, -2, side_block_cont, -1, blankline
         
         ## lists
         def check_radio()      : return _(r'\[[\*Xx ]?\]|<[\*Xx ]?>'), space
@@ -231,7 +249,7 @@ class MarkdownGrammar(dict):
                 link_reference,
                 hr, directive,
                 pre, html_block, lists,
-                side_block, table, dl, blockquote, footnote_desc,
+                card, side_block, table, dl, blockquote, footnote_desc,
                 title, paragraph ]
         
         def article(): return content
@@ -252,6 +270,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.footnote_id = footnote_id
         self.resources   = resources if resources is not None else ResourceStore()
         self._current_section_level = None
+        # Controls how heading IDs are generated. For the top-level document we want IDs that
+        # include leading zeros when headings start below H1 (e.g. first heading is H2 -> 0-1).
+        # For isolated nested parsing contexts (e.g. cards), we often want the first heading
+        # to start at title_1 regardless of level.
+        self._title_id_begin_level: int | None = 1
     
     def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
         if root:
@@ -262,15 +285,20 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
     
-    def parse_markdown(self, text, peg=None):
+    def parse_markdown(self, text, peg=None, *, title_id_begin_level: int | None = 1):
         g = self.grammar or MarkdownGrammar()
         if isinstance(peg, str):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
-        v = self.__class__(self.tag_class, g, footnote_id=self.footnote_id, resources=self.resources)
+        # Create nested visitor with fresh title IDs for isolated context
+        nested_resources = self.resources.nested_store()
+        v = self.__class__(self.tag_class, g, footnote_id=self.footnote_id, resources=nested_resources)
+        v._title_id_begin_level = title_id_begin_level
         parsed_output = v.visit(result[0])
         self.footnote_id = v.footnote_id
+        # Ensure any open sections are closed
+        parsed_output += v._close_section()
         
         return parsed_output
     
@@ -484,10 +512,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_table_sep(self, node: Symbol) -> str:
         return ''
 
-    def get_title_id(self, level:int, begin=1) -> str:
-        self.resources.titles_ids[level] = self.resources.titles_ids.get(level, 0) + 1
-        _ids = [self.resources.titles_ids.get(x, 0) for x in range(begin, level + 1)]
-        return f"title_{'-'.join(map(str, _ids))}"
+    def get_title_id(self, level: int, begin: int | None = None) -> str:
+        """Generate a deterministic heading id."""
+        begin = self._title_id_begin_level if begin is None else begin
+        if begin is None:
+            begin = level
+            self._title_id_begin_level = begin
+
+        titles = self.resources.titles_ids
+        titles[level] = titles.get(level, 0) + 1
+
+        ids = [str(titles.get(l, 0)) for l in range(begin, level + 1)]
+        return f"title_{'-'.join(ids)}"
 
     def _alt_title(self, node: Symbol):
         node  = node.what[0]
@@ -533,6 +569,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         stars = len(parts[0].strip())
         outta = parts[1].strip() if len(parts) > 1 else '5'
         return self.tag('span', '⭐'*stars, _class='star-rating', title=f"{stars} stars out of {outta}")
+
+    def visit_card(self, node: Symbol) -> str:
+        if content_node := node.find('card_content'):
+            # Cards act like isolated documents: start heading ids at title_1 regardless of level.
+            content = self.parse_markdown(content_node.text.strip(), 'content', title_id_begin_level=None).strip()
+        else:
+            content = ''
+        
+        _cls, _id = self._extract_attrs(node)
+        return self.tag('div', f"\n{content}\n", _class=f"card {_cls}".strip(), id=_id or None)
 
     def visit_side_block(self, node: Symbol) -> str:
         content = [self.parse_markdown(thing.text, 'content').strip()

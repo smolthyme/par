@@ -725,7 +725,47 @@ Third one
 <p>Third one</p>
 </div>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-    
+
+    def test_sidebyside_double_with_adv_imgs(self):
+        md_text = '''\
+# Our Jam
+        
+|||
+![Exhibitions](exhibition-stand-icon.svg){.icon-lg} Exhibitions
+![Tradeshows](partner-handshake-icon.svg){.icon-lg} Tradeshows
+![Stand Builds](toolbox-build.svg){.icon-lg} Stand Builds
+
+|||
+![Warehousing](warehouse-icon.svg){.icon-lg} Warehousing
+![Logistics](delivery-truck-icon.svg){.icon-lg} Logistics
+![Site Visits](binoculars-icon.svg){.icon-lg} Site Visits
+
+## Why we're the best
+
+Good stuff all round! Test examples rock!
+'''
+        expected = '''
+<section id="section-our-jam">
+<h1 id="title_2">Our Jam<a class="anchor" href="#title_2"></a></h1>
+<div class="collection-horiz">
+<p><img alt="Exhibitions" class="icon-lg" src="images/exhibition-stand-icon.svg"/> Exhibitions</p>
+<p><img alt="Tradeshows" class="icon-lg" src="images/partner-handshake-icon.svg"/> Tradeshows</p>
+<p><img alt="Stand Builds" class="icon-lg" src="images/toolbox-build.svg"/> Stand Builds</p>
+</div>
+<div class="collection-horiz">
+<p><img alt="Warehousing" class="icon-lg" src="images/warehouse-icon.svg"/> Warehousing</p>
+<p><img alt="Logistics" class="icon-lg" src="images/delivery-truck-icon.svg"/> Logistics</p>
+<p><img alt="Site Visits" class="icon-lg" src="images/binoculars-icon.svg"/> Site Visits</p>
+</div>
+</section>
+<section id="section-why-we-re-the-best">
+<h2 id="title_2-2">Why we're the best<a class="anchor" href="#title_2-2"></a></h2>
+<p>Good stuff all round! Test examples rock!</p>
+</section>'''
+        self.maxDiff = None
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+
     def test_sidebyside_with_class_and_formatting(self):
         md_text = '''\
 ||| {.custom-class}
@@ -747,6 +787,129 @@ Third one
         expected = '''<div class="collection-horiz">
 <p><img alt="A Picture with Class" class="fancy-pic" src="http://example.com/pic.jpg"/></p>
 <p><img alt="Another Picture with Class" class="fancy-pic" src="http://example.com/pic.jpg"/></p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+class TestCardsHTML(unittest.TestCase):
+    def test_inline_card_simple(self):
+        md_text = '''[|A simple card with just text|]'''
+        expected = '''<div class="card">
+<p>A simple card with just text</p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_inline_card_with_formatting(self):
+        md_text = '''[|### Card Header|]'''
+        expected = '''<div class="card">
+<section id="section-card-header">
+<h3 id="title_1">Card Header<a class="anchor" href="#title_1"></a></h3>
+</section>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_inline_card_with_link(self):
+        md_text = '''[|Check out [this link](https://example.com)|]'''
+        expected = '''<div class="card">
+<p>Check out <a href="https://example.com">this link</a></p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_multiline_card(self):
+        md_text = '''\
+[|
+## Card Title
+Some paragraph text here.
+|]
+'''
+        expected = '''<div class="card">
+<section id="section-card-title">
+<h2 id="title_1">Card Title<a class="anchor" href="#title_1"></a></h2>
+<p>Some paragraph text here.</p>
+</section>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_card_with_list(self):
+        md_text = '''\
+[|
+* Item one
+* Item two
+* Item three
+|]
+'''
+        expected = '''<div class="card">
+<ul>
+<li>Item one</li>
+<li>Item two</li>
+<li>Item three</li>
+</ul>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_card_with_class(self):
+        md_text = '''[|Styled card content|]{.highlight}'''
+        expected = '''<div class="card highlight">
+<p>Styled card content</p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_card_with_id_and_class(self):
+        md_text = '''[|Card with attrs|]{#my-card .special}'''
+        expected = '''<div class="card special" id="my-card">
+<p>Card with attrs</p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_two_cards_sequential(self):
+        md_text = '''\
+[|First card|]
+[|Second card|]
+'''
+        expected = '''<div class="card">
+<p>First card</p>
+</div>
+
+<div class="card">
+<p>Second card</p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_cards_in_sidebyside(self):
+        md_text = '''\
+|||
+[|
+## Card One
+First card content
+|]
+
+|||
+[|
+## Card Two
+Second card content
+|]
+'''
+        expected = '''<div class="collection-horiz">
+<div class="card">
+<section id="section-card-one">
+<h2 id="title_1">Card One<a class="anchor" href="#title_1"></a></h2>
+<p>First card content</p>
+</section>
+</div>
+</div>
+<div class="collection-horiz">
+<div class="card">
+<section id="section-card-two">
+<h2 id="title_1">Card Two<a class="anchor" href="#title_1"></a></h2>
+<p>Second card content</p>
+</section>
+</div>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_card_with_image_link(self):
+        md_text = '''[|[![Logo](logo.png)](https://example.com)|]'''
+        expected = '''<div class="card">
+<p><a href="https://example.com"><img alt="Logo" src="images/logo.png">Logo</img></a></p>
 </div>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
