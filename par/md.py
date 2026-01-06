@@ -46,6 +46,13 @@ class MarkdownGrammar(dict):
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
         
+        ## shared content patterns
+        def rest_of_line()     : return _(r'[^\r\n]+')
+        def title_string()     : return _(r'["\']([^"\'\n\r]*)["\']|(\([^\)]*\))')
+        def in_braces()        : return _(r'[^\s\)]+')
+        def in_sq_braces()     : return _(r'[^\]]+')
+
+
         def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
         def htmlentity()       : return _(r'&\w+;')
         def escape_string()    : return _(r'\\'), _(r'.')
@@ -113,7 +120,7 @@ class MarkdownGrammar(dict):
         def table_sep()        : return _(r'\|')
         def table_td()         : return _(r'[^\|\r\n]*'), table_sep
         def table_horiz_line() : return _(r'\s*:?-+:?\s*'), table_sep
-        def table_other()      : return _(r'[^\r\n]+')
+        def table_other()      : return rest_of_line()
         def table_head()       : return 0, table_sep, -2, table_td, -1, table_other, blankline
         def table_separator()  : return 0, table_sep, -2, table_horiz_line, -1, table_other, blankline
         def table_body_line()  : return 0, table_sep, -2, table_td, -1, table_other, blankline
@@ -162,11 +169,11 @@ class MarkdownGrammar(dict):
         # Email addresses
         def email_address()    : return _(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
         
-        # Link components
-        def link_text()        : return _(r'[^\]]+')
-        def link_url()         : return _(r'[^\s\)]+')
-        def link_title()       : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
-        def link_label()       : return _(r'[^\]]+')
+        # Link components (using shared patterns)
+        def link_text()        : return in_sq_braces()
+        def link_url()         : return in_braces()
+        def link_title()       : return title_string()
+        def link_label()       : return in_sq_braces()
         
         # Inline links
         def inline_link()      : return _(r'\['), 0, link_text, _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)')
@@ -174,29 +181,29 @@ class MarkdownGrammar(dict):
         # Reference links
         def reference_link()   : return _(r'\['), link_text, _(r'\]'), 0, space, _(r'\['), 0, link_label, _(r'\]')
         
-        # Reference link definitions
-        def link_ref_label()   : return _(r'[^\]]+')
+        # Reference link definitions (using shared patterns)
+        def link_ref_label()   : return in_sq_braces()
         def link_ref_url()     : return _(r'[^\s]+')
-        def link_ref_title()   : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
+        def link_ref_title()   : return title_string()
         def link_reference()   : return _(r'^\s*\['), link_ref_label, _(r'\]:'), space, link_ref_url, 0, (space, link_ref_title), 0, space, blankline
         
-        # Images - inline
-        def image_alt()        : return _(r'[^\]]+')
-        def image_url()        : return _(r'[^\s\)]+')
-        def image_title()      : return _(r'["\']([^"\']*)["\']|(\([^\)]*\))')
+        # Images - inline (using shared patterns)
+        def image_alt()        : return in_sq_braces()
+        def image_url()        : return in_braces()
+        def image_title()      : return title_string()
         def inline_image()     : return _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), 0, attr_def
         
-        # Images - reference
+        # Images - reference (note: allows empty label)
         def image_ref_label()  : return _(r'[^\]]*')
         def reference_image()  : return _(r'!\['), 0, image_alt, _(r'\]'), 0, space, _(r'\['), 0, image_ref_label, _(r'\]'), 0, attr_def
         
         # Clickable images (inline image wrapped in inline link)
         def image_link()       : return _(r'\['), _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)'), 0, attr_def
         
-        # Wiki-style links
+        # Wiki-style links (wiki_link_text uses shared bracketed_text)
         def wiki_link_page()   : return _(r'[^\]#\|]+')
         def wiki_link_anchor() : return _(r'#[^\]#\|]*')
-        def wiki_link_text()   : return _(r'[^\]]+')
+        def wiki_link_text()   : return in_sq_braces()
         def wiki_link()        : return _(r'\[\['), 0, wiki_link_page, 0, wiki_link_anchor, 0, (_(r'\|'), wiki_link_text), _(r'\]\]')
         
         # Wiki-style images
@@ -404,7 +411,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('sub', newline=False)
     
     def visit_fmt_subscript(self, node: Symbol) -> str:
-        return node.text.strip(",")
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip(",")
 
     def visit_fmt_subscript_end(self, node: Symbol) -> str:
         return self.tag('sub', enclose=3, newline=False)
@@ -413,7 +421,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('sup', newline=False)
     
     def visit_fmt_superscript(self, node: Symbol) -> str:
-        return node.text.strip("^")
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("^")
 
     def visit_fmt_superscript_end(self, node: Symbol) -> str:
         return self.tag('sup', enclose=3, newline=False)
@@ -422,7 +431,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('span', style="text-decoration: line-through", newline=False)
 
     def visit_fmt_strikethrough(self, node: Symbol) -> str:
-        return node.text.strip("~")
+        a = node.find('words')
+        return self.visit(a) if a else node.text.strip("~")
 
     def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
         return self.tag('span', enclose=3, newline=False)
@@ -454,7 +464,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
 
     def visit_quote_line(self, node: Symbol) -> str:
-        return node.text[2:]
+        # Grammar: quote_line = '> (?!- )', quote_text - visit the quote_text child directly
+        return (qt.text if (qt := node.find('quote_text')) else node.text.lstrip('> '))
 
     def visit_blockquote(self, node: Symbol) -> str:
         text = []
@@ -517,11 +528,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return node[1].text
 
     def visit_star_rating(self, node: Symbol) -> str:
-        r = _(r"(?P<stars>[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+) */ *(?P<outta>\d+)")
-        if (m := r.match(node.text)):
-            return self.tag('span', '⭐'*len(m.group('stars')), _class='star-rating', title=f"{len(m.group('stars'))} stars out of {m.group('outta')}")
-        else:
-            return self.tag('span', '⭐'*5, _class='star-rating')
+        # Grammar already matched pattern, just split on '/'
+        parts = node.text.split('/')
+        stars = len(parts[0].strip())
+        outta = parts[1].strip() if len(parts) > 1 else '5'
+        return self.tag('span', '⭐'*stars, _class='star-rating', title=f"{stars} stars out of {outta}")
 
     def visit_side_block(self, node: Symbol) -> str:
         content = [self.parse_markdown(thing.text, 'content').strip()
