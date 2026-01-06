@@ -301,6 +301,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         parsed_output += v._close_section()
         
         return parsed_output
+
+    def fmt_tag(self, node: Symbol, html_tag: str, strip_chars: str) -> str:
+        if a := node.find('words'):
+            return self.visit(a)
+        return node.text.strip(strip_chars)
     
     def visit_string(self, node: Symbol) -> str:
         return self.to_html_charcodes(node.text)
@@ -391,8 +396,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('strong', newline=False)
     
     def visit_fmt_bold(self, node: Symbol) -> str:
-        a = node.find('words')
-        return self.visit(a) if a else node.text.strip("*_")
+        return self.fmt_tag(node, 'strong', '*_')
 
     def visit_fmt_bold_end(self, node: Symbol) -> str:
         return self.tag('strong', enclose=3, newline=False)
@@ -405,8 +409,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('em', newline=False)
 
     def visit_fmt_italic(self, node: Symbol) -> str:
-        a = node.find('words')
-        return self.visit(a) if a else node.text.strip("*_")
+        return self.fmt_tag(node, 'em', '*_')
     
     def visit_fmt_italic_end(self, node: Symbol) -> str:
         return self.tag('em', enclose=3, newline=False)
@@ -419,8 +422,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('u', newline=False)
     
     def visit_fmt_underline(self, node: Symbol) -> str:
-        a = node.find('words')
-        return self.visit(a) if a else node.text.strip("_")
+        return self.fmt_tag(node, 'u', '_')
     
     def visit_fmt_underline_end(self, node: Symbol) -> str:
         return self.tag('u', enclose=3, newline=False)
@@ -429,8 +431,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('code', newline=False)
     
     def visit_fmt_code(self, node: Symbol) -> str:
-        a = node.find('words')
-        return self.visit(a) if a else node.text.strip("`")
+        return self.fmt_tag(node, 'code', '`')
 
     def visit_fmt_code_end(self, node: Symbol) -> str:
         return self.tag('code', enclose=3, newline=False)
@@ -439,8 +440,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('sub', newline=False)
     
     def visit_fmt_subscript(self, node: Symbol) -> str:
-        a = node.find('words')
-        return self.visit(a) if a else node.text.strip(",")
+        return self.fmt_tag(node, 'sub', ',')
 
     def visit_fmt_subscript_end(self, node: Symbol) -> str:
         return self.tag('sub', enclose=3, newline=False)
@@ -449,8 +449,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('sup', newline=False)
     
     def visit_fmt_superscript(self, node: Symbol) -> str:
-        a = node.find('words')
-        return self.visit(a) if a else node.text.strip("^")
+        return self.fmt_tag(node, 'sup', '^')
 
     def visit_fmt_superscript_end(self, node: Symbol) -> str:
         return self.tag('sup', enclose=3, newline=False)
@@ -459,8 +458,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('span', style="text-decoration: line-through", newline=False)
 
     def visit_fmt_strikethrough(self, node: Symbol) -> str:
-        a = node.find('words')
-        return self.visit(a) if a else node.text.strip("~")
+        return self.fmt_tag(node, 'span', '~')
 
     def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
         return self.tag('span', enclose=3, newline=False)
