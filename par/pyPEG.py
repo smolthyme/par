@@ -125,7 +125,7 @@ class parser(object):
         self.memory  = {}
         self.packrat = p
 
-    def parseLine(self, textline, pattern:ParsePattern, resultSoFar=[], skipWS=True, skipComments: Union[Callable, None]=None) -> Tuple[list, str]:
+    def parseLine(self, textline, pattern:ParsePattern, resultSoFar=None, skipWS=True, skipComments: Union[Callable, None]=None) -> Tuple[list, str]:
         """\
 * textline     : text to parse
 * pattern      : pyPEG language description
@@ -134,6 +134,8 @@ class parser(object):
 * skipComments : function which returns pyPEG for matching comments
 
 - returns:    pyAST, textrest"""
+        if resultSoFar is None:
+            resultSoFar = []
         name = None
         _textline = textline
         _pattern = pattern
@@ -313,7 +315,9 @@ class parser(object):
 
         return -1  # Return -1 if no valid line number is found
 
-def parseLine(textline, pattern, resultSoFar = [], skipWS = True, skipComments = None, packrat = False) -> Tuple[List[Any], str]:
+def parseLine(textline, pattern, resultSoFar = None, skipWS = True, skipComments = None, packrat = False) -> Tuple[List[Any], str]:
+    if resultSoFar is None:
+        resultSoFar = []
     p = parser(p=packrat)
     text = skip(p.skipper, textline, skipWS, skipComments)
     return p.parseLine(text, pattern, resultSoFar, skipWS, skipComments)
