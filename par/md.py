@@ -89,8 +89,8 @@ class MarkdownGrammar(dict):
         def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
         
         ## embedded html
-        def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code).*?>.*?<(/\1)>', re.I|re.DOTALL)
-        def html_inline()      : return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input).*?>.*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
+        def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code|iframe)\b[^>]*?>[^<]*?<(/\1)>', re.I|re.DOTALL)
+        def html_inline()      : return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input)\b[^>]*?>[^<]*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
         
         #def words()            : return word, -1, [space, word]
         def words(ig=r'(?!)')  : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
@@ -270,10 +270,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.footnote_id = footnote_id
         self.resources   = resources if resources is not None else ResourceStore()
         self._current_section_level = None
-        # Controls how heading IDs are generated. For the top-level document we want IDs that
-        # include leading zeros when headings start below H1 (e.g. first heading is H2 -> 0-1).
-        # For isolated nested parsing contexts (e.g. cards), we often want the first heading
-        # to start at title_1 regardless of level.
         self._title_id_begin_level: int | None = 1
     
     def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
