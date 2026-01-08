@@ -636,7 +636,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 elif lvl < hi:
                     toc.append(self.tag('ul', enclose=3))
                 hi = lvl
-                toc.append(self.tag('li', self.tag('a', title, href=f"#toc_{count}", newline=False)))
+                toc.append(self.tag('li', self.tag('a', title, href=f"#{anchor}", newline=False)))
                 count += 1
             toc.append(self.tag('ul', enclose=3))
             toc.append(self.tag('section', enclose=3, newline=False))

@@ -1165,8 +1165,8 @@ Something here
         expected = '''\
 <section class="toc">
 <ul>
-<li><a href="#toc_1">First heading</a></li>
-<li><a href="#toc_2">Second heading</a></li>
+<li><a href="#title_0-1">First heading</a></li>
+<li><a href="#title_0-2">Second heading</a></li>
 </ul>
 </section>
 <section id="section-first-heading">
