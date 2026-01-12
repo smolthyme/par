@@ -8,36 +8,28 @@ Par
 About Par
 ----------------
 
-Par is a simple structured text parser project. It based on pyPEG for now. 
-And pyPEG is also shipped with par.
+Par is a simple structured text parser project. It based on pyPEG (req. version included) for now. 
 
-It support Google Code Wiki syntax and markdown syntax. And it also extends
-markdown syntax, for example, it support: definition list, table, direct link, etc.
+It supports and extends markdown syntax, as well as some other small 'languages'.
 
 License
 ------------
 
-Par is released under BSD license. 
-
-"""
+Par is released under BSD license."""
 
 from setuptools import setup
-import par
 
 setup(name='par',
-    version='1.3.4',
-    description="A simple structured text parser project",
+    version='1.4.0',
+    description="A simple structured text parser",
     long_description=__doc__,
     classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
         "Programming Language :: Python",
         "Operating System :: OS Independent",
-        "Programming Language :: Python :: 2.6",
-        "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3.3",
-        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.12",
     ],
     packages = ['par'],
     platforms = 'any',
