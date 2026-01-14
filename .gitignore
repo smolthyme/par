@@ -1,3 +1,4 @@
+__pycache__/
 *.pyc
 *.egg*
 .tox
@@ -5,4 +6,5 @@
 dist
 build
 *.bak
+*.profile
 .*/
