@@ -269,8 +269,8 @@ class TestListsAdvanced(unittest.TestCase):
     ```
 '''
         result = parseHtml(md_text)
-        self.assertIn('Item with code', result)
-        self.assertIn('code here', result)
+        self.assertIn('<li>Item with code', result)
+        self.assertIn('<code>code here', result)
 
     def test_list_starting_with_number(self):
         """Unordered list item starting with number"""
@@ -279,8 +279,8 @@ class TestListsAdvanced(unittest.TestCase):
 * 2001 was also a year
 '''
         result = parseHtml(md_text)
-        self.assertIn('1984', result)
-        self.assertIn('2001', result)
+        self.assertIn('<li>1984', result)
+        self.assertIn('<li>2001', result)
 
     def test_deeply_nested_lists(self):
         """Deeply nested lists (3+ levels)"""
@@ -303,8 +303,8 @@ class TestListsAdvanced(unittest.TestCase):
 * Item 3
 '''
         result = parseHtml(md_text)
-        # Should handle gracefully
-        self.assertIsInstance(result, str)
+        item_count = result.count('<li>')
+        self.assertGreaterEqual(item_count, 2)
 
 
 class TestCodeBlocksAdvanced(unittest.TestCase):
@@ -946,12 +946,20 @@ class TestSpecialCharacters(unittest.TestCase):
         md_text = 'Pages 10–20'
         result = parseHtml(md_text)
         self.assertIn('Pages', result)
+        self.assertIn('–', result)
 
     def test_em_dash(self):
         """Em dash"""
         md_text = 'Text—more text'
         result = parseHtml(md_text)
         self.assertIn('Text', result)
+        self.assertIn('—', result)
+
+    def test_substituted_em_dash(self):
+        """Em dash from --'s"""
+        md_text = 'Text -- more text'
+        result = parseHtml(md_text)
+        self.assertIn('—', result)
 
 
 class TestMultilineContent(unittest.TestCase):
