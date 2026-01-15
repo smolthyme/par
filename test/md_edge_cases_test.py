@@ -45,7 +45,8 @@ class TestEdgeCasesAndErrorHandling(unittest.TestCase):
         md_text = '**bold *italic** text*'
         # Parser behavior may vary, just ensure it doesn't crash
         result = parseHtml(md_text)
-        self.assertIsInstance(result, str)
+        self.assertIn('<strong>bold', result)
+        self.assertIn('<em>italic', result)
 
     def test_unicode_characters(self):
         """Unicode characters should be preserved"""
@@ -93,62 +94,67 @@ class TestBasicMarkdownElements(unittest.TestCase):
     def test_strikethrough_text(self):
         """Strikethrough with ~~ markers"""
         md_text = 'This is ~~strikethrough~~ text.'
-        # Check if strikethrough is rendered (implementation may vary)
-        result = parseHtml(md_text)
-        self.assertIn('strikethrough', result)
+        expected = '<p>This is <span style="text-decoration: line-through">strikethrough</span> text.</p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_strikethrough_multiple(self):
         """Multiple strikethrough in one line"""
         md_text = '~~first~~ and ~~second~~'
-        result = parseHtml(md_text)
-        self.assertIn('first', result)
-        self.assertIn('second', result)
+        expected = '<p><span style="text-decoration: line-through">first</span> and <span style="text-decoration: line-through">second</span></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_superscript_text(self):
         """Superscript with ^ markers"""
         md_text = 'x^2^ + y^3^'
-        result = parseHtml(md_text)
-        # Should contain superscript tags
-        self.assertIn('2', result)
-        self.assertIn('3', result)
+        expected = '<p>x<sup>2</sup> + y<sup>3</sup></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_subscript_text(self):
         """Subscript with ,, markers"""
         md_text = 'H,,2,,O and CO,,2,,'
-        result = parseHtml(md_text)
-        # Should contain subscript tags
-        self.assertIn('2', result)
+        expected = '<p>H<sub>2</sub>O and CO<sub>2</sub></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_escaped_asterisk(self):
         """Escaped asterisk should appear literally"""
         md_text = r'\*not bold\*'
         expected = '<p>*not bold*</p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+        result = parseHtml(md_text).strip()
+        self.assertEqual(result, expected.strip())
+        # Ensure no bold tags were produced
+        self.assertNotIn('<strong>', result)
 
     def test_escaped_underscore(self):
         """Escaped underscore should appear literally"""
         md_text = r'\_not italic\_'
         expected = '<p>_not italic_</p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+        result = parseHtml(md_text).strip()
+        self.assertEqual(result, expected.strip())
+        self.assertNotIn('<em>', result)
 
     def test_escaped_backtick(self):
         """Escaped backtick should appear literally"""
         md_text = r'\`not code\`'
         expected = '<p>`not code`</p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+        result = parseHtml(md_text).strip()
+        self.assertEqual(result, expected.strip())
+        self.assertNotIn('<code>', result)
 
     def test_escaped_bracket(self):
         """Escaped bracket should appear literally"""
         md_text = r'\[not a link\]'
         expected = '<p>[not a link]</p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+        result = parseHtml(md_text).strip()
+        self.assertEqual(result, expected.strip())
+        self.assertNotIn('<a ', result)
 
     def test_line_break_two_spaces(self):
         """Two spaces at end of line should create line break"""
         md_text = 'Line 1  \nLine 2'
-        result = parseHtml(md_text)
-        # Should contain <br> tag
-        self.assertIn('br', result.lower())
+        result = parseHtml(md_text).strip()
+        # Should contain a self-closing <br/> tag between lines
+        self.assertIn('<br/', result)
+        self.assertTrue(result.startswith('<p>') and result.endswith('</p>'))
 
     def test_line_break_backslash(self):
         """Backslash at end of line may create line break"""
@@ -170,10 +176,8 @@ class TestComplexTextFormatting(unittest.TestCase):
     def test_nested_italic_bold(self):
         """Italic containing bold"""
         md_text = '*italic **and bold** together*'
-        result = parseHtml(md_text)
-        # Should contain both em and strong tags
-        self.assertIn('italic', result)
-        self.assertIn('bold', result)
+        expected = '<p><em>italic <strong>and bold</strong> together</em></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_adjacent_bold_italic(self):
         """Adjacent bold and italic without space"""
@@ -191,31 +195,26 @@ class TestComplexTextFormatting(unittest.TestCase):
     def test_triple_emphasis(self):
         """Triple asterisks for bold+italic"""
         md_text = '***bold and italic***'
-        result = parseHtml(md_text)
-        # Should contain both strong and em tags
-        self.assertIn('bold and italic', result)
+        expected = '<p><strong><em>bold and italic</em></strong></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_bold_with_code(self):
         """Bold containing code"""
         md_text = '**bold with `code` inside**'
-        result = parseHtml(md_text)
-        self.assertIn('strong', result)
-        self.assertIn('code', result)
+        expected = '<p><strong>bold with <code>code</code> inside</strong></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_italic_with_code(self):
         """Italic containing code"""
         md_text = '*italic with `code` inside*'
-        result = parseHtml(md_text)
-        self.assertIn('em', result)
-        self.assertIn('code', result)
+        expected = '<p><em>italic with <code>code</code> inside</em></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_complex_nested_formatting(self):
         """Complex nested formatting"""
         md_text = '**bold *italic `code` back* bold**'
-        result = parseHtml(md_text)
-        self.assertIn('bold', result)
-        self.assertIn('italic', result)
-        self.assertIn('code', result)
+        expected = '<p><strong>bold <em>italic <code>code</code> back</em> bold</strong></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 
 class TestListsAdvanced(unittest.TestCase):
@@ -360,7 +359,7 @@ nested backticks
 >     code in quote
 '''
         result = parseHtml(md_text)
-        self.assertIn('blockquote', result)
+        self.assertIn('<blockquote', result)
         # Code handling in quotes may vary
         self.assertIn('code in quote', result)
 
@@ -383,6 +382,7 @@ line 3
 ```
 '''
         result = parseHtml(md_text)
+        self.assertIn('<pre>', result)
         self.assertIn('line 1', result)
         self.assertIn('line 3', result)
 
@@ -393,30 +393,28 @@ class TestLinksAndImagesAdvanced(unittest.TestCase):
     def test_autolink_http(self):
         """Automatic linking of HTTP URLs"""
         md_text = 'Visit http://example.com for info'
-        result = parseHtml(md_text)
-        self.assertIn('<a', result)
-        self.assertIn('http://example.com', result)
+        expected = '<p>Visit <a href="http://example.com">http://example.com</a> for info</p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_autolink_https(self):
         """Automatic linking of HTTPS URLs"""
         md_text = 'Visit https://example.com for info'
-        result = parseHtml(md_text)
-        self.assertIn('<a', result)
-        self.assertIn('https://example.com', result)
+        expected = '<p>Visit <a href="https://example.com">https://example.com</a> for info</p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_autolink_ftp(self):
         """Automatic linking of FTP URLs"""
         md_text = 'Download from ftp://files.example.com'
-        result = parseHtml(md_text)
-        self.assertIn('ftp://files.example.com', result)
+        expected = '<p>Download from <a href="ftp://files.example.com">ftp://files.example.com</a></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_email_autolink(self):
         """Automatic linking of email addresses"""
         md_text = 'Contact user@example.com for help'
         result = parseHtml(md_text)
-        # Email should be obfuscated/linked
-        self.assertIn('user', result)
-        self.assertIn('example.com', result)
+        # The displayed email will be obfuscated, but link href should be a mailto
+        self.assertIn('<a', result)
+        self.assertIn('mailto:user@example.com', result)
 
     def test_reference_style_image(self):
         """Reference-style image link"""
@@ -425,10 +423,8 @@ class TestLinksAndImagesAdvanced(unittest.TestCase):
 
 [img1]: http://example.com/image.jpg "Image Title"
 '''
-        result = parseHtml(md_text)
-        self.assertIn('<img', result)
-        self.assertIn('http://example.com/image.jpg', result)
-        self.assertIn('Alt text', result)
+        expected = '<p><img alt="Alt text" src="http://example.com/image.jpg" title="Image Title"></img></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_reference_style_image_no_title(self):
         """Reference-style image without title"""
@@ -897,10 +893,10 @@ class TestSpecialCharacters(unittest.TestCase):
     def test_less_than_greater_than(self):
         """Less than and greater than signs"""
         md_text = '5 < 10 and 20 > 15'
-        result = parseHtml(md_text)
-        # Should be escaped
-        self.assertIn('5', result)
-        self.assertIn('10', result)
+        result = parseHtml(md_text).strip()
+        # Angle brackets should be escaped as HTML entities
+        self.assertIn('&lt;', result)
+        self.assertIn('&gt;', result)
 
     def test_ampersand_standalone(self):
         """Standalone ampersand"""
