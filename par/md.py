@@ -499,7 +499,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_blockquote(self, node: Symbol) -> str:
         # Strip leading '>' markers from each line and parse the inner markdown so nested
-        # lists and multiple paragraphs within blockquotes are preserved correctly.
         lines = node.text.splitlines()
         stripped = '\n'.join(line.lstrip('> ').rstrip() for line in lines).strip() + '\n'
         result = self.parse_markdown(stripped, 'content')
