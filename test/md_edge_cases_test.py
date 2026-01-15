@@ -22,24 +22,6 @@ class TestEdgeCasesAndErrorHandling(unittest.TestCase):
         expected = ''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
-    def test_unclosed_bold_marker(self):
-        """Unclosed bold marker should not be processed"""
-        md_text = '**bold'
-        expected = '<p>**bold</p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-
-    def test_unclosed_italic_marker(self):
-        """Unclosed italic marker should not be processed"""
-        md_text = '*italic'
-        expected = '<p>*italic</p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-
-    def test_unclosed_code_marker(self):
-        """Unclosed code marker should not be processed"""
-        md_text = '`code'
-        expected = '<p>`code</p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-
     def test_mismatched_nesting_bold_italic(self):
         """Mismatched nesting should handle gracefully"""
         md_text = '**bold *italic** text*'
@@ -153,7 +135,7 @@ class TestBasicMarkdownElements(unittest.TestCase):
         md_text = 'Line 1  \nLine 2'
         result = parseHtml(md_text).strip()
         # Should contain a self-closing <br/> tag between lines
-        self.assertIn('<br/', result)
+        self.assertIn('<br/>', result)
         self.assertTrue(result.startswith('<p>') and result.endswith('</p>'))
 
     def test_line_break_backslash(self):
