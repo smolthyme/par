@@ -75,9 +75,9 @@ class MarkdownGrammar(dict):
         
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
-        def fmt_bold2()        : return _(r'__'),   words , _(r'__')
+        def fmt_bold2()        : return _(r'(?<!\w)__'),   words , _(r'__(?!\w)')
         #def fmt_underline()    : return _(r'_'),    words , _(r'_')
-        def fmt_italic2()      : return _(r'_'),    words , _(r'_')
+        def fmt_italic2()      : return _(r'(?<!\w)_'),    words , _(r'_(?!\w)')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
         def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
@@ -112,7 +112,7 @@ class MarkdownGrammar(dict):
         
         ## pre
         def pre_lang()         : return 0, space, 0, (block_kwargs, -1, (_(r','), block_kwargs))
-        def pre_text()         : return _(r'.+?(?=```|~~~+|</code>)', re.M|re.DOTALL)
+        def pre_text()         : return _(r'.*?(?=```|~~~+|</code>)', re.M|re.DOTALL)
         def pre_indented()     : return _(r'(?:(?:    |\t).+\n?)+', re.M), -1, blankline  # Plain indented code block
         def pre_fenced()       : return _(r'```|~~~+|<code>'), 0, pre_lang, blankline, pre_text, _(r'```|~~~+|</code>'), -2, blankline
         def pre()              : return [pre_indented, pre_fenced]
@@ -312,6 +312,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_longdash(self, node: Symbol) -> str:
         return '—'
 
+    def visit_escape_string(self, node: Symbol) -> str:
+        # Return the literal character following the escape backslash
+        return node.text[1:] if node.text and node.text.startswith('\\') else node.text
+
+    def visit_htmlentity(self, node: Symbol) -> str:
+        # Preserve HTML entities like &nbsp; without double-escaping
+        return node.text
+
     def visit_hr(self, node: Symbol) -> str:
         return self.tag('hr', enclose=1)
 
@@ -490,10 +498,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return (qt.text if (qt := node.find('quote_text')) else node.text.lstrip('> '))
 
     def visit_blockquote(self, node: Symbol) -> str:
-        text = []
-        for line in node.find_all('quote_lines'):
-            text.append(self.visit(line))
-        result = self.parse_markdown(''.join(text), 'content')
+        # Strip leading '>' markers from each line and parse the inner markdown so nested
+        # lists and multiple paragraphs within blockquotes are preserved correctly.
+        lines = node.text.splitlines()
+        stripped = '\n'.join(line.lstrip('> ').rstrip() for line in lines).strip() + '\n'
+        result = self.parse_markdown(stripped, 'content')
         
         attrib = node.find("quote_name")
         atrdat = node.find("quote_date")
