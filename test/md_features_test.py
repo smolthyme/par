@@ -1218,5 +1218,14 @@ Heading 2
 </section>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_emdash_in_headings(self):
+        md_text = '''\
+# Title -- Subtitle
+## Another -- Example
+'''
+        result = parseHtml(md_text).strip()
+        self.assertIn('Title — Subtitle', result)
+        self.assertIn('Another — Example', result)
+
 if __name__ == '__main__':
     unittest.main()
