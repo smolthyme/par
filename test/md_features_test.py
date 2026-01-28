@@ -1006,11 +1006,6 @@ class TestMiscInlineHTML(unittest.TestCase):
         expected = '''<p>★★★★ / wombat wontparse</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
-    # def test_button_link(self):
-    #     md_text = '''((Click Me|http://example.com|btn-primary))'''
-    #     expected = '''<p><button onclick="location.href='http://example.com'" class="btn-primary">Click Me</button></p>'''
-    #     self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-
 class TestMiscBlocksHTML(unittest.TestCase):
     def test_blockquote_with_attribution(self):
         md_text = '''> "I have been using the AquaBoostAG liquefied polymer" -- Mystery Mountain Grove'''
