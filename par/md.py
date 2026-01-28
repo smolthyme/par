@@ -217,6 +217,12 @@ class MarkdownGrammar(dict):
         
         # Clickable images (inline image wrapped in inline link)
         def image_link()       : return _(r'\['), _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)'), 0, attr_def
+
+        # Buttons - syntax: ((Label|>url)), ((Label|>> url)), ((Label|/form-id or /action)), ((Label|$ js))
+        def button_label()    : return _(r'[^|\)]+')
+        # Allow any content up until the closing '))' sequence (so JS with parens is permitted)
+        def button_action()   : return _(r'(?:>>|>|/|\$)'), 0, _(r'.*(?=\)\))', re.S)
+        def button()          : return _(r'\(\('), 0, button_label, _(r'\|'), 0, button_action, _(r'\)\)'), 0, attr_def
         
         # Wiki-style links (wiki_link_text uses shared bracketed_text)
         def wiki_link_page()   : return _(r'[^\]#\|]+')
@@ -235,7 +241,7 @@ class MarkdownGrammar(dict):
                 escape_string,
                 html_block, html_inline,
                 # Links and images (before formatting)
-                image_link, inline_image, reference_image, wiki_image,
+                image_link, button, inline_image, reference_image, wiki_image,
                 inline_link, reference_link, wiki_link,
                 raw_url, email_address,
                 # Formatting
@@ -790,6 +796,55 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         return self._render_link(ref['url'], text, ref.get('title'))
+
+    def visit_button(self, node: Symbol) -> str:
+        if label := (node.find('button_label')):
+            label = label.text.strip()
+            action_node = node.find('button_action')
+            if not action_node:
+                return node.text
+            action = action_node.text.strip()
+            if action.startswith('>>'):
+                marker = '>>'
+                rest = action[2:].strip()
+            else:
+                marker = action[0]
+                rest = action[1:].strip()
+
+            _cls, _id = self._extract_attrs(node)
+            cls_str = _cls.strip() if _cls else ''
+
+            # Buttons that navigate to a URL (single or double >)
+            if marker in ('>', '>>'):
+                url = rest
+                if not self._is_safe_url(url):
+                    return node.text
+                target = '_blank' if marker == '>>' else None
+                attrs = f'class="{cls_str}"' if cls_str else ''
+                if _id:
+                    attrs += (f' id="{_id}"') if attrs else f'id="{_id}"'
+                # Render inner button without trailing newline to avoid extra newline before closing form
+                return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=url, method='get', target=target, attrs=attrs)
+
+            # Slash-prefixed: form action (POST) if 'submit' in path, otherwise a button referencing form id
+            if marker == '/':
+                if 'submit' in action.lower():
+                    attrs = f'class="{cls_str}"' if cls_str else ''
+                    if _id:
+                        attrs += (f' id="{_id}"') if attrs else f'id="{_id}"'
+                    return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=action, method='post', attrs=attrs)
+                else:
+                    formid = rest.lstrip('/').strip()
+                    # Pass class on button if present; preserve desired attribute order
+                    if cls_str:
+                        return self.tag('button', label, attrs=f' type="submit" form="{formid}"', _class=cls_str)
+                    return self.tag('button', label, attrs=f' type="submit" form="{formid}"')
+
+            # JS onclick
+            if marker == '$':
+                return self.tag('button', label, attrs=f' type="button" onclick="{rest}"', _class=cls_str if cls_str else '')
+
+        return node.text
 
     def visit_link_reference(self, node: Symbol) -> str:
         return ''

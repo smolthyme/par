@@ -1222,5 +1222,36 @@ Heading 2
         self.assertIn('Title — Subtitle', result)
         self.assertIn('Another — Example', result)
 
+class TestButtonsHTML(unittest.TestCase):
+    def test_button_as_link(self):
+        md_text = "((Go to Example.com|>https://example.com))"
+        expected = '<p><form action="https://example.com" method="get"><button type="submit">Go to Example.com</button></form></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_open_new_tab(self):
+        md_text = "((Go to Example.com in new tab|>> https://example.com))"
+        expected = '<p><form action="https://example.com" method="get" target="_blank"><button type="submit">Go to Example.com in new tab</button></form></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_submit_form_post(self):
+        md_text = "((Submit|/submit-this-form-yo))"
+        expected = '<p><form action="/submit-this-form-yo" method="post"><button type="submit">Submit</button></form></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_form_attr_button(self):
+        md_text = "((Submit|/form-name))"
+        expected = '<p><button type="submit" form="form-name">Submit</button></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_js_onclick(self):
+        md_text = "((Click Me|$ alert('Button clicked!')))"
+        expected = "<p><button type=\"button\" onclick=\"alert('Button clicked!')\">Click Me</button></p>"
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_styled_button_class_on_form(self):
+        md_text = "((Styled Button|> https://example.com)){.cssstyle}"
+        expected = '<p><form action="https://example.com" method="get" class="cssstyle"><button type="submit">Styled Button</button></form></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
 if __name__ == '__main__':
     unittest.main()
