@@ -553,11 +553,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def _get_title(self, node: Symbol, level: int):
         _cls, _id = self._extract_attrs(node)
         _id = _id or self.get_title_id(level)
-        title = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
+        title_raw = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
+        # Render inline markdown within titles (support bold/italic/code/longdash etc.)
+        title_rendered = self.parse_markdown(title_raw, 'text').strip()
         anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
-        section_s = self._open_section(self.slug(f"{title}"))
+        section_s = self._open_section(self.slug(f"{title_raw}"))
         
-        return section_s + self.tag(f'h{level}', f"{title}{anchor}", id=_id, _class=_cls)
+        return section_s + self.tag(f'h{level}', f"{title_rendered}{anchor}", id=_id, _class=_cls)
 
     def visit_atx_title(self, node: Symbol) -> str:
         level = len(level.text) if (level := node.find('hashes')) and level.text else 1
