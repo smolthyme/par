@@ -222,7 +222,7 @@ class MarkdownGrammar(dict):
         def button_label()    : return _(r'[^|\)]+')
         # Allow any content up until the closing '))' sequence (so JS with parens is permitted)
         def button_action()   : return _(r'(?:>>|>|/|\$)'), 0, _(r'.*(?=\)\))', re.S)
-        def button()          : return _(r'\(\('), 0, button_label, _(r'\|'), 0, button_action, _(r'\)\)'), 0, attr_def
+        def button()          : return _(r'\(\('), 0, button_label, 0, (_(r'\|\s*'), button_action), _(r'\)\)'), 0, attr_def
         
         # Wiki-style links (wiki_link_text uses shared bracketed_text)
         def wiki_link_page()   : return _(r'[^\]#\|]+')
