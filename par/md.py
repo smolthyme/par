@@ -101,9 +101,15 @@ class MarkdownGrammar(dict):
         def directive_title()  : return _(r'[^\n\r]+')
         def directive()        : return _(r'\.\.'), 0, space, directive_name, 0, space, _(r'::'), 0, directive_title
         
-        def block_kwargs_key() : return _(r'[^=,\)\n]+')
-        def block_kwargs_val() : return _(r'[^\),\n]+')
+        def block_kwargs_key() : return _(r'[^=,\)\s\}\n]+')
+        def block_kwargs_val() : return _(r'[^\)\s,\}\n]+')
         def block_kwargs()     : return block_kwargs_key, 0, (_(r'='), block_kwargs_val)
+        
+        ## classes, id and kv pairs supported
+        def attr_def_id()      : return _(r'#[^\s\}]+')
+        def attr_def_class()   : return _(r'\.[^\s\}]+')
+        def attr_def_set()     : return [attr_def_id, attr_def_class, block_kwargs], -1, (0, _(r'[\t ,]+'), [attr_def_id, attr_def_class, block_kwargs])
+        def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
         
         ## footnote
         def footnote()         : return _(r'\[\^\w+\]')
@@ -116,12 +122,6 @@ class MarkdownGrammar(dict):
         def pre_indented()     : return _(r'(?:(?:    |\t).+\n?)+', re.M), -1, blankline  # Plain indented code block
         def pre_fenced()       : return _(r'```|~~~+|<code>'), 0, pre_lang, blankline, pre_text, _(r'```|~~~+|</code>'), -2, blankline
         def pre()              : return [pre_indented, pre_fenced]
-        
-        ## class and id definition
-        def attr_def_id()      : return _(r'#[^\s\}]+')
-        def attr_def_class()   : return _(r'\.[^\s\}]+')
-        def attr_def_set()     : return [attr_def_id, attr_def_class], -1, (space, [attr_def_id, attr_def_class])
-        def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
         
         ## titles / subject
         def title_text()       : return _(r'[^\[\]\n#\{\}]+', re.U)
@@ -223,7 +223,7 @@ class MarkdownGrammar(dict):
         # Allow any content up until the closing '))' sequence (so JS with parens is permitted)
         def button_action()   : return _(r'(?:>>|>|/|\$)'), 0, _(r'.*(?=\)\))', re.S)
         def button()          : return _(r'\(\('), 0, button_label, 0, (_(r'\|\s*'), button_action), _(r'\)\)'), 0, attr_def
-        
+
         # Wiki-style links (wiki_link_text uses shared bracketed_text)
         def wiki_link_page()   : return _(r'[^\]#\|]+')
         def wiki_link_anchor() : return _(r'#[^\]#\|]*')
@@ -237,11 +237,30 @@ class MarkdownGrammar(dict):
         def wiki_image_height(): return _(r'\d+%?|\d+px|[\d\.]+(?:em|rem|vh)')
         def wiki_image()       : return _(r'\[\[image:'), wiki_image_file, 0, (_(r'\|'), 0, wiki_image_align), 0, (_(r'\|'), 0, wiki_image_width), 0, (_(r'\|'), 0, wiki_image_height), _(r'\]\]')
         
+        # Input elements - syntax: [Label: >type___*] for inputs, [Label <___] for outputs
+        def input_label()     : return _(r'[^\]<>]+?(?=\s*[<>])')
+        def input_marker()    : return _(r'>')  # input direction
+        def output_marker()   : return _(r'<')  # output direction
+        def input_type_mod()  : return _(r'@|tel|#|!')  # @=email, tel=tel, #=number, !=file/img
+        def input_multiple()  : return _(r'\+')  # + means multiple (for file inputs)
+        def input_field()     : return _(r'_{3,}')  # ___ = text, ______ (6+) = textarea
+        def input_required()  : return _(r'\*')  # * means required
+        def input_checkbox()  : return _(r'\[[xX ]?\]')
+        def input_elem()      : return _(r'\['), input_label, 0, space, input_marker, 0, space, 0, input_type_mod, 0, input_multiple, [input_checkbox, input_field], 0, input_required, _(r'\]'), 0, attr_def
+        def output_elem()     : return _(r'\['), input_label, 0, space, output_marker, 0, space, input_field, _(r'\]'), 0, attr_def
+        
+
+        # Form blocks
+        def form_action()      : return _(r'[^\n\r\]]+')
+        def form_content()     : return _(r'(?:(?!^\][ \t]*(?:\{|$)).)+', re.DOTALL | re.M)
+        def form_type()        : return _(r'&>|=>|\*=')
+        def form()             : return _(r'\['), form_type, 0, space, form_action, blankline, 0, form_content, _(r'\]'), 0, attr_def, -1, blankline
+        
         def word()             : return [
                 escape_string,
                 html_block, html_inline,
                 # Links and images (before formatting)
-                image_link, button, inline_image, reference_image, wiki_image,
+                image_link, button, input_elem, output_elem, inline_image, reference_image, wiki_image,
                 inline_link, reference_link, wiki_link,
                 raw_url, email_address,
                 # Formatting
@@ -254,7 +273,7 @@ class MarkdownGrammar(dict):
         def content(): return -2, [blankline,
                 link_reference,
                 hr, directive,
-                pre, html_block, lists,
+                pre, html_block, lists, form,
                 card, side_block, table, dl, blockquote, footnote_desc,
                 title, paragraph ]
         
@@ -284,8 +303,48 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             [self._collect_link_reference(obj) for obj in nodes[0].find_all('link_reference')]
             # Collect titles for ToC
             [self._alt_title(onk) for onk in nodes[0].find_all('title')]
-        
-        return super(MarkdownHtmlVisitor, self).visit(nodes, root)
+
+        # Use normal traversal
+        html = super(MarkdownHtmlVisitor, self).visit(nodes, root)
+
+        # Post-process document-level attribute-only paragraphs like "<p>{#id .class}</p>"
+        # and apply them to the nearest previous opening tag in the HTML output.
+        import re
+        def parse_attr_text(text: str):
+            cls = []
+            _id = None
+            kv = {}
+            for part in re.findall(r'(#\w[\w-]*)|(\.\w[\w-]*)|([^\s=]+)(?:=([^\s]+))?', text):
+                if part[0]:
+                    _id = part[0][1:]
+                elif part[1]:
+                    cls.append(part[1][1:])
+                elif part[2]:
+                    key = part[2]
+                    val = part[3] if part[3] else True
+                    kv[key] = val
+            return ' '.join(cls), _id, kv
+
+        def apply_attr_paragraphs(h: str) -> str:
+            # Find all paragraph-only attr blocks
+            for m in re.finditer(r'<p>\s*(\{[^}]+\})\s*</p>\s*', h):
+                attrs_txt = m.group(1)
+                cls, _id, kv = parse_attr_text(attrs_txt.strip('{} '))
+                start = m.start()
+                # find last opening tag before this paragraph
+                prev_tags = list(re.finditer(r'<(?P<tag>\w+)(?P<attrs>[^>]*)>', h[:start]))
+                if not prev_tags:
+                    continue
+                last = prev_tags[-1]
+                tag_start = last.start()
+                # merge attributes at that position
+                h = h[:tag_start] + self._merge_attrs_to_opening_tag(h[tag_start:], cls, _id, kv)
+                # remove the attribute paragraph (it may have shifted positions previously; rebuild search)
+                h = re.sub(re.escape(m.group(0)), '', h, count=1)
+                return apply_attr_paragraphs(h)  # restart since indices changed
+            return h
+
+        return apply_attr_paragraphs(html)
     
     def parse_markdown(self, text, peg=None, *, title_id_begin_level: int | None = 1):
         g = self.grammar or MarkdownGrammar()
@@ -329,8 +388,95 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_hr(self, node: Symbol) -> str:
         return self.tag('hr', enclose=1)
 
+    def _merge_attrs_to_opening_tag(self, html: str, _class: str, _id: str, kv: dict) -> str:
+        """Merge attributes into the first opening tag of an HTML fragment.
+        Prefer targeting inner input/output elements when present (so `{name=ml}` attaches
+        to the `<input>` inside a `<label>` rather than the `<label>` itself).
+        Returns modified HTML (or original if no opening tag found).
+        """
+        import re
+
+        # Prefer to target inner tags like input/textarea/output if present
+        preferred = ['input', 'textarea', 'output', 'img', 'a', 'audio', 'video', 'form', 'div', 'section']
+        target_pos = None
+        target_tag = None
+        for t in preferred:
+            mpos = re.search(fr"<\s*{t}\b", html)
+            if mpos:
+                target_pos = mpos.start()
+                target_tag = t
+                break
+
+        if target_pos is None:
+            # fallback to the first opening tag
+            m = re.search(r"^(\s*<(?P<tag>\w+)(?P<attrs>[^>]*?)(?P<selfclose>/?)(?:>|\s>))", html)
+            if not m:
+                return html
+            tag = m.group('tag')
+            attrs = m.group('attrs') or ''
+            start, end = m.span(0)
+        else:
+            # capture the opening tag at the found position
+            m = re.search(r"<(?P<tag>\w+)(?P<attrs>[^>]*?)(?P<selfclose>/?)>", html[target_pos:])
+            if not m:
+                return html
+            tag = m.group('tag')
+            attrs = m.group('attrs') or ''
+            start = target_pos + m.start(0)
+            end = target_pos + m.end(0)
+
+        # Parse existing attributes into dict
+        attr_re = re.compile(r'([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*(=\s*(?:"([^"]*)"|\'([^\']*)\'))?')
+        existing = {}
+        for am in attr_re.finditer(attrs):
+            k = am.group(1)
+            v = am.group(3) if am.group(3) is not None else (am.group(4) if am.group(4) is not None else True)
+            existing[k] = v
+
+        # Merge classes
+        if _class:
+            existing['class'] = (existing.get('class', '') + ' ' + _class).strip()
+        # Merge id (new id overrides existing if present)
+        if _id:
+            existing['id'] = _id
+        # Merge kv attrs (kv True => boolean attribute)
+        for k, v in kv.items():
+            existing[k] = v
+
+        # Rebuild attribute string (put class/id/others in deterministic order)
+        parts = []
+        if 'class' in existing and existing['class']:
+            parts.append(f'class="{existing["class"]}"')
+        if 'id' in existing and existing['id']:
+            parts.append(f'id="{existing["id"]}"')
+        for k in sorted(x for x in existing.keys() if x not in ('class', 'id')):
+            val = existing[k]
+            if val is True:
+                parts.append(k)
+            else:
+                parts.append(f'{k}="{val}"')
+
+        new_attrs = ' ' + ' '.join(parts) if parts else ''
+
+        new_open = f"<{tag}{new_attrs}{m.group('selfclose') or ''}>"
+        return html[:start] + new_open + html[end:]
+
     def visit_paragraph(self, node: Symbol) -> str:
-        if content := self.visit(node).strip():
+        # Render children one by one so an attribute definition that appears
+        # *after* an element (e.g. `![img](x){.c}` or `(...) {.c}`) can be applied
+        # to the previous rendered element instead of remaining as literal text.
+        parts = []
+        for child in node.what if hasattr(node, 'what') and node.what else []:
+            if not isinstance(child, str) and child.__name__ == 'attr_def':
+                _cls, _id, kv = self._extract_attrs(child)
+                if parts:
+                    parts[-1] = self._merge_attrs_to_opening_tag(parts[-1], _cls, _id, kv)
+                # swallow the attr_def (do not render literally)
+                continue
+            parts.append(self.visit(child) if not isinstance(child, str) else child)
+
+        content = ''.join(parts).strip()
+        if content:
             return self.tag('p', content, enclose=2)
         else:
             return ''
@@ -545,13 +691,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (marker := node.find('setext_underline')) and marker.text:
                     level = 1 if marker.text[0] == '=' else 2
         
-        _cls, _id = self._extract_attrs(node)
+        _cls, _id, _ = self._extract_attrs(node)
         _id = _id or self.get_title_id(level)
         title = (title_node := node.find('title_text')) and title_node.text
         self.resources.toc_items.append((level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
-        _cls, _id = self._extract_attrs(node)
+        _cls, _id, _ = self._extract_attrs(node)
         _id = _id or self.get_title_id(level)
         title_raw = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         # Render inline markdown within titles (support bold/italic/code/longdash etc.)
@@ -587,7 +733,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         else:
             content = ''
         
-        _cls, _id = self._extract_attrs(node)
+        _cls, _id, _ = self._extract_attrs(node)
         return self.tag('div', f"\n{content}\n", _class=f"card {_cls}".strip(), id=_id or None)
 
     def visit_side_block(self, node: Symbol) -> str:
@@ -595,7 +741,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 for thing in node.find_all('side_block_cont')]
         
         if head := node.find('side_block_head'):
-            _cls, _id = self._extract_attrs(head)
+            _cls, _id, _ = self._extract_attrs(head)
             return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {_cls or ''}", id=_id)
         else:
             return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz")
@@ -803,9 +949,22 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if label := (node.find('button_label')):
             label = label.text.strip()
             action_node = node.find('button_action')
-            if not action_node:
-                return node.text
-            action = action_node.text.strip()
+            action = action_node.text.strip() if action_node else None
+
+            _cls, _id, _ = self._extract_attrs(node)
+            cls_str = _cls.strip() if _cls else ''
+            def _class_id_attrs() -> str:
+                parts = []
+                if cls_str:
+                    parts.append(f'class="{cls_str}"')
+                if _id:
+                    parts.append(f'id="{_id}"')
+                return ' '.join(parts)
+
+            # No action -> submit button (useable inside forms)
+            if not action:
+                return self.tag('button', label, attrs=' type="submit"', _class=cls_str or '', id=_id or None)
+
             if action.startswith('>>'):
                 marker = '>>'
                 rest = action[2:].strip()
@@ -813,28 +972,19 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 marker = action[0]
                 rest = action[1:].strip()
 
-            _cls, _id = self._extract_attrs(node)
-            cls_str = _cls.strip() if _cls else ''
-
             # Buttons that navigate to a URL (single or double >)
             if marker in ('>', '>>'):
                 url = rest
                 if not self._is_safe_url(url):
                     return node.text
                 target = '_blank' if marker == '>>' else None
-                attrs = f'class="{cls_str}"' if cls_str else ''
-                if _id:
-                    attrs += (f' id="{_id}"') if attrs else f'id="{_id}"'
-                # Render inner button without trailing newline to avoid extra newline before closing form
-                return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=url, method='get', target=target, attrs=attrs)
+                # Render a small form that contains a button performing a GET
+                return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=url, method='get', target=target, attrs=_class_id_attrs())
 
             # Slash-prefixed: form action (POST) if 'submit' in path, otherwise a button referencing form id
             if marker == '/':
                 if 'submit' in action.lower():
-                    attrs = f'class="{cls_str}"' if cls_str else ''
-                    if _id:
-                        attrs += (f' id="{_id}"') if attrs else f'id="{_id}"'
-                    return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=action, method='post', attrs=attrs)
+                    return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=action, method='post', attrs=_class_id_attrs())
                 else:
                     formid = rest.lstrip('/').strip()
                     # Pass class on button if present; preserve desired attribute order
@@ -844,9 +994,154 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
             # JS onclick
             if marker == '$':
-                return self.tag('button', label, attrs=f' type="button" onclick="{rest}"', _class=cls_str if cls_str else '')
+                return self.tag('button', label, attrs=f' type="button" onclick="{rest}"', _class=cls_str or '')
 
         return node.text
+
+    def visit_form(self, node: Symbol) -> str:
+        """Handle form blocks: [&> /action], [=> /action], [*= expression]"""
+        form_type = node.find('form_type')
+        if not form_type:
+            return node.text
+        
+        form_type_text = form_type.text.strip()
+        action = (action_node.text.strip() if (action_node := node.find('form_action')) else '')
+        content = (content_node.text if (content_node := node.find('form_content')) else '')
+        
+        _cls, _id, _ = self._extract_attrs(node)
+        
+        # Parse content specially for forms - inputs/outputs/buttons should not be in <p> tags
+        parsed_content = self._parse_form_content(content.strip())
+        
+        # Determine form attributes based on type
+        if form_type_text == '&>':  # POST form
+            return self.tag('form', f"\n{parsed_content}\n", action=action, method='post', _class=_cls, id=_id or None)
+        elif form_type_text == '=>':  # GET form
+            return self.tag('form', f"\n{parsed_content}\n", action=action, method='get', _class=_cls, id=_id or None)
+        elif form_type_text == '*=':  # oninput form
+            return self.tag('form', f"\n{parsed_content}\n", oninput=action, _class=_cls, id=_id or None)
+        
+        return node.text
+
+    def _parse_form_content(self, content: str) -> str:
+        """Parse form content, ensuring inputs/buttons are not wrapped in <p> tags"""
+        lines = content.split('\n')
+        result = []
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            
+            # Parse the line as markdown
+            parsed = self.parse_markdown(stripped + '\n', 'content').strip()
+            
+            # If parsed result is a <p> containing only a <label> or <button>, unwrap it
+            if parsed.startswith('<p>') and parsed.endswith('</p>'):
+                inner = parsed[3:-4]  # Remove <p> and </p>
+                # Check if the inner content is just a label or button (possibly with whitespace)
+                inner_stripped = inner.strip()
+                if (inner_stripped.startswith('<label>') and inner_stripped.endswith('</label>')) or \
+                   (inner_stripped.startswith('<button') and inner_stripped.endswith('</button>')):
+                    parsed = inner_stripped
+            
+            result.append(parsed)
+        
+        return '\n'.join(result)
+
+    def _derive_input_name(self, label: str) -> str:
+        """Derive input name from label text"""
+        # Strip trailing punctuation and whitespace
+        clean = re.sub(r'[:\?\!]+$', '', label.strip()).strip()
+        # Get the first word, lowercased
+        words = clean.split()
+        if words:
+            # Use the first word, removing any remaining punctuation
+            name = re.sub(r'[^\w]', '', words[0]).lower()
+            return name
+        return 'input'
+
+    def visit_input_elem(self, node: Symbol) -> str:
+        """Handle input elements: [Label: >type___*]"""
+        label = (label_node.text.strip() if (label_node := node.find('input_label')) else '')
+        
+        # Determine input type from type modifier
+        type_mod = (mod_node.text if (mod_node := node.find('input_type_mod')) else '')
+        is_multiple = node.find('input_multiple') is not None
+        is_required = node.find('input_required') is not None
+        is_checkbox = node.find('input_checkbox') is not None
+        field = node.find('input_field')
+        
+        # Extract attributes from attr_def
+        _cls, _id, kv_attrs = self._extract_attrs(node)
+        
+        # Get name from attrs or derive from label
+        name = kv_attrs.pop('name', None) or self._derive_input_name(label)
+        
+        # Determine input type
+        if is_checkbox:
+            input_type = 'checkbox'
+            checkbox_text = node.find('input_checkbox').text
+            is_checked = 'x' in checkbox_text.lower() or 'X' in checkbox_text
+        elif type_mod == '@':
+            input_type = 'email'
+            is_checked = False
+        elif type_mod == 'tel':
+            input_type = 'tel'
+            is_checked = False
+        elif type_mod == '#':
+            input_type = kv_attrs.pop('type', 'number')
+            is_checked = False
+        elif type_mod == '!':
+            input_type = 'file'
+            is_checked = False
+        else:
+            input_type = kv_attrs.pop('type', 'text')
+            is_checked = False
+        
+        # Check if textarea (6+ underscores)
+        is_textarea = field and len(field.text) >= 6
+        
+        # Build the input/textarea element
+        if is_textarea:
+            # Use boolean attributes for 'required' when present
+            attrs = {} if not is_required else {'required': True}
+            inner = self.tag('textarea', '', name=name, 
+                           _class=_cls, id=_id or None, 
+                           newline=False, enclose=2, **attrs, **kv_attrs)
+        elif is_checkbox:
+            inner = self.tag('input', '', name=name, type=input_type,
+                           checked=True if is_checked else None,
+                           _class=_cls, id=_id or None,
+                           newline=False, enclose=1, **kv_attrs)
+        elif input_type == 'file':
+            inner = self.tag('input', '', name=name, type=input_type,
+                           accept='image/*',
+                           multiple=True if is_multiple else None,
+                           required=True if is_required else None,
+                           _class=_cls, id=_id or None,
+                           newline=False, enclose=1, **kv_attrs)
+        else:
+            inner = self.tag('input', '', name=name, type=input_type,
+                           required=True if is_required else None,
+                           _class=_cls, id=_id or None,
+                           newline=False, enclose=1, **kv_attrs)        
+        return self.tag('label', f"{label} {inner}", newline=False, enclose=2)
+
+    def visit_output_elem(self, node: Symbol) -> str:
+        """Handle output elements: [Label <___]"""
+        label = (label_node.text.strip() if (label_node := node.find('input_label')) else '')
+        
+        # Extract attributes
+        _cls, _id, kv_attrs = self._extract_attrs(node)
+        
+        # Get name from attrs or derive from label
+        name = kv_attrs.pop('name', None) or self._derive_input_name(label)
+        
+        inner = self.tag('output', '', name=name, _class=_cls, id=_id or None, 
+                        newline=False, enclose=2, **kv_attrs)
+        
+        return self.tag('label', f"{label} {inner}", newline=False, enclose=2)
 
     def visit_link_reference(self, node: Symbol) -> str:
         return ''
@@ -892,13 +1187,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         img_tag = self._render_media(image_url, alt or "", image_title, enclose=0, content=alt or "")
         
-        _cls, _id = self._extract_attrs(node)
+        _cls, _id, _ = self._extract_attrs(node)
         self.resources.links_ext.append(link_url)
         return self.tag('a', img_tag, href=link_url, title=link_title, newline=False, _class=_cls, id=_id or None)
 
-    def _extract_attrs(self, node: Symbol) -> tuple[str, str]:
-        """Extract class and id attributes from attr_def nodes"""
+    def _extract_attrs(self, node: Symbol) -> tuple[str, str, dict]:
+        """Extract class, id, and key-value attributes from attr_def nodes
+
+        Supports:
+          - `.class` (one or more)
+          - `#id`
+          - `key` (boolean attribute)
+          - `key=value`
+        """
         _id = _class = ''
+        kv = {}
         
         if (attr_def := next((n for n in node.find_all_here('attr_def')), None)):
             for class_node in attr_def.find_all('attr_def_class'):
@@ -906,8 +1209,19 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             
             if id_node := attr_def.find('attr_def_id'):
                 _id = id_node.text[1:]  # Skip the leading '#'
+            
+            # block_kwargs nodes may contain key or key=val
+            for kv_node in attr_def.find_all('block_kwargs'):
+                if (key_node := kv_node.find('block_kwargs_key')):
+                    key = key_node.text
+                    val_node = kv_node.find('block_kwargs_val')
+                    if val_node and val_node.text:
+                        kv[key] = val_node.text
+                    else:
+                        # Boolean attribute (e.g. 'required') represented as True
+                        kv[key] = True
         
-        return _class, _id
+        return _class.strip(), _id, kv
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
@@ -922,7 +1236,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return node.text
         
-        _cls, _id = self._extract_attrs(node)
+        _cls, _id, _ = self._extract_attrs(node)
         return self._render_media(url, alt, title, enclose=1, _class=_cls, _id=_id)
 
     def visit_reference_image(self, node: Symbol) -> str:
@@ -940,7 +1254,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return node.text
         
-        _cls, _id = self._extract_attrs(node)
+        _cls, _id, _ = self._extract_attrs(node)
         return self._render_media(url, alt, title, enclose=2, _class=_cls, _id=_id)
 
     def visit_wiki_image(self, node: Symbol) -> str:

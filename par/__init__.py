@@ -90,7 +90,7 @@ class HTMLVisitor(SimpleVisitor):
         else:
             kw['class'] = _class.strip()
 
-        kwattrs = ' '.join(f'{x}="{y}"' for x, y in sorted(kw.items()) if y)
+        kwattrs = ' '.join(x if y is True else f'{x}="{y}"' for x, y in sorted(kw.items()) if y)
         kwattrs = f' {kwattrs}{f" {attrs}" if attrs != '' else ""}' if kwattrs else attrs
         nline = '\n' if newline else ''
         enclose = 2 if child else enclose

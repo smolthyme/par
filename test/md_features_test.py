@@ -1253,5 +1253,228 @@ class TestButtonsHTML(unittest.TestCase):
         expected = '<p><form action="https://example.com" method="get" class="cssstyle"><button type="submit">Styled Button</button></form></p>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+
+class TestFormsHTML(unittest.TestCase):
+    """Test form block syntax: [&> url ...], [=> url ...], [*= expr ...]"""
+    
+    def test_form_post_simple(self):
+        """[&> /action] creates a POST form"""
+        md_text = '''\
+[&> /contact-api
+Get in contact with us!
+]
+'''
+        expected = '''\
+<form action="/contact-api" method="post">
+<p>Get in contact with us!</p>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_form_get_simple(self):
+        """[=> /action] creates a GET form"""
+        md_text = '''\
+[=>/search
+Search the site
+]
+'''
+        expected = '''\
+<form action="/search" method="get">
+<p>Search the site</p>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_form_oninput(self):
+        """[*= expression ...] creates a form with oninput handler"""
+        md_text = '''\
+[*= result.value=a.value*2
+Double your number
+]
+'''
+        expected = '''\
+<form oninput="result.value=a.value*2">
+<p>Double your number</p>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_form_with_id_and_class(self):
+        """Form with {#id .class} attributes"""
+        md_text = '''\
+[&> /api
+Content here
+]{#my-form .styled}
+'''
+        expected = '''\
+<form action="/api" class="styled" id="my-form" method="post">
+<p>Content here</p>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_form_post_full_url(self):
+        """POST form with full URL"""
+        md_text = '''\
+[&>https://cool.com/send
+Submit data
+]
+'''
+        expected = '''\
+<form action="https://cool.com/send" method="post">
+<p>Submit data</p>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+
+class TestInputsHTML(unittest.TestCase):
+    """Test input syntax: [Label: >type___*]"""
+    
+    def test_text_input_required(self):
+        """[Name: >___*] creates required text input"""
+        md_text = '''[Name: >___*]'''
+        expected = '''<p><label>Name: <input name="name" required type="text"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_text_input_optional(self):
+        """[Name: >___] creates optional text input"""
+        md_text = '''[Name: >___]'''
+        expected = '''<p><label>Name: <input name="name" type="text"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_email_input(self):
+        """[Email >@___*] creates email input"""
+        md_text = '''[Email >@___*]'''
+        expected = '''<p><label>Email <input name="email" required type="email"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_tel_input(self):
+        """[Phone: >tel___*] creates telephone input"""
+        md_text = '''[Phone: >tel___*]'''
+        expected = '''<p><label>Phone: <input name="phone" required type="tel"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_number_input(self):
+        """[Amount >#___] creates number input"""
+        md_text = '''[Amount >#___]'''
+        expected = '''<p><label>Amount <input name="amount" type="number"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_file_input(self):
+        """[Photo: >!___*] creates file input for images"""
+        md_text = '''[Photo: >!___*]'''
+        expected = '''<p><label>Photo: <input accept="image/*" name="photo" required type="file"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_file_input_multiple(self):
+        """[Photos: >!+___*] creates multiple file input"""
+        md_text = '''[Photos: >!+___*]'''
+        expected = '''<p><label>Photos: <input accept="image/*" multiple name="photos" required type="file"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_checkbox_input(self):
+        """[Urgent? >[]] creates checkbox"""
+        md_text = '''[Urgent? >[]]'''
+        expected = '''<p><label>Urgent? <input name="urgent" type="checkbox"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_checkbox_checked(self):
+        """[Active >[x]] creates checked checkbox"""
+        md_text = '''[Active >[x]]'''
+        expected = '''<p><label>Active <input checked name="active" type="checkbox"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_textarea(self):
+        """[Message: > ______*] creates textarea (6+ underscores)"""
+        md_text = '''[Message: > ______*]'''
+        expected = '''<p><label>Message: <textarea name="message" required></textarea></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_output_element(self):
+        """[Result <___] creates output element"""
+        md_text = '''[Result <___]'''
+        expected = '''<p><label>Result <output name="result"></output></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_input_with_attributes(self):
+        """Input with {name=x type=y} attributes"""
+        md_text = '''[Milliliters (ml) >#___]{name=ml type=number min=0 step=any value=100}'''
+        expected = '''<p><label>Milliliters (ml) <input min="0" name="ml" step="any" type="number" value="100"/></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_output_with_attributes(self):
+        """Output with {name=x .class} attributes"""
+        md_text = '''[Ounces (oz) <___]{name=oz .stylish}'''
+        expected = '''<p><label>Ounces (oz) <output class="stylish" name="oz"></output></label></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+
+class TestFormsWithInputsHTML(unittest.TestCase):
+    """Test forms containing inputs"""
+
+    def test_contact_form(self):
+        """Complete contact form example"""
+        md_text = '''\
+[&> /contact-api
+Get in contact with us!
+[Name: >___*]
+[Phone: >tel___*]
+[Urgent? >[]]
+[Message: > ______*]
+((Send)){type=submit}
+]
+'''
+        expected = '''\
+<form action="/contact-api" method="post">
+<p>Get in contact with us!</p>
+<label>Name: <input name="name" required type="text"/></label>
+<label>Phone: <input name="phone" required type="tel"/></label>
+<label>Urgent? <input name="urgent" type="checkbox"/></label>
+<label>Message: <textarea name="message" required></textarea></label>
+<button type="submit">Send</button>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_newsletter_form(self):
+        """Newsletter signup form"""
+        md_text = '''\
+[=>/newslettersignup
+[Email >@___*]]
+'''
+        expected = '''\
+<form action="/newslettersignup" method="get">
+<label>Email <input name="email" required type="email"/></label>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_converter_form(self):
+        """Unit converter with oninput and output"""
+        md_text = '''\
+[*= oz.value=(+ml.value/29.5735).toFixed(2)
+**Milliliter** to **Ounce** conversion
+[Milliliters (ml) >#___]{name=ml type=number min=0 step=any value=100}
+[Ounces (oz) <___]{name=oz .stylish}
+]{#ml2oz .card}
+'''
+        expected = '''\
+<form class="card" id="ml2oz" oninput="oz.value=(+ml.value/29.5735).toFixed(2)">
+<p><strong>Milliliter</strong> to <strong>Ounce</strong> conversion</p>
+<label>Milliliters (ml) <input min="0" name="ml" step="any" type="number" value="100"/></label>
+<label>Ounces (oz) <output class="stylish" name="oz"></output></label>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_image_upload_form(self):
+        """Image upload form with multiple files"""
+        md_text = '''\
+[=>https://cool.com/send-a-shot
+[Photo: >!+___*]
+((Submit))
+]
+'''
+        expected = '''\
+<form action="https://cool.com/send-a-shot" method="get">
+<label>Photo: <input accept="image/*" multiple name="photo" required type="file"/></label>
+<button type="submit">Submit</button>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+
 if __name__ == '__main__':
     unittest.main()
