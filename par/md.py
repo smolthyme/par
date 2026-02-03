@@ -995,11 +995,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         form_type_text = form_type.text.strip()
         action = (action_node.text.strip() if (action_node := node.find('form_action')) else '')
-        content = (content_node.text if (content_node := node.find('form_content')) else '')
+        # Collect all form_content nodes (there may be multiple entries)
+        content_nodes = list(node.find_all_here('form_content'))
+        if content_nodes:
+            content = ''.join(c.text for c in content_nodes)
+        else:
+            content = ''
         
         attrs = self._extract_attrs(node)
-        # Parse content using grammar-driven 'form_content' to avoid paragraph wrapping
-        parsed_content = self.parse_markdown(content.strip(), 'form_content').strip()
+        # Parse content using grammar-driven repeated 'form_content' to avoid paragraph wrapping
+        # Use a direct pattern tuple (-1, form_content) so we parse multiple form_content entries
+        # Render each `form_content` node directly so inputs/buttons are preserved
+        parts = []
+        for c in content_nodes:
+            parts.append(self.visit(c) if not isinstance(c, str) else c)
+        parsed_content = ''.join(parts).strip()
 
         # Determine form attributes based on type
         if form_type_text == '&>':  # POST form
