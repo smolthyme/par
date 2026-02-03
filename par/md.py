@@ -57,8 +57,8 @@ class MarkdownGrammar(dict):
         ## basic
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'[^\*_\s\d\.`]+') # Remove brackets maybe?
-        def blankline()        : return 0, space, eol
+        def wordlike()         : return _(r'[^\*_\s\d\.`\[\]]+') # Remove brackets maybe?
+        def blankline()        : return -1, space, eol
         def blanklines()       : return -2, blankline
         
         ## shared content patterns
@@ -252,9 +252,13 @@ class MarkdownGrammar(dict):
 
         # Form blocks
         def form_action()      : return _(r'[^\n\r\]]+')
-        def form_content()     : return _(r'(?:(?!^\][ \t]*(?:\{|$)).)+', re.DOTALL | re.M)
-        def form_type()        : return _(r'&>|=>|\*=')
-        def form()             : return _(r'\['), form_type, 0, space, form_action, blankline, 0, form_content, _(r'\]'), 0, attr_def, -1, blankline
+        # form items should avoid automatic paragraph wrapping for inputs/buttons/outputs
+        def form_item()        : return [input_elem, output_elem, button, text]
+        def form_content_line(): return form_item, -1, (0, space, form_item), blankline
+        def form_content()     : return -2, form_content_line, -1, blankline
+        # Allow optional whitespace after the form-type marker (e.g. '[=>/path' or '[=> /path')
+        def form_type()        : return _(r'(?:&>|=>|\*=)\s*')
+        def form()             : return _(r'^\s*\['), form_type, form_action, blankline, 0, form_content, _(r'\]'), 0, attr_def, -1, blankline
         
         def word()             : return [
                 escape_string,
@@ -306,45 +310,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
         # Use normal traversal
         html = super(MarkdownHtmlVisitor, self).visit(nodes, root)
-
-        # Post-process document-level attribute-only paragraphs like "<p>{#id .class}</p>"
-        # and apply them to the nearest previous opening tag in the HTML output.
-        import re
-        def parse_attr_text(text: str):
-            cls = []
-            _id = None
-            kv = {}
-            for part in re.findall(r'(#\w[\w-]*)|(\.\w[\w-]*)|([^\s=]+)(?:=([^\s]+))?', text):
-                if part[0]:
-                    _id = part[0][1:]
-                elif part[1]:
-                    cls.append(part[1][1:])
-                elif part[2]:
-                    key = part[2]
-                    val = part[3] if part[3] else True
-                    kv[key] = val
-            return ' '.join(cls), _id, kv
-
-        def apply_attr_paragraphs(h: str) -> str:
-            # Find all paragraph-only attr blocks
-            for m in re.finditer(r'<p>\s*(\{[^}]+\})\s*</p>\s*', h):
-                attrs_txt = m.group(1)
-                cls, _id, kv = parse_attr_text(attrs_txt.strip('{} '))
-                start = m.start()
-                # find last opening tag before this paragraph
-                prev_tags = list(re.finditer(r'<(?P<tag>\w+)(?P<attrs>[^>]*)>', h[:start]))
-                if not prev_tags:
-                    continue
-                last = prev_tags[-1]
-                tag_start = last.start()
-                # merge attributes at that position
-                h = h[:tag_start] + self._merge_attrs_to_opening_tag(h[tag_start:], cls, _id, kv)
-                # remove the attribute paragraph (it may have shifted positions previously; rebuild search)
-                h = re.sub(re.escape(m.group(0)), '', h, count=1)
-                return apply_attr_paragraphs(h)  # restart since indices changed
-            return h
-
-        return apply_attr_paragraphs(html)
+        # No post-processing of attribute-only paragraphs; attributes are attached via grammar
+        return html
     
     def parse_markdown(self, text, peg=None, *, title_id_begin_level: int | None = 1):
         g = self.grammar or MarkdownGrammar()
@@ -362,6 +329,27 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         parsed_output += v._close_section()
         
         return parsed_output
+
+    def _extract_attrs(self, node: Symbol) -> dict:
+        """Extract attributes from `attr_def` into a kwargs-ready dict.
+
+        Returns a dict suitable for `**kwargs` in `tag()` where classes are
+        provided as `_class` and id as `id`.
+        """
+        attrs = {}
+        if (attr_def := next((n for n in node.find_all_here('attr_def')), None)):
+            classes = [cn.text[1:] for cn in attr_def.find_all('attr_def_class')]
+            if classes:
+                attrs['_class'] = ' '.join(classes)
+            if id_node := attr_def.find('attr_def_id'):
+                attrs['id'] = id_node.text[1:]
+            for kv_node in attr_def.find_all('block_kwargs'):
+                if (key_node := kv_node.find('block_kwargs_key')):
+                    key = key_node.text
+                    val_node = kv_node.find('block_kwargs_val')
+                    val = val_node.text if (val_node and val_node.text) else True
+                    attrs[key] = val
+        return attrs
 
     def fmt_tag(self, node: Symbol, html_tag: str, strip_chars: str) -> str:
         if a := node.find('words'):
@@ -468,9 +456,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         parts = []
         for child in node.what if hasattr(node, 'what') and node.what else []:
             if not isinstance(child, str) and child.__name__ == 'attr_def':
-                _cls, _id, kv = self._extract_attrs(child)
+                attrs = self._extract_attrs(child)
+                cls = attrs.pop('_class', '')
+                id_ = attrs.pop('id', None)
                 if parts:
-                    parts[-1] = self._merge_attrs_to_opening_tag(parts[-1], _cls, _id, kv)
+                    parts[-1] = self._merge_attrs_to_opening_tag(parts[-1], cls, id_, attrs)
                 # swallow the attr_def (do not render literally)
                 continue
             parts.append(self.visit(child) if not isinstance(child, str) else child)
@@ -691,14 +681,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (marker := node.find('setext_underline')) and marker.text:
                     level = 1 if marker.text[0] == '=' else 2
         
-        _cls, _id, _ = self._extract_attrs(node)
-        _id = _id or self.get_title_id(level)
+        attrs = self._extract_attrs(node)
+        _cls = attrs.get('_class', '')
+        _id = attrs.get('id') or self.get_title_id(level)
         title = (title_node := node.find('title_text')) and title_node.text
         self.resources.toc_items.append((level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
-        _cls, _id, _ = self._extract_attrs(node)
-        _id = _id or self.get_title_id(level)
+        attrs = self._extract_attrs(node)
+        _cls = attrs.get('_class', '')
+        _id = attrs.get('id') or self.get_title_id(level)
         title_raw = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         # Render inline markdown within titles (support bold/italic/code/longdash etc.)
         title_rendered = self.parse_markdown(title_raw, 'text').strip()
@@ -733,16 +725,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         else:
             content = ''
         
-        _cls, _id, _ = self._extract_attrs(node)
-        return self.tag('div', f"\n{content}\n", _class=f"card {_cls}".strip(), id=_id or None)
+        attrs = self._extract_attrs(node)
+        return self.tag('div', f"\n{content}\n", _class=f"card {attrs.get('_class','')}".strip(), id=attrs.get('id') or None)
 
     def visit_side_block(self, node: Symbol) -> str:
         content = [self.parse_markdown(thing.text, 'content').strip()
                 for thing in node.find_all('side_block_cont')]
         
         if head := node.find('side_block_head'):
-            _cls, _id, _ = self._extract_attrs(head)
-            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {_cls or ''}", id=_id)
+            attrs = self._extract_attrs(head)
+            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {attrs.get('_class','') or ''}", id=attrs.get('id'))
         else:
             return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz")
 
@@ -951,8 +943,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             action_node = node.find('button_action')
             action = action_node.text.strip() if action_node else None
 
-            _cls, _id, _ = self._extract_attrs(node)
-            cls_str = _cls.strip() if _cls else ''
+            attrs = self._extract_attrs(node)
+            cls_str = attrs.get('_class','').strip()
+            _id = attrs.get('id')
             def _class_id_attrs() -> str:
                 parts = []
                 if cls_str:
@@ -1008,46 +1001,21 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         action = (action_node.text.strip() if (action_node := node.find('form_action')) else '')
         content = (content_node.text if (content_node := node.find('form_content')) else '')
         
-        _cls, _id, _ = self._extract_attrs(node)
-        
-        # Parse content specially for forms - inputs/outputs/buttons should not be in <p> tags
-        parsed_content = self._parse_form_content(content.strip())
-        
+        attrs = self._extract_attrs(node)
+        # Parse content using grammar-driven 'form_content' to avoid paragraph wrapping
+        parsed_content = self.parse_markdown(content.strip(), 'form_content').strip()
+
         # Determine form attributes based on type
         if form_type_text == '&>':  # POST form
-            return self.tag('form', f"\n{parsed_content}\n", action=action, method='post', _class=_cls, id=_id or None)
+            return self.tag('form', f"\n{parsed_content}\n", action=action, method='post', **attrs)
         elif form_type_text == '=>':  # GET form
-            return self.tag('form', f"\n{parsed_content}\n", action=action, method='get', _class=_cls, id=_id or None)
+            return self.tag('form', f"\n{parsed_content}\n", action=action, method='get', **attrs)
         elif form_type_text == '*=':  # oninput form
-            return self.tag('form', f"\n{parsed_content}\n", oninput=action, _class=_cls, id=_id or None)
+            return self.tag('form', f"\n{parsed_content}\n", oninput=action, **attrs)
         
         return node.text
 
-    def _parse_form_content(self, content: str) -> str:
-        """Parse form content, ensuring inputs/buttons are not wrapped in <p> tags"""
-        lines = content.split('\n')
-        result = []
-        
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            
-            # Parse the line as markdown
-            parsed = self.parse_markdown(stripped + '\n', 'content').strip()
-            
-            # If parsed result is a <p> containing only a <label> or <button>, unwrap it
-            if parsed.startswith('<p>') and parsed.endswith('</p>'):
-                inner = parsed[3:-4]  # Remove <p> and </p>
-                # Check if the inner content is just a label or button (possibly with whitespace)
-                inner_stripped = inner.strip()
-                if (inner_stripped.startswith('<label>') and inner_stripped.endswith('</label>')) or \
-                   (inner_stripped.startswith('<button') and inner_stripped.endswith('</button>')):
-                    parsed = inner_stripped
-            
-            result.append(parsed)
-        
-        return '\n'.join(result)
+    # form content parsing is now grammar-driven; previous re-parsing helper removed
 
     def _derive_input_name(self, label: str) -> str:
         """Derive input name from label text"""
@@ -1073,7 +1041,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         field = node.find('input_field')
         
         # Extract attributes from attr_def
-        _cls, _id, kv_attrs = self._extract_attrs(node)
+        attrs = self._extract_attrs(node)
+        _cls = attrs.pop('_class', '')
+        _id = attrs.pop('id', None)
+        kv_attrs = attrs
         
         # Get name from attrs or derive from label
         name = kv_attrs.pop('name', None) or self._derive_input_name(label)
@@ -1133,13 +1104,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         label = (label_node.text.strip() if (label_node := node.find('input_label')) else '')
         
         # Extract attributes
-        _cls, _id, kv_attrs = self._extract_attrs(node)
-        
+        attrs = self._extract_attrs(node)
+        _cls = attrs.pop('_class', '')
+        _id = attrs.pop('id', None)
+
         # Get name from attrs or derive from label
-        name = kv_attrs.pop('name', None) or self._derive_input_name(label)
-        
+        name = attrs.pop('name', None) or self._derive_input_name(label)
+
         inner = self.tag('output', '', name=name, _class=_cls, id=_id or None, 
-                        newline=False, enclose=2, **kv_attrs)
+                newline=False, enclose=2, **attrs)
         
         return self.tag('label', f"{label} {inner}", newline=False, enclose=2)
 
@@ -1187,41 +1160,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         img_tag = self._render_media(image_url, alt or "", image_title, enclose=0, content=alt or "")
         
-        _cls, _id, _ = self._extract_attrs(node)
+        attrs = self._extract_attrs(node)
         self.resources.links_ext.append(link_url)
-        return self.tag('a', img_tag, href=link_url, title=link_title, newline=False, _class=_cls, id=_id or None)
-
-    def _extract_attrs(self, node: Symbol) -> tuple[str, str, dict]:
-        """Extract class, id, and key-value attributes from attr_def nodes
-
-        Supports:
-          - `.class` (one or more)
-          - `#id`
-          - `key` (boolean attribute)
-          - `key=value`
-        """
-        _id = _class = ''
-        kv = {}
-        
-        if (attr_def := next((n for n in node.find_all_here('attr_def')), None)):
-            for class_node in attr_def.find_all('attr_def_class'):
-                _class += (class_node.text[1:] + ' ')  # Skip the leading '.'
-            
-            if id_node := attr_def.find('attr_def_id'):
-                _id = id_node.text[1:]  # Skip the leading '#'
-            
-            # block_kwargs nodes may contain key or key=val
-            for kv_node in attr_def.find_all('block_kwargs'):
-                if (key_node := kv_node.find('block_kwargs_key')):
-                    key = key_node.text
-                    val_node = kv_node.find('block_kwargs_val')
-                    if val_node and val_node.text:
-                        kv[key] = val_node.text
-                    else:
-                        # Boolean attribute (e.g. 'required') represented as True
-                        kv[key] = True
-        
-        return _class.strip(), _id, kv
+        return self.tag('a', img_tag, href=link_url, title=link_title, newline=False, **attrs)
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
@@ -1236,8 +1177,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return node.text
         
-        _cls, _id, _ = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=1, _class=_cls, _id=_id)
+        attrs = self._extract_attrs(node)
+        return self._render_media(url, alt, title, enclose=1, _class=attrs.get('_class',''), _id=attrs.get('id'))
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
@@ -1254,8 +1195,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return node.text
         
-        _cls, _id, _ = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=2, _class=_cls, _id=_id)
+        attrs = self._extract_attrs(node)
+        return self._render_media(url, alt, title, enclose=2, _class=attrs.get('_class',''), _id=attrs.get('id'))
 
     def visit_wiki_image(self, node: Symbol) -> str:
         if not (file_node := node.find('wiki_image_file')):
