@@ -58,7 +58,7 @@ class MarkdownGrammar(dict):
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
         def wordlike()         : return _(r'[^\*_\s\d\.`\[\]]+') # Remove brackets maybe?
-        def blankline()        : return -1, space, eol
+        def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
         
         ## shared content patterns
@@ -68,7 +68,6 @@ class MarkdownGrammar(dict):
         def in_sq_braces()     : return _(r'[^\]]+')
 
 
-        def literal()          : return _(r'u?r?([\'"])(?:\\.|(?!\1).)*\1', re.I|re.DOTALL)
         def htmlentity()       : return _(r'&\w+;')
         def escape_string()    : return _(r'\\'), _(r'.')
         def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[\]]+')
@@ -253,11 +252,10 @@ class MarkdownGrammar(dict):
         # Form blocks
         def form_action()      : return _(r'[^\n\r\]]+')
         # form items should avoid automatic paragraph wrapping for inputs/buttons/outputs
-        def form_content()     : return -2, [input_elem, output_elem, button, paragraph], -1, blankline
-        # Allow optional whitespace after the form-type marker (e.g. '[=>/path' or '[=> /path')
-        def form_type()        : return _(r'(?:&>|=>|\*=)\s*')
-        def form()             : return _(r'^\s*\['), form_type, form_action, blankline, 0, form_content, _(r'\]'), 0, attr_def
-        
+        def form_content()     : return [input_elem, output_elem, button, paragraph], 0, blankline
+        def form_type()        : return _(r'(?:&>|=>|\*=)*')
+        def form()             : return _(r'^\s*\['), 0, space, form_type, 0, space, form_action, blankline, -1, form_content, _(r'\]'), 0, attr_def
+
         def word()             : return [
                 escape_string,
                 html_block, html_inline,
