@@ -253,12 +253,10 @@ class MarkdownGrammar(dict):
         # Form blocks
         def form_action()      : return _(r'[^\n\r\]]+')
         # form items should avoid automatic paragraph wrapping for inputs/buttons/outputs
-        def form_item()        : return [input_elem, output_elem, button, text]
-        def form_content_line(): return form_item, -1, (0, space, form_item), blankline
-        def form_content()     : return -2, form_content_line, -1, blankline
+        def form_content()     : return -2, [input_elem, output_elem, button, paragraph], -1, blankline
         # Allow optional whitespace after the form-type marker (e.g. '[=>/path' or '[=> /path')
         def form_type()        : return _(r'(?:&>|=>|\*=)\s*')
-        def form()             : return _(r'^\s*\['), form_type, form_action, blankline, 0, form_content, _(r'\]'), 0, attr_def, -1, blankline
+        def form()             : return _(r'^\s*\['), form_type, form_action, blankline, 0, form_content, _(r'\]'), 0, attr_def
         
         def word()             : return [
                 escape_string,
