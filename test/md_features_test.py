@@ -1228,6 +1228,12 @@ class TestButtonsHTML(unittest.TestCase):
         expected = '<p><form action="https://example.com" method="get"><button type="submit">Go to Example.com</button></form></p>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_local_link_button(self):
+        """Button linking to local page, avoids full URL parsing or JS requirement"""
+        md_text = "((Go to Local Page|>local-page.html))"
+        expected = '<p><form action="local-page.html" method="get"><button type="submit">Go to Local Page</button></form></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
     def test_open_new_tab(self):
         md_text = "((Go to Example.com in new tab|>> https://example.com))"
         expected = '<p><form action="https://example.com" method="get" target="_blank"><button type="submit">Go to Example.com in new tab</button></form></p>'
