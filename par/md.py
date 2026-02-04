@@ -968,12 +968,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     return node.text
                 target = '_blank' if marker == '>>' else None
                 # Render a small form that contains a button performing a GET
-                return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=url, method='get', target=target, attrs=_class_id_attrs())
+                return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=url, method='get', target=target, attrs=_class_id_attrs(), newline=False)
 
             # Slash-prefixed: form action (POST) if 'submit' in path, otherwise a button referencing form id
             if marker == '/':
                 if 'submit' in action.lower():
-                    return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=action, method='post', attrs=_class_id_attrs())
+                    return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=action, method='post', attrs=_class_id_attrs(), newline=False)
                 else:
                     formid = rest.lstrip('/').strip()
                     # Pass class on button if present; preserve desired attribute order
