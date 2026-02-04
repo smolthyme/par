@@ -1249,6 +1249,27 @@ class TestButtonsHTML(unittest.TestCase):
         expected = '<p><button type="submit" form="form-name">Submit</button></p>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_button_link_mixed_into_content(self):
+        md_text = "Please click ((here|>https://example.com)) to proceed."
+        expected = '<p>Please click <form action="https://example.com" method="get"><button type="submit">here</button></form> to proceed.</p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_button_link_mixed_into_complex_multiline_content(self):
+        md_text = '''\
+Welcome to the place!
+
+((Click Here|>https://example.com))
+
+* A list of
+* Two whole things'''
+        expected = '''<p>Welcome to the place!</p>
+<p><form action="https://example.com" method="get"><button type="submit">Click Here</button></form></p>
+<ul>
+<li>A list of</li>
+<li>Two whole things</li>
+</ul>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
     def test_js_onclick(self):
         md_text = "((Click Me|$ alert('Button clicked!')))"
         expected = "<p><button type=\"button\" onclick=\"alert('Button clicked!')\">Click Me</button></p>"

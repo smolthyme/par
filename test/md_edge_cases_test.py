@@ -867,8 +867,8 @@ class TestSpecialCharacters(unittest.TestCase):
         md_text = '5 < 10 and 20 > 15'
         result = parseHtml(md_text).strip()
         # Angle brackets should be escaped as HTML entities
-        self.assertIn('&lt;', result)
         self.assertIn('&gt;', result)
+        self.assertIn('&lt;', result)
 
     def test_ampersand_standalone(self):
         """Standalone ampersand"""
