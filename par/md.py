@@ -1,4 +1,3 @@
-
 """Advanced Markdown parsing and HTML conversion."""
 from .__init__ import SimpleVisitor, MDHTMLVisitor # Visits parsed nodes and converts to HTML/text etc.
 
@@ -203,6 +202,7 @@ class MarkdownGrammar(dict):
         def link_ref_url()     : return _(r'[^\s]+')
         def link_ref_title()   : return title_string()
         def link_reference()   : return _(r'^\s*\['), link_ref_label, _(r'\]:'), space, link_ref_url, 0, (space, link_ref_title), 0, space, blankline
+        
         
         # Images - inline (using shared patterns)
         def image_alt()        : return in_sq_braces()
@@ -1043,7 +1043,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         type_mod = (mod_node.text if (mod_node := node.find('input_type_mod')) else '')
         is_multiple = node.find('input_multiple') is not None
         is_required = node.find('input_required') is not None
-        is_checkbox = node.find('input_checkbox') is not None
+        checkbox = node.find('input_checkbox')
         field = node.find('input_field')
         
         # Extract attributes from attr_def
@@ -1056,37 +1056,30 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         name = kv_attrs.pop('name', None) or self._derive_input_name(label)
         
         # Determine input type
-        if is_checkbox:
+        is_checked = False
+        if checkbox:
             input_type = 'checkbox'
-            checkbox_text = node.find('input_checkbox').text
-            is_checked = 'x' in checkbox_text.lower() or 'X' in checkbox_text
+            is_checked = 'x' in checkbox.text.lower()
         elif type_mod == '@':
             input_type = 'email'
-            is_checked = False
         elif type_mod == 'tel':
             input_type = 'tel'
-            is_checked = False
         elif type_mod == '#':
             input_type = kv_attrs.pop('type', 'number')
-            is_checked = False
         elif type_mod == '!':
             input_type = 'file'
-            is_checked = False
         else:
             input_type = kv_attrs.pop('type', 'text')
-            is_checked = False
         
         # Check if textarea (6+ underscores)
         is_textarea = field and len(field.text) >= 6
         
         # Build the input/textarea element
         if is_textarea:
-            # Use boolean attributes for 'required' when present
-            attrs = {} if not is_required else {'required': True}
             inner = self.tag('textarea', '', name=name, 
                            _class=_cls, id=_id or None, 
-                           newline=False, enclose=2, **attrs, **kv_attrs)
-        elif is_checkbox:
+                           newline=False, enclose=2, **{'required': is_required}, **kv_attrs)
+        elif checkbox:
             inner = self.tag('input', '', name=name, type=input_type,
                            checked=True if is_checked else None,
                            _class=_cls, id=_id or None,
@@ -1184,7 +1177,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=1, _class=attrs.get('_class',''), _id=attrs.get('id'))
+        return self._render_media(url, alt, title, enclose=1, _class=attrs.get('_class',''), _id=attrs.get('id')or '')
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
@@ -1202,7 +1195,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=2, _class=attrs.get('_class',''), _id=attrs.get('id'))
+        return self._render_media(url, alt, title, enclose=2, _class=attrs.get('_class',''), _id=attrs.get('id') or '')
 
     def visit_wiki_image(self, node: Symbol) -> str:
         if not (file_node := node.find('wiki_image_file')):
