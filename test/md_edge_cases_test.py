@@ -997,9 +997,9 @@ class TestReferenceLinks(unittest.TestCase):
 
 [Google]: http://google.com
 '''
+        expected = '<p><a href="http://google.com">Google</a></p>'
         result = parseHtml(md_text)
-        self.assertIn('Google', result)
-        self.assertIn('google.com', result)
+        self.assertEqual(result.strip(), expected.strip())
 
     def test_shortcut_reference_link(self):
         """Shortcut reference link"""
@@ -1008,9 +1008,9 @@ class TestReferenceLinks(unittest.TestCase):
 
 [Google]: http://google.com
 '''
+        expected = '<p><a href="http://google.com">Google</a></p>'
         result = parseHtml(md_text)
-        # Behavior may vary
-        self.assertIsInstance(result, str)
+        self.assertEqual(result.strip(), expected.strip())
 
     def test_reference_link_unused(self):
         """Reference definition that's not used"""
