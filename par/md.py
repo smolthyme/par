@@ -56,7 +56,7 @@ class MarkdownGrammar(dict):
         ## basic
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'[^\*_\s\d\.`\[\]]+') # Remove brackets maybe?
+        def wordlike()         : return _(r'[^\*\s\d\.`\[\]]+') # allow underscore in words
         def blankline()        : return 0, space, eol
         def blanklines()       : return -2, blankline
         
@@ -69,13 +69,12 @@ class MarkdownGrammar(dict):
 
         def htmlentity()       : return _(r'&\w+;')
         def escape_string()    : return _(r'\\'), _(r'.')
-        def string()           : return _(r'[^\\\*_\^~ \t\r\n`,<\[\]]+')
+        def string()           : return _(r'[^\\\*\^~ \t\r\n`,<\[\]]+')
         
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
         def fmt_bold2()        : return _(r'(?<!\w)__'),   words , _(r'__(?!\w)')
         #def fmt_underline()    : return _(r'_'),    words , _(r'_')
-        def fmt_italic2()      : return _(r'(?<!\w)_'),    words , _(r'_(?!\w)')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
         def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
@@ -264,7 +263,7 @@ class MarkdownGrammar(dict):
                 inline_link, reference_link, wiki_link,
                 raw_url, email_address,
                 # Formatting
-                fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,
+                fmt_bold, fmt_bold2, fmt_italic, fmt_code,
                 fmt_subscript, fmt_superscript, fmt_strikethrough,
                 footnote, longdash,
                 htmlentity, star_rating, string, wordlike
