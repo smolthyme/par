@@ -1,6 +1,6 @@
 """Parser for file names which breaks them into their component parts"""
 
-# BIG HUEG NOTE: This is a work in progress, and is not intended for use yet. 2023/07
+# BIG NOTE: This is a work in progress
 
 import re, types
 from dataclasses import dataclass, field
@@ -52,8 +52,6 @@ class FileParts():
             return False
         elif ck_parts.tags and not any([tag in self.tags for tag in ck_parts.tags]):
             return False
-        # if ck_parts.meta and not all([self.meta.get(k) == v for k, v in ck_parts.meta.items()]):
-        #     return False
         
         elif ck_parts.sort and self.sort and ck_parts.sort == self.sort:
             return True
