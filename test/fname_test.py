@@ -20,13 +20,13 @@ test_cases = {
     '001.jpg': {'title': '001', 'exts': 'jpg', 'sort': None},
     '002. Bork.jpg': { 'sort': '002.', 'title': 'Bork', 'exts': 'jpg'},
     '17. Liz Of & Pho - CB.jpg': {'title': 'Liz Of & Pho - CB','sort': '17.', 'exts': 'jpg',},
-    "1.Norms's Bio.md.txt": {'title': "Norms's Bio", 'sort': '1.', 'exts': 'md.txt'},
-    '10.Windhoek 🇳🇦 🡒 Vic Falls (Fly).md.txt': {'title': 'Windhoek 🇳🇦 🡒 Vic Falls (Fly)', 'sort': '10.', 'exts': 'md.txt'},
+    "1. Norms's Bio.md.txt": {'title': "Norms's Bio", 'sort': '1.', 'exts': 'md.txt'},
+    '10. Windhoek 🇳🇦 🡒 Vic Falls (Fly).md.txt': {'title': 'Windhoek 🇳🇦 🡒 Vic Falls (Fly)', 'sort': '10.', 'exts': 'md.txt'},
     'Tomb_22 - $20,000.jpg': {'title': 'Tomb_22 - $20,000', 'exts': 'jpg'},
     '#menu,.content,#body,pre.ttf': {'title': '#menu,.content,#body,pre', 'exts': 'ttf'},
     ' Liz (Tu) Rite.card.yaml': {'title': 'Liz (Tu) Rite', 'exts': 'card.yaml'},
     '#body {background-size=cover}.svg': {'title': '#body', 'exts': 'svg', 'meta': {'background-size': 'cover'}},
-    '91.Dr. Paul J. Garcia.jpg': {'title': 'Dr. Paul J. Garcia', 'sort': '91.', 'exts': 'jpg'},
+    '91. Dr. Paul J. Garcia.jpg': {'title': 'Dr. Paul J. Garcia', 'sort': '91.', 'exts': 'jpg'},
     '_. Company [pages]/': {'title': 'Company', 'sort': '_.', 'group': 'pages'},
     '_. Last item {cool=false}.dj.html': {'title': 'Last item','sort': '_.', 'meta': {'cool': 'false'},'exts': 'dj.html'}
 }
