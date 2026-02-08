@@ -10,6 +10,8 @@ from .pyPEG import *
 
 rx = re.compile
 ig = ignore
+simple_ext_chars_re = rx(r'^[\.a-z]+$')
+
 
 @dataclass
 class FileParts():
@@ -33,11 +35,11 @@ class FileParts():
                 f"{f' [{self.group}]' if self.group else ''}{meta_str}" \
                 f"{f'.{self.exts}' if self.exts  else ''}"
     
-    def __eq__(self, ck_parts: 'FileParts') -> bool:
+    def __eq__(self, ck_parts: object) -> bool:
         """Checks if a file's properties match a given pattern.
-        Returns True if they ALL match in their respective way."""
-        
-        simple_ext_chars_re = re.compile(r'^[\.a-z]+$')
+        Returns True if they ALL match in their respective way."""  
+        if not isinstance(ck_parts, FileParts):
+            return NotImplemented
         
         if ck_parts.title and not re.match(ck_parts.title, self.title):
             return False
