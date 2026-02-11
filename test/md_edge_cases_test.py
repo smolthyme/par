@@ -426,6 +426,12 @@ class TestLinksAndImagesAdvanced(unittest.TestCase):
         self.assertIn('Local', result)
         self.assertIn('../path/to/file.html', result)
 
+    def test_word_in_square_bracket_but_not_link(self):
+        """Word in square brackets but not a link"""
+        md_text = 'This is a [test] of brackets.'
+        result = parseHtml(md_text)
+        self.assertIn('[test]', result)
+
     def test_link_absolute_path(self):
         """Absolute path in link"""
         md_text = '[Root](/index.html)'
