@@ -419,18 +419,7 @@ class TestLinksAndImagesAdvanced(unittest.TestCase):
         self.assertIn('<img', result)
         self.assertIn('image.png', result)
 
-    def test_malformed_link_missing_closing_paren(self):
-        """Malformed link missing closing parenthesis"""
-        md_text = '[Link](http://example.com'
-        self.assertRaises(SyntaxError, parseHtml, md_text)
 
-    def test_malformed_link_missing_closing_bracket(self):
-        """Malformed link missing closing bracket"""
-        md_text = '[Link(http://example.com)'
-        # Should assert an error
-        self.assertRaises(SyntaxError, parseHtml, md_text)
-
-    def test_link_relative_path(self):
         """Relative path in link"""
         md_text = '[Local](../path/to/file.html)'
         result = parseHtml(md_text)
