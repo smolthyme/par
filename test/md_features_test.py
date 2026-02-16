@@ -16,6 +16,11 @@ class TestFormattingSimpleHTML(unittest.TestCase):
         md_text = '''This is *italic* text.'''
         expected = '''<p>This is <em>italic</em> text.</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+    
+    def test_alt_italic_text(self):
+        md_text = '''This is _also italic_ text. However this is a word_with_underscores.'''
+        expected = '''<p>This is <em>also italic</em> text. However this is a word_with_underscores.</p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_bold_and_italic_text(self):
         md_text = '''This is ***bold and italic*** text.'''
