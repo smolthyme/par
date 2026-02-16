@@ -74,7 +74,7 @@ class MarkdownGrammar(dict):
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
         def fmt_bold2()        : return _(r'(?<!\w)__'),   words , _(r'__(?!\w)')
-        #def fmt_underline()    : return _(r'_'),    words , _(r'_')
+        def fmt_italic2()      : return _(r'(?<!\w)_(?![\s_])(.+?)_(?!\w)', re.S)
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
         def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
@@ -263,7 +263,7 @@ class MarkdownGrammar(dict):
                 inline_link, reference_link, wiki_link,
                 raw_url, email_address,
                 # Formatting
-                fmt_bold, fmt_bold2, fmt_italic, fmt_code,
+                fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,
                 fmt_subscript, fmt_superscript, fmt_strikethrough,
                 footnote, longdash,
                 htmlentity, star_rating, string, wordlike
@@ -556,7 +556,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('em', enclose=3, newline=False)
     
     visit_fmt_italic2_begin = visit_fmt_italic_begin
-    visit_fmt_italic2 = visit_fmt_italic
+    def visit_fmt_italic2(self, node: Symbol) -> str:
+        return self.to_html_charcodes(node.text.strip('_'))
     visit_fmt_italic2_end = visit_fmt_italic_end
 
     def visit_fmt_underline_begin(self, node: Symbol) -> str:
