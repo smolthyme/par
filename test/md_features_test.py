@@ -621,6 +621,11 @@ That's some text with a footnote.[^1]
 <p><img src="images/a.png" style="width: 250px;"></img></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_link_with_class_and_trailing_text(self):
+        md_text = '''[Link text](http://example.com){.my-class} trailing text'''
+        expected = '''<p><a class="my-class" href="http://example.com">Link text</a> trailing text</p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
     def test_various_link_formats(self):
         md_text = '''\
 [](http://aaaa.com)
