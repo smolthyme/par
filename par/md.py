@@ -74,7 +74,7 @@ class MarkdownGrammar(dict):
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
         def fmt_bold2()        : return _(r'(?<!\w)__'),   words , _(r'__(?!\w)')
-        def fmt_italic2()      : return _(r'(?<!\w)_(?![\s_])(.+?)_(?!\w)', re.S)
+        def fmt_italic2()      : return _(r'(?<!\w)_(?![\s_])(.+?)_(?!\w)')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'),   words , _(r',,')
         def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
@@ -106,7 +106,7 @@ class MarkdownGrammar(dict):
         def attr_def_id()      : return _(r'#[^\s\}]+')
         def attr_def_class()   : return _(r'\.[^\s\}]+')
         def attr_def_set()     : return [attr_def_id, attr_def_class, block_kwargs], -1, (0, _(r'[\t ,]+'), [attr_def_id, attr_def_class, block_kwargs])
-        def attr_def()         : return _(r'\{'), attr_def_set, _(r'\}')
+        def attr_def()         : return _(r'\{[\s:]*'), attr_def_set, _(r'\}')
         
         ## footnote
         def footnote()         : return _(r'\[\^\w+\]')
@@ -191,7 +191,7 @@ class MarkdownGrammar(dict):
         def link_label()       : return in_sq_braces()
         
         # Inline links
-        def inline_link()      : return _(r'\['), 0, link_text, _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)')
+        def inline_link()      : return _(r'\['), 0, link_text, _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)'), 0, attr_def
         
         # Reference links
         def reference_link()   : return _(r'\['), link_text, _(r'\]'), 0, space, _(r'\['), 0, link_label, _(r'\]')
@@ -916,8 +916,17 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         text = (text_node.text if (text_node := node.find('link_text')) else url_node.text)
         url = url_node.text
         title = (self._extract_title(title_node.text) if (title_node := node.find('link_title')) else None)
+
+        if not self._is_safe_url(url):
+            return text
+
+        self.resources.links_ext.append(url)
+
+        attrs = self._extract_attrs(node)
+        if attrs == {}:
+            return self._render_link(url, text, title)
         
-        return self._render_link(url, text, title)
+        return self.tag('a', text, href=url, title=title, newline=False, **attrs)
 
     def visit_reference_link(self, node: Symbol) -> str:
         if not (text_node := node.find('link_text')):
