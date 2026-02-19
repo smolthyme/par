@@ -106,8 +106,6 @@ def skip(skipper, text: str, skipWS: bool, skipComments: Union[Callable, None]) 
     while skipComments:
         try:
             skip, t = skipper.parseLine(t, skipComments, [], skipWS, None)
-            if skipWS:
-                t = t.lstrip()
         except:
             break
     return t
@@ -142,7 +140,7 @@ class parser(object):
 
         def syntaxError(error=None):
             if self.packrat:
-                self.memory[(len(_textline), id(_pattern))] = False
+                self.memory[len(_textline), id(_pattern) if isinstance(_pattern, list) else _pattern] = False
             raise SyntaxError(error)
 
         def Result(result: object, text: str) -> tuple:
@@ -165,19 +163,19 @@ class parser(object):
                 name.line = self.lineNo()
                 results.append(Symbol(name, []))
             elif result:
-                if type(result) is type([]):
+                if isinstance(result, list):
                     results.extend(result)
                 else:
                     results.extend([result])
             
             if self.packrat:
-                self.memory[(len(_textline), id(_pattern))] = (results, text)
+                self.memory[len(_textline), id(_pattern) if isinstance(_pattern, list) else _pattern] = (results, text)
             
             return results, text        
         
         if self.packrat:
             try:
-                result = self.memory[(len(textline), id(pattern))]
+                result = self.memory[len(textline), id(pattern) if isinstance(pattern, list) else pattern]
                 if result:
                     return result
                 else:
@@ -239,7 +237,7 @@ class parser(object):
         elif isinstance(pattern, tuple):
             n = 1; result = []
             for p in pattern:
-                if type(p) is type(0):
+                if isinstance(p, int):
                     n = p
                 elif isinstance(n, int):
                     if n > 0:
