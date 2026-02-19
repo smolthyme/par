@@ -77,9 +77,9 @@ class MarkdownGrammar(dict):
         def fmt_bold2()        : return _(r'(?<!\w)__'),   words , _(r'__(?!\w)')
         def fmt_italic2()      : return _(r'(?<!\w)_(?![\s_])(.+?)_(?!\w)')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
-        def fmt_subscript()    : return _(r',,'),   words , _(r',,')
-        def fmt_superscript()  : return _(r'\^'),   words , _(r'\^')
-        def fmt_strikethrough(): return _(r'~~'),   words , _(r'~~')
+        def fmt_subscript()    : return _(r',,'), 0 ,space, words,  _(r',,')
+        def fmt_superscript()  : return _(r'\^'), 0 ,space, words,  _(r'\^')
+        def fmt_strikethrough(): return _(r'~~'), 0 ,space, words , _(r'~~')
         
         ## inline
         def longdash()         : return _(r"--\B")
@@ -87,7 +87,7 @@ class MarkdownGrammar(dict):
         def star_rating()      : return _(r"[★☆⚝✩✪✫✬✭✮✯✰✱✲✳✴✶✷✻⭐⭑⭒🌟🟀🟂🟃🟄🟆🟇🟈🟉🟊🟌🟍⍟]+ */ *\d+")
         
         ## embedded html
-        def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code|iframe)\b[^>]*?>[^<]*?<(/\1)>', re.I|re.DOTALL)
+        def html_block()       : return _(r'<(table|thead|tbody|tr|th|td|pre|div|p|ul|ol|li|h1|h2|h3|h4|h5|h6|blockquote|code|iframe|section|dl|dt|dd|form|label|textarea|output|button|video|audio|object)\b[^>]*?>[\s\S]*?</\1>', re.I|re.DOTALL)
         def html_inline()      : return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input)\b[^>]*?>[^<]*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
         def html_comment()     : return _(r'<!--.*?-->', re.DOTALL)
         
@@ -289,7 +289,10 @@ class MarkdownGrammar(dict):
         text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
         # Hard line breaks: two+ trailing spaces or a trailing backslash before newline.
         # FIXME: We replace with literal <br/> so inline processing keeps them within the same paragraph
-        text = re.sub(r'(?<=[^\s|]) {2,}\n|\\\n', '<br/>', text)
+        # Preserve the trailing newline after converting to a <br/> so parsing retains line boundary
+        # Only convert two+ spaces followed by newline into a <br/> when the newline is followed
+        # by non-blank content (avoid converting trailing spaces at end-of-text into a <br/>).
+        text = re.sub(r'(?<=[^\s|]) {2,}\n(?=[^\n])|\\\n', '<br/>\n', text)
         kwargs.setdefault('packrat', True)
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
@@ -1219,8 +1222,10 @@ def parseHtml(text, tag_class=None, grammar=None, visitor=None):
 def parseEmbeddedHtml(text):
     """Parse markdown and strip outer <p> tags if only one paragraph"""
     parsed = parseHtml(text)
+    # Only strip <p> tags when the entire output is a single paragraph element
+    # (use a tempered regex to ensure no additional <p> tags exist).
     clean = re.compile(r"</?p\b[^>]*>", re.I | re.MULTILINE)
-    if len(_("<p>").findall(parsed)) == 1:
+    if re.match(r'^\s*<p\b[^>]*>(?:(?!<p\b).)*?</p>\s*$', parsed, re.I | re.S):
         parsed = re.sub(clean, "", parsed)
     return parsed
 
