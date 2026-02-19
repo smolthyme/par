@@ -294,15 +294,15 @@ console.log(add(2, 3));</code></pre></li>
         expected = '''\
 <ul>
 <li><input type="checkbox"></input>a</li>
-<li><input type="checkbox" checked></input>b
+<li><input checked type="checkbox"></input>b
 <ul>
-<li><input type="radio" checked></input>c</li>
+<li><input checked type="radio"></input>c</li>
 <li><input type="radio"></input>d</li>
 </ul></li>
 <li><input type="checkbox"></input>a
 <ul>
-<li><input type="checkbox" checked></input>b</li>
-<li><input type="radio" checked></input>c</li>
+<li><input checked type="checkbox"></input>b</li>
+<li><input checked type="radio"></input>c</li>
 <li><input type="radio"></input>d</li>
 </ul></li>
 </ul>'''
@@ -1256,7 +1256,7 @@ class TestButtonsHTML(unittest.TestCase):
 
     def test_form_attr_button(self):
         md_text = "((Submit|/form-name))"
-        expected = '<p><button type="submit" form="form-name">Submit</button></p>'
+        expected = '<p><button form="form-name" type="submit">Submit</button></p>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_button_link_mixed_into_content(self):
@@ -1282,12 +1282,12 @@ Welcome to the place!
 
     def test_js_onclick(self):
         md_text = "((Click Me|$ alert('Button clicked!')))"
-        expected = "<p><button type=\"button\" onclick=\"alert('Button clicked!')\">Click Me</button></p>"
+        expected = "<p><button onclick=\"alert('Button clicked!')\" type=\"button\">Click Me</button></p>"
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_styled_button_class_on_form(self):
         md_text = "((Styled Button|> https://example.com)){.cssstyle}"
-        expected = '<p><form action="https://example.com" method="get" class="cssstyle"><button type="submit">Styled Button</button></form></p>'
+        expected = '<p><form action="https://example.com" class="cssstyle" method="get"><button type="submit">Styled Button</button></form></p>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 
