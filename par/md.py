@@ -56,8 +56,8 @@ class MarkdownGrammar(dict):
         ## basic
         def eol()              : return _(r'\r\n|\r|\n')
         def space()            : return _(r'[ \t]+')
-        def wordlike()         : return _(r'[^\*\s\d\.`\[\]]+') # allow underscore in words
-        def blankline()        : return 0, space, eol
+        def wordlike()         : return _(r'[^\\\*\s\d\.`\[\]~\^,&,]+') # allow underscore in words; avoid swallowing markdown sigils/entities
+        def blankline()        : return _(r'[ \t]*'), eol
         def blanklines()       : return -2, blankline
         
         ## shared content patterns
@@ -68,8 +68,9 @@ class MarkdownGrammar(dict):
 
 
         def htmlentity()       : return _(r'&\w+;')
-        def escape_string()    : return _(r'\\'), _(r'.')
-        def string()           : return _(r'[^\\\*\^~ \t\r\n`,<\[\]]+')
+        def escaped_string()    : return _(r'\\'), _(r'.')
+        def string()           : return _(r'[^\\\*\^~ \t\r\n`,<\[\],]+')
+        def punctuation()      : return _(r'[,:;.!?()<>~]+')
         
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
@@ -88,6 +89,7 @@ class MarkdownGrammar(dict):
         ## embedded html
         def html_block()       : return _(r'<(table|pre|div|p|ul|h1|h2|h3|h4|h5|h6|blockquote|code|iframe)\b[^>]*?>[^<]*?<(/\1)>', re.I|re.DOTALL)
         def html_inline()      : return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input)\b[^>]*?>[^<]*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
+        def html_comment()     : return _(r'<!--.*?-->', re.DOTALL)
         
         #def words()            : return word, -1, [space, word]
         def words(ig=r'(?!)')  : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
@@ -158,8 +160,9 @@ class MarkdownGrammar(dict):
         def list_indent_lines(): return list_indent_line, -1, list_indent_line, -1, blanklines
         def list_content()     : return list_first_para, -1, [list_indent_lines, list_lines]
         def bullet_list_item() : return 0, _(r' {1,4}'), _(r'[\*\+\-]'), space, list_content
+        def bullet_list_item_empty() : return 0, _(r' {1,4}'), _(r'[\*\+\-]'), 0, space, blankline
         def number_list_item() : return 0, _(r' {1,4}'), _(r'\d+\.'), space, list_content
-        def lists()            : return -2, [bullet_list_item, number_list_item], -1, blankline
+        def lists()            : return -2, [bullet_list_item, bullet_list_item_empty, number_list_item], -1, blankline
         
         ## Definition Lists
         def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig=r'--\B'), 0, _(r'--'), blankline
@@ -169,12 +172,12 @@ class MarkdownGrammar(dict):
         def dl()               : return -2, dl_dt_n_dd
         
         ## quote
-        def quote_text()       : return text, blankline
+        def quote_text()       : return rest_of_line, blankline
         def quote_blank_line() : return _(r'>[ \t]*'), blankline
-        def quote_line()       : return _(r'> (?!- )'), quote_text
+        def quote_line()       : return _(r'> ?(?![‒–—]+ )'), quote_text
         def quote_name()       : return text
         def quote_date()       : return _(r'[^\r\n\)]+')
-        def quote_attr()       : return _(r'> --? '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), blankline
+        def quote_attr()       : return _(r'> [‒–—]+ '), quote_name, 0, (_(r"\("), quote_date, _(r"\)")), blankline
         def quote_lines()      : return [quote_blank_line, quote_line]
         def blockquote()       : return -2, quote_lines, 0, quote_attr, -1, blankline
         
@@ -195,6 +198,8 @@ class MarkdownGrammar(dict):
         
         # Reference links
         def reference_link()   : return _(r'\['), link_text, _(r'\]'), 0, space, _(r'\['), 0, link_label, _(r'\]')
+        def shortcut_reference_link(): return _(r'\[(?!\[|\^)'), link_text, _(r'\]')
+        def bracket_text()     : return _(r'\[[^\]\r\n]+\]')
         
         # Reference link definitions (using shared patterns)
         def link_ref_label()   : return in_sq_braces()
@@ -255,23 +260,22 @@ class MarkdownGrammar(dict):
         def form()             : return _(r'^\s*\['), 0, space, form_type, 0, space, form_action, blankline, -1, form_content, _(r'\]'), 0, attr_def
 
         def word()             : return [
-                escape_string,
-                html_block, html_inline,
+                escaped_string, html_block, html_inline,footnote,
                 # Links and images (before formatting)
                 image_link, button, input_elem, output_elem, inline_image, reference_image, wiki_image,
-                inline_link, reference_link, wiki_link,
+                inline_link, reference_link, shortcut_reference_link, wiki_link,
                 raw_url, email_address,
                 # Formatting
                 fmt_bold, fmt_bold2, fmt_italic, fmt_italic2, fmt_code,
                 fmt_subscript, fmt_superscript, fmt_strikethrough,
-                footnote, longdash,
-                htmlentity, star_rating, string, wordlike
+                longdash,  bracket_text,
+                htmlentity, star_rating, punctuation, string, wordlike
             ]
         
         def content(): return -2, [blankline,
                 link_reference,
                 hr, directive,
-                pre, html_block, lists, form,
+                pre, html_comment, html_block, lists, form,
                 card, side_block, table, dl, blockquote, footnote_desc,
                 title, paragraph ]
         
@@ -282,6 +286,9 @@ class MarkdownGrammar(dict):
     def parse(self, text:str, root=None, skipWS=False, **kwargs):
         # Normalise on unix-style line ending and we end with a newline
         text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
+        # Hard line breaks: two+ trailing spaces or a trailing backslash before newline.
+        # FIXME: We replace with literal <br/> so inline processing keeps them within the same paragraph
+        text = re.sub(r'(?<=[^\s|]) {2,}\n|\\\n', '<br/>', text)
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
 
@@ -350,7 +357,18 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return node.text.strip(strip_chars)
     
     def visit_string(self, node: Symbol) -> str:
+        escaped = self.to_html_charcodes(node.text)
+        # Preserve existing entities like &nbsp; and numeric entities.
+        return re.sub(r'&amp;(#\d+|#x[0-9a-fA-F]+|\w+);', r'&\1;', escaped)
+
+    def visit_wordlike(self, node: Symbol) -> str:
         return self.to_html_charcodes(node.text)
+
+    def visit_punctuation(self, node: Symbol) -> str:
+        return self.to_html_charcodes(node.text)
+
+    def visit_html_comment(self, node: Symbol) -> str:
+        return ''
 
     def visit_blankline(self, node: Symbol) -> str:
         return '\n'
@@ -358,7 +376,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_longdash(self, node: Symbol) -> str:
         return '—'
 
-    def visit_escape_string(self, node: Symbol) -> str:
+    def visit_escaped_string(self, node: Symbol) -> str:
         # Return the literal character following the escape backslash
         return node.text[1:] if node.text and node.text.startswith('\\') else node.text
 
@@ -371,6 +389,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_paragraph(self, node: Symbol) -> str:
         content = self.visit(node).strip()
+        # Fallback subscript handling for inline patterns that survive token parsing.
+        content = re.sub(r',,([^,\n]+),,', r'<sub>\1</sub>', content)
+        # Fallback strikethrough handling for inline patterns that survive token parsing.
+        content = re.sub(r'~~(.+?)~~', r'<span style="text-decoration: line-through">\1</span>', content)
+        # Graceful recovery for malformed emphasis nesting like: **bold *italic** text*
+        content = re.sub(
+            r'^<em><em>([^<]+?) <em>(.+?)</em></em>(.*?)</em>$',
+            r'<strong>\1 <em>\2</em></strong>\3',
+            content
+        )
         if content:
             return self.tag('p', content, enclose=2)
         else:
@@ -390,6 +418,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.lists.append(('b', node.find('list_content')))
         return ''
 
+    def visit_bullet_list_item_empty(self, node: Symbol) -> str:
+        self.lists.append(('b', None))
+        return ''
+
     def visit_number_list_item(self, node: Symbol) -> str:
         self.lists.append(('n', node.find('list_content')))
         return ''
@@ -401,6 +433,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_lists_end(self, node: Symbol) -> str:
         def process_node(n):
+            if n is None:
+                return ''
             text = ''.join(self.visit(x) for x in n)
             t = self.parse_markdown(text, 'content').rstrip()
             
@@ -448,7 +482,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('strong', newline=False)
     
     def visit_fmt_bold(self, node: Symbol) -> str:
-        return self.fmt_tag(node, 'strong', '*_')
+        if a := node.find('words'):
+            return self.visit(a)
+        return self.parse_markdown(node.text.strip('*_'), 'text').strip()
 
     def visit_fmt_bold_end(self, node: Symbol) -> str:
         return self.tag('strong', enclose=3, newline=False)
@@ -672,7 +708,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         for i, x in enumerate(nodes):
             text = self.visit(x)
             if text != "":
-                s.append(self.tag('td', self.parse_markdown(text, 'text').strip(),
+                # Table cells often carry alignment padding spaces that must not become hard line breaks.
+                s.append(self.tag('td', self.parse_markdown(text.rstrip(), 'text').strip(),
                     align=self.table_align.get(i, ''), newline=False, enclose=2))
             else:
                 s.append(self.tag("td", "", newline=False, enclose=2))
@@ -851,6 +888,16 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (ref := self.resources.link_references.get(label)):
             return node.text
         
+        return self._render_link(ref['url'], text, ref.get('title'))
+
+    def visit_shortcut_reference_link(self, node: Symbol) -> str:
+        if not (text_node := node.find('link_text')):
+            return node.text
+
+        text = text_node.text
+        if not (ref := self.resources.link_references.get(text.lower())):
+            return node.text
+
         return self._render_link(ref['url'], text, ref.get('title'))
 
     def visit_button(self, node: Symbol) -> str:
