@@ -1,8 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-
-# Author: limodou@gmail.com
-# This program is based on pyPEG
+#
+# Based on pyPEG (previous author: Limodou)
 #
 # license: BSD
 
@@ -19,11 +18,11 @@ DUPLICATE_DASH_RE   = re.compile(r'--+')
 NUM_SEP_COMMAS_RE   = re.compile(r'(?<=\d),(?=\d)')
 VALID_SLUG_RE       = re.compile(r'^[-a-zA-Z0-9]+$')
 
-__author__ = 'limodou'
-__author_email__ = 'limodou@gmail.com'
-__url__ = 'https://github.com/limodou/par'
+__author__ = 'smolchoad'
+__author_email__ = None
+__url__ = None
 __license__ = 'BSD'
-__version__ = '1.3.4'
+__version__ = '1.4.2'
 
 _ = re.compile
 
@@ -81,14 +80,16 @@ class HTMLVisitor(SimpleVisitor):
         """
         
         kw = kwargs.copy()
-        _class = kw.pop('_class', '')
-        _class += ' ' + kw.pop('class', '')
+        _class = f"{kw.pop('_class', '')} {kw.pop('class', '')}".strip()
+        _id = kw.pop('_id', None)
+        if _id is not None:
+            kw['id'] = _id
         tag_class = ''#self.tag_class.get(tag, '')
 
         if tag_class:
-            kw['class'] = f"{tag_class[1:]} {_class.lstrip()}" if tag_class.startswith('+') else tag_class
+            kw['class'] = f"{tag_class[1:]} {_class}".strip() if tag_class.startswith('+') else tag_class
         else:
-            kw['class'] = _class.strip()
+            kw['class'] = _class
 
         kwattrs = ' '.join(x if y is True else f'{x}="{y}"' for x, y in sorted(kw.items()) if y)
         kwattrs = f' {kwattrs}{f" {attrs}" if attrs != '' else ""}' if kwattrs else attrs

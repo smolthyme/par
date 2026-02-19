@@ -329,7 +329,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         """Extract attributes from `attr_def` into a kwargs-ready dict.
 
         Returns a dict suitable for `**kwargs` in `tag()` where classes are
-        provided as `_class` and id as `id`.
+        provided as `_class` and id as `_id`.
         """
         attrs = {}
         if (attr_def := next((n for n in node.find_all_here('attr_def')), None)):
@@ -337,7 +337,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             if classes:
                 attrs['_class'] = ' '.join(classes)
             if id_node := attr_def.find('attr_def_id'):
-                attrs['id'] = id_node.text[1:]
+                attrs['_id'] = id_node.text[1:]
             for kv_node in attr_def.find_all('block_kwargs'):
                 if (key_node := kv_node.find('block_kwargs_key')):
                     key = key_node.text
@@ -371,7 +371,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_hr(self, node: Symbol) -> str:
         return self.tag('hr', enclose=1)
 
-    def _merge_attrs_to_opening_tag(self, html: str, _class: str, _id: str, kv: dict) -> str:
+    def _merge_attrs_to_opening_tag(self, html: str, _class: str, _id: str | None, kv: dict) -> str:
         """Merge attributes into the first opening tag of an HTML fragment.
         Prefer targeting inner input/output elements when present (so `{name=ml}` attaches
         to the `<input>` inside a `<label>` rather than the `<label>` itself).
@@ -382,12 +382,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         # Prefer to target inner tags like input/textarea/output if present
         preferred = ['input', 'textarea', 'output', 'img', 'a', 'audio', 'video', 'form', 'div', 'section']
         target_pos = None
-        target_tag = None
         for t in preferred:
             mpos = re.search(fr"<\s*{t}\b", html)
             if mpos:
                 target_pos = mpos.start()
-                target_tag = t
                 break
 
         if target_pos is None:
@@ -453,7 +451,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             if not isinstance(child, str) and child.__name__ == 'attr_def':
                 attrs = self._extract_attrs(child)
                 cls = attrs.pop('_class', '')
-                id_ = attrs.pop('id', None)
+                id_ = attrs.pop('_id', None)
                 if parts:
                     parts[-1] = self._merge_attrs_to_opening_tag(parts[-1], cls, id_, attrs)
                 # swallow the attr_def (do not render literally)
@@ -485,8 +483,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def visit_check_radio(self, node: Symbol) -> str:
-        return self.tag('input', '', newline=False, attrs=('checked' if node.text[1] in ['x', 'X', '*'] else ""), enclose=2,
-                type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else '')
+        return self.tag('input', '',  newline=False, enclose=2,
+            checked=node.text[1] in ['x', 'X', '*'],
+            type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else ''
+        )
 
     def visit_lists_end(self, node: Symbol) -> str:
         def process_node(n):
@@ -678,15 +678,14 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     level = 1 if marker.text[0] == '=' else 2
         
         attrs = self._extract_attrs(node)
-        _cls = attrs.get('_class', '')
-        _id = attrs.get('id') or self.get_title_id(level)
+        _id = attrs.get('_id') or self.get_title_id(level)
         title = (title_node := node.find('title_text')) and title_node.text
         self.resources.toc_items.append((level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
         attrs = self._extract_attrs(node)
         _cls = attrs.get('_class', '')
-        _id = attrs.get('id') or self.get_title_id(level)
+        _id = attrs.get('_id') or self.get_title_id(level)
         title_raw = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
         # Render inline markdown within titles (support bold/italic/code/longdash etc.)
         title_rendered = self.parse_markdown(title_raw, 'text').strip()
@@ -722,7 +721,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             content = ''
         
         attrs = self._extract_attrs(node)
-        return self.tag('div', f"\n{content}\n", _class=f"card {attrs.get('_class','')}".strip(), id=attrs.get('id') or None)
+        return self.tag('div', f"\n{content}\n", _class=f"card {attrs.get('_class','')}".strip(), _id=attrs.get('_id'))
 
     def visit_side_block(self, node: Symbol) -> str:
         content = [self.parse_markdown(thing.text, 'content').strip()
@@ -730,7 +729,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         if head := node.find('side_block_head'):
             attrs = self._extract_attrs(head)
-            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {attrs.get('_class','') or ''}", id=attrs.get('id'))
+            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {attrs.get('_class','')}", _id=attrs.get('_id'))
         else:
             return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz")
 
@@ -863,31 +862,32 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return 'image', None
 
-    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '', _class: str = '', _id: str = '') -> str:
+    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '', _class: str = '', _id: str | None = None) -> str:
         """Unified media rendering logic"""
         media_type, meta = self._get_media_type(url)
         
         if media_type == 'youtube':
             self.resources.videos.append(url)
             yt_class = f'yt-embed {_class}'.strip() if _class else 'yt-embed'
-            return self.tag('object', '', attrs=f' class="{yt_class}" data="https://www.youtube.com/embed/{meta}"', enclose=2)
+            return self.tag('object', '', enclose=2, _class=yt_class, data=f'https://www.youtube.com/embed/{meta}')
         
         elif media_type == 'video':
             self.resources.videos.append(url)
             src = self._prefix_local_image(url)
             return self.tag('video', controls="yesplz", disablePictureInPicture="True", 
-                            playsinline="True", src=src, type=f'video/{meta}', enclose=enclose, _class=_class, id=_id or None)
+                            playsinline="True", src=src, type=f'video/{meta}', enclose=enclose, _class=_class, _id=_id)
         
         elif media_type == 'audio':
             self.resources.audios.append(url)
             src = self._prefix_local_image(url)
             mime = 'audio/mpeg' if meta == 'mp3' else f'audio/{meta}'
-            return self.tag('audio', controls="yesplz", src=src, type=mime, enclose=enclose, _class=_class, id=_id or None)
+            return self.tag('audio', controls="yesplz", src=src, type=mime, enclose=enclose, _class=_class, _id=_id)
+            
             
         else: # Image
             self.resources.images.append(url)
             src = self._prefix_local_image(url)
-            return self.tag('img', content, src=src, alt=alt, title=title, style=style, enclose=enclose, newline=False, _class=_class, id=_id or None)
+            return self.tag('img', content, src=src, alt=alt, title=title, style=style, enclose=enclose, newline=False, _class=_class, _id=_id)
 
     def _render_link(self, url: str, text: str, title: str | None = None) -> str:
         """Unified link rendering logic"""
@@ -949,19 +949,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             action = action_node.text.strip() if action_node else None
 
             attrs = self._extract_attrs(node)
-            cls_str = attrs.get('_class','').strip()
-            _id = attrs.get('id')
-            def _class_id_attrs() -> str:
-                parts = []
-                if cls_str:
-                    parts.append(f'class="{cls_str}"')
-                if _id:
-                    parts.append(f'id="{_id}"')
-                return ' '.join(parts)
+            cls_str = attrs.get('_class', '').strip()
+            _id = attrs.get('_id')
 
             # No action -> submit button (useable inside forms)
             if not action:
-                return self.tag('button', label, attrs=' type="submit"', _class=cls_str or '', id=_id or None)
+                return self.tag('button', label, type='submit', _class=cls_str, _id=_id)
 
             if action.startswith('>>'):
                 marker = '>>'
@@ -977,22 +970,24 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     return node.text
                 target = '_blank' if marker == '>>' else None
                 # Render a small form that contains a button performing a GET
-                return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=url, method='get', target=target, attrs=_class_id_attrs(), newline=False)
+                return self.tag( 'form',
+                    self.tag('button', label, type='submit', newline=False),
+                    action=url, method='get', target=target, newline=False, **attrs)
 
             # Slash-prefixed: form action (POST) if 'submit' in path, otherwise a button referencing form id
             if marker == '/':
                 if 'submit' in action.lower():
-                    return self.tag('form', self.tag('button', label, attrs=' type="submit"', newline=False), action=action, method='post', attrs=_class_id_attrs(), newline=False)
+                    return self.tag( 'form',
+                        self.tag('button', label, type='submit', newline=False),
+                        action=action, method='post', newline=False, **attrs)
                 else:
                     formid = rest.lstrip('/').strip()
                     # Pass class on button if present; preserve desired attribute order
-                    if cls_str:
-                        return self.tag('button', label, attrs=f' type="submit" form="{formid}"', _class=cls_str)
-                    return self.tag('button', label, attrs=f' type="submit" form="{formid}"')
+                    return self.tag('button', label, type='submit', form=formid, _class=cls_str, _id=_id)
 
             # JS onclick
             if marker == '$':
-                return self.tag('button', label, attrs=f' type="button" onclick="{rest}"', _class=cls_str or '')
+                return self.tag('button', label, type='button', onclick=rest, _class=cls_str, _id=_id)
 
         return node.text
 
@@ -1058,7 +1053,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         # Extract attributes from attr_def
         attrs = self._extract_attrs(node)
         _cls = attrs.pop('_class', '')
-        _id = attrs.pop('id', None)
+        _id = attrs.pop('_id', None)
         kv_attrs = attrs
         
         # Get name from attrs or derive from label
@@ -1086,25 +1081,25 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         # Build the input/textarea element
         if is_textarea:
             inner = self.tag('textarea', '', name=name, 
-                           _class=_cls, id=_id or None, 
-                           newline=False, enclose=2, **{'required': is_required}, **kv_attrs)
+                            _class=_cls, _id=_id, 
+                            newline=False, enclose=2, **{'required': is_required}, **kv_attrs)
         elif checkbox:
             inner = self.tag('input', '', name=name, type=input_type,
-                           checked=True if is_checked else None,
-                           _class=_cls, id=_id or None,
-                           newline=False, enclose=1, **kv_attrs)
+                            checked=True if is_checked else None,
+                            _class=_cls, _id=_id,
+                            newline=False, enclose=1, **kv_attrs)
         elif input_type == 'file':
             inner = self.tag('input', '', name=name, type=input_type,
-                           accept='image/*',
-                           multiple=True if is_multiple else None,
-                           required=True if is_required else None,
-                           _class=_cls, id=_id or None,
-                           newline=False, enclose=1, **kv_attrs)
+                            accept='image/*',
+                            multiple=True if is_multiple else None,
+                            required=True if is_required else None,
+                            _class=_cls, _id=_id,
+                            newline=False, enclose=1, **kv_attrs)
         else:
             inner = self.tag('input', '', name=name, type=input_type,
-                           required=True if is_required else None,
-                           _class=_cls, id=_id or None,
-                           newline=False, enclose=1, **kv_attrs)        
+                            required=True if is_required else None,
+                            _class=_cls, _id=_id,
+                            newline=False, enclose=1, **kv_attrs)        
         return self.tag('label', f"{label} {inner}", newline=False, enclose=2)
 
     def visit_output_elem(self, node: Symbol) -> str:
@@ -1114,12 +1109,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         # Extract attributes
         attrs = self._extract_attrs(node)
         _cls = attrs.pop('_class', '')
-        _id = attrs.pop('id', None)
+        _id = attrs.pop('_id', None)
 
         # Get name from attrs or derive from label
         name = attrs.pop('name', None) or self._derive_input_name(label)
 
-        inner = self.tag('output', '', name=name, _class=_cls, id=_id or None, 
+        inner = self.tag('output', '', name=name, _class=_cls, _id=_id, 
                 newline=False, enclose=2, **attrs)
         
         return self.tag('label', f"{label} {inner}", newline=False, enclose=2)
@@ -1186,7 +1181,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=1, _class=attrs.get('_class',''), _id=attrs.get('id')or '')
+        return self._render_media(url, alt, title, enclose=1, _class=attrs.get('_class',''), _id=attrs.get('_id'))
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
@@ -1204,7 +1199,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=2, _class=attrs.get('_class',''), _id=attrs.get('id') or '')
+        return self._render_media(url, alt, title, enclose=2, _class=attrs.get('_class',''), _id=attrs.get('_id'))
 
     def visit_wiki_image(self, node: Symbol) -> str:
         if not (file_node := node.find('wiki_image_file')):
