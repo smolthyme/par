@@ -697,6 +697,29 @@ Text after
         result = parseHtml(md_text)
         self.assertIn('test.jpg', result)
 
+    def test_second_pass_preserves_rendered_sections(self):
+        """Second-pass parse should preserve generated section/list HTML instead of escaping it."""
+        md_text = '''This is a concise media kit. 
+
+## Usage guidelines
+
+When using the logo, please adhere to the following guidelines:
+
+- Maintain clear space equal to the height of the logo
+- Do not alter logo proportions, colours, or orientation
+
+## Contact
+
+If you have any questions or need further assistance, please [contact us via phone or email](contact-us.html).'''
+
+        first = parseHtml(md_text).strip()
+        second = parseHtml(first).strip()
+
+        self.assertEqual(second, first)
+        self.assertNotIn('&lt;section', second)
+        self.assertNotIn('&lt;h2', second)
+        self.assertNotIn('&lt;ul', second)
+
 
 class TestPerformanceAndStress(unittest.TestCase):
     """Tests for performance and stress cases"""
