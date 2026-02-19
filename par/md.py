@@ -284,12 +284,19 @@ class MarkdownGrammar(dict):
         return {k: v for k, v in locals().items() if isinstance(v, types.FunctionType)}, article
     
     def parse(self, text:str, root=None, skipWS=False, **kwargs):
+        """Parse markdown text"""
         # Normalise on unix-style line ending and we end with a newline
         text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
         # Hard line breaks: two+ trailing spaces or a trailing backslash before newline.
         # FIXME: We replace with literal <br/> so inline processing keeps them within the same paragraph
         text = re.sub(r'(?<=[^\s|]) {2,}\n|\\\n', '<br/>', text)
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
+
+
+_RE_SUBSCRIPT_FALLBACK   = re.compile(r',,([^,\n]+),,')
+_RE_STRIKETHROUGH_FALLBACK = re.compile(r'~~(.+?)~~')
+_RE_EMPHASIS_RECOVERY    = re.compile(r'^<em><em>([^<]+?) <em>(.+?)</em></em>(.*?)</em>$')
+_RE_YOUTUBE = re.compile(r'(?:youtube\.com/(?:watch\?v=|embed/|v/)|youtu\.be/)([^&?]{11})')
 
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):    
@@ -390,15 +397,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_paragraph(self, node: Symbol) -> str:
         content = self.visit(node).strip()
         # Fallback subscript handling for inline patterns that survive token parsing.
-        content = re.sub(r',,([^,\n]+),,', r'<sub>\1</sub>', content)
+        content = _RE_SUBSCRIPT_FALLBACK.sub(r'<sub>\1</sub>', content)
         # Fallback strikethrough handling for inline patterns that survive token parsing.
-        content = re.sub(r'~~(.+?)~~', r'<span style="text-decoration: line-through">\1</span>', content)
+        content = _RE_STRIKETHROUGH_FALLBACK.sub(r'<span style="text-decoration: line-through">\1</span>', content)
         # Graceful recovery for malformed emphasis nesting like: **bold *italic** text*
-        content = re.sub(
-            r'^<em><em>([^<]+?) <em>(.+?)</em></em>(.*?)</em>$',
-            r'<strong>\1 <em>\2</em></strong>\3',
-            content
-        )
+        content = _RE_EMPHASIS_RECOVERY.sub( r'<strong>\1 <em>\2</em></strong>\3', content)
         if content:
             return self.tag('p', content, enclose=2)
         else:
@@ -754,11 +757,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def _open_section(self, id):
-        stry = ""
+        parts = []
         if self._current_section_level is not None:
-            stry += self._close_section()
+            parts.append(self._close_section())
         self._current_section_level = id
-        return stry+self.tag('section', '', id=f'section-{id}')
+        parts.append(self.tag('section', '', id=f'section-{id}'))
+        return ''.join(parts)
 
     def _close_section(self):
         if hasattr(self, '_current_section_level') and self._current_section_level is not None:
@@ -793,14 +797,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def _get_media_type(self, url: str) -> tuple[str, str | None]:
         """Determine media type and metadata from URL."""
-        if 'youtube.com' in url or 'youtu.be' in url:
-            for pattern in [
-                _(r'youtube\.com/watch\?v=([^&]{11})'),
-                _(r'youtu\.be/([^?]{11})'),
-                _(r'youtube\.com/embed/([^?]{11})'),
-                _(r'youtube\.com/v/([^?]{11})')]:
-                if match := pattern.search(url):
-                    return 'youtube', match.group(1)
+        if match := _RE_YOUTUBE.search(url):
+            return 'youtube', match.group(1)
         
         ext = url.lower().split('.')[-1] if '.' in url else ''
         if ext in {'mp4', 'm4v', 'mkv', 'webm'}:
