@@ -250,7 +250,6 @@ class MarkdownGrammar(dict):
 
         # Form blocks
         def form_action()      : return _(r'[^\n\r\]]+')
-        # form items should avoid automatic paragraph wrapping for inputs/buttons/outputs
         def form_content()     : return [input_elem, output_elem, button, paragraph], 0, blankline
         def form_type()        : return _(r'(?:&>|=>|\*=)*')
         def form()             : return _(r'^\s*\['), 0, space, form_type, 0, space, form_action, blankline, -1, form_content, _(r'\]'), 0, attr_def
@@ -328,8 +327,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def _extract_attrs(self, node: Symbol) -> dict:
         """Extract attributes from `attr_def` into a kwargs-ready dict.
 
-        Returns a dict suitable for `**kwargs` in `tag()` where classes are
-        provided as `_class` and id as `_id`.
+        Returns a dict suitable for `**kwargs` in `tag()` (classes as `_class` and id as `_id`.)
         """
         attrs = {}
         if (attr_def := next((n for n in node.find_all_here('attr_def')), None)):
@@ -371,94 +369,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_hr(self, node: Symbol) -> str:
         return self.tag('hr', enclose=1)
 
-    def _merge_attrs_to_opening_tag(self, html: str, _class: str, _id: str | None, kv: dict) -> str:
-        """Merge attributes into the first opening tag of an HTML fragment.
-        Prefer targeting inner input/output elements when present (so `{name=ml}` attaches
-        to the `<input>` inside a `<label>` rather than the `<label>` itself).
-        Returns modified HTML (or original if no opening tag found).
-        """
-        import re
-
-        # Prefer to target inner tags like input/textarea/output if present
-        preferred = ['input', 'textarea', 'output', 'img', 'a', 'audio', 'video', 'form', 'div', 'section']
-        target_pos = None
-        for t in preferred:
-            mpos = re.search(fr"<\s*{t}\b", html)
-            if mpos:
-                target_pos = mpos.start()
-                break
-
-        if target_pos is None:
-            # fallback to the first opening tag
-            m = re.search(r"^(\s*<(?P<tag>\w+)(?P<attrs>[^>]*?)(?P<selfclose>/?)(?:>|\s>))", html)
-            if not m:
-                return html
-            tag = m.group('tag')
-            attrs = m.group('attrs') or ''
-            start, end = m.span(0)
-        else:
-            # capture the opening tag at the found position
-            m = re.search(r"<(?P<tag>\w+)(?P<attrs>[^>]*?)(?P<selfclose>/?)>", html[target_pos:])
-            if not m:
-                return html
-            tag = m.group('tag')
-            attrs = m.group('attrs') or ''
-            start = target_pos + m.start(0)
-            end = target_pos + m.end(0)
-
-        # Parse existing attributes into dict
-        attr_re = re.compile(r'([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*(=\s*(?:"([^"]*)"|\'([^\']*)\'))?')
-        existing = {}
-        for am in attr_re.finditer(attrs):
-            k = am.group(1)
-            v = am.group(3) if am.group(3) is not None else (am.group(4) if am.group(4) is not None else True)
-            existing[k] = v
-
-        # Merge classes
-        if _class:
-            existing['class'] = (existing.get('class', '') + ' ' + _class).strip()
-        # Merge id (new id overrides existing if present)
-        if _id:
-            existing['id'] = _id
-        # Merge kv attrs (kv True => boolean attribute)
-        for k, v in kv.items():
-            existing[k] = v
-
-        # Rebuild attribute string (put class/id/others in deterministic order)
-        parts = []
-        if 'class' in existing and existing['class']:
-            parts.append(f'class="{existing["class"]}"')
-        if 'id' in existing and existing['id']:
-            parts.append(f'id="{existing["id"]}"')
-        for k in sorted(x for x in existing.keys() if x not in ('class', 'id')):
-            val = existing[k]
-            if val is True:
-                parts.append(k)
-            else:
-                parts.append(f'{k}="{val}"')
-
-        new_attrs = ' ' + ' '.join(parts) if parts else ''
-
-        new_open = f"<{tag}{new_attrs}{m.group('selfclose') or ''}>"
-        return html[:start] + new_open + html[end:]
-
     def visit_paragraph(self, node: Symbol) -> str:
-        # Render children one by one so an attribute definition that appears
-        # *after* an element (e.g. `![img](x){.c}` or `(...) {.c}`) can be applied
-        # to the previous rendered element instead of remaining as literal text.
-        parts = []
-        for child in node.what if hasattr(node, 'what') and node.what else []:
-            if not isinstance(child, str) and child.__name__ == 'attr_def':
-                attrs = self._extract_attrs(child)
-                cls = attrs.pop('_class', '')
-                id_ = attrs.pop('_id', None)
-                if parts:
-                    parts[-1] = self._merge_attrs_to_opening_tag(parts[-1], cls, id_, attrs)
-                # swallow the attr_def (do not render literally)
-                continue
-            parts.append(self.visit(child) if not isinstance(child, str) else child)
-
-        content = ''.join(parts).strip()
+        content = self.visit(node).strip()
         if content:
             return self.tag('p', content, enclose=2)
         else:
@@ -485,8 +397,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_check_radio(self, node: Symbol) -> str:
         return self.tag('input', '',  newline=False, enclose=2,
             checked=node.text[1] in ['x', 'X', '*'],
-            type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else ''
-        )
+            type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else '' )
 
     def visit_lists_end(self, node: Symbol) -> str:
         def process_node(n):
