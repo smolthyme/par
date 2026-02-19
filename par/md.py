@@ -959,32 +959,23 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         action = (action_node.text.strip() if (action_node := node.find('form_action')) else '')
         # Collect all form_content nodes (there may be multiple entries)
         content_nodes = list(node.find_all_here('form_content'))
-        if content_nodes:
-            content = ''.join(c.text for c in content_nodes)
-        else:
-            content = ''
         
         attrs = self._extract_attrs(node)
         # Parse content using grammar-driven repeated 'form_content' to avoid paragraph wrapping
         # Use a direct pattern tuple (-1, form_content) so we parse multiple form_content entries
         # Render each `form_content` node directly so inputs/buttons are preserved
-        parts = []
-        for c in content_nodes:
-            parts.append(self.visit(c) if not isinstance(c, str) else c)
-        parsed_content = ''.join(parts).strip()
+        parsed_content = ''.join([self.visit(c) for c in content_nodes]).strip()
 
-        # Determine form attributes based on type
-        if form_type_text == '&>':  # POST form
-            return self.tag('form', f"\n{parsed_content}\n", action=action, method='post', **attrs)
-        elif form_type_text == '=>':  # GET form
-            return self.tag('form', f"\n{parsed_content}\n", action=action, method='get', **attrs)
-        elif form_type_text == '*=':  # oninput form
-            return self.tag('form', f"\n{parsed_content}\n", oninput=action, **attrs)
-        
+        match form_type_text:
+            case '&>':
+                return self.tag('form', f"\n{parsed_content}\n", action=action, method='post', **attrs)
+            case '=>':
+                return self.tag('form', f"\n{parsed_content}\n", action=action, method='get', **attrs)
+            case '*=':
+                return self.tag('form', f"\n{parsed_content}\n", oninput=action, **attrs)
+            
         return node.text
-
-    # form content parsing is now grammar-driven; previous re-parsing helper removed
-
+    
     def _derive_input_name(self, label: str) -> str:
         """Derive input name from label text"""
         # Strip trailing punctuation and whitespace
@@ -996,7 +987,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             name = re.sub(r'[^\w]', '', words[0]).lower()
             return name
         return 'input'
-
+    
     def visit_input_elem(self, node: Symbol) -> str:
         """Handle input elements: [Label: >type___*]"""
         label = (label_node.text.strip() if (label_node := node.find('input_label')) else '')
