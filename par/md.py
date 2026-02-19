@@ -290,6 +290,7 @@ class MarkdownGrammar(dict):
         # Hard line breaks: two+ trailing spaces or a trailing backslash before newline.
         # FIXME: We replace with literal <br/> so inline processing keeps them within the same paragraph
         text = re.sub(r'(?<=[^\s|]) {2,}\n|\\\n', '<br/>', text)
+        kwargs.setdefault('packrat', True)
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
 

@@ -8,9 +8,6 @@ from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Option
 
 print_trace = False # For debugging
 
-word_regex = re.compile(r"\w+")
-rest_regex = re.compile(r".*")
-
 class keyword(str): pass
 
 class ignore(object):
@@ -110,6 +107,8 @@ def skip(skipper, text: str, skipWS: bool, skipComments: Union[Callable, None]) 
             break
     return t
 
+word_regex = re.compile(r"\w+")
+
 class parser(object):
     def __init__(self, another=False, p=False): 
         if not(another):
@@ -135,12 +134,12 @@ class parser(object):
         if resultSoFar is None:
             resultSoFar = []
         name = None
-        _textline = textline
         _pattern = pattern
+        _rsf_len = len(resultSoFar)
 
         def syntaxError(error=None):
             if self.packrat:
-                self.memory[len(_textline), id(_pattern) if isinstance(_pattern, list) else _pattern] = False
+                self.memory[_cache_key] = False
             raise SyntaxError(error)
 
         def Result(result: object, text: str) -> tuple:
@@ -169,18 +168,17 @@ class parser(object):
                     results.extend([result])
             
             if self.packrat:
-                self.memory[len(_textline), id(_pattern) if isinstance(_pattern, list) else _pattern] = (results, text)
+                self.memory[_cache_key] = (results[_rsf_len:], text)
             
             return results, text        
         
         if self.packrat:
-            try:
-                result = self.memory[len(textline), id(pattern) if isinstance(pattern, list) else pattern]
-                if result:
-                    return result
-                else:
+            _cache_key = (len(textline), id(pattern) if isinstance(pattern, (list, tuple)) else pattern)
+            if (cached := self.memory.get(_cache_key)) is not None:
+                if cached is False:
                     raise SyntaxError()
-            except: pass
+                resultSoFar.extend(cached[0])
+                return resultSoFar, cached[1]
 
         if callable(pattern):
             if __debug__:
