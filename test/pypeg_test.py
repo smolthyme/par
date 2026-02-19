@@ -286,6 +286,126 @@ class TestParserPackrat(unittest.TestCase):
         result2, rest2 = p.parseLine("123", pattern)
         self.assertEqual(result1, result2)
         self.assertEqual(rest1, rest2)
+    
+    def test_packrat_with_ambiguous_alternatives(self):
+        """Test packrat caching with a grammar that has multiple alternatives.
+        Without caching, alternatives would redundantly re-parse the same position."""
+        p = parser(p=True)
+        
+        def identifier():
+            return re.compile(r"[a-zA-Z_]\w*")
+        
+        def keyword_or_var():
+            """Either a keyword or an identifier"""
+            return [keyword("class"), keyword("def"), identifier]
+        
+        initial_cache_size = len(p.memory)
+        result, rest = p.parseLine("myVar", keyword_or_var)
+        
+        # Verify parsing succeeded
+        self.assertEqual(rest, "")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].__name__, "keyword_or_var")
+        
+        # Cache should have entries: failed attempts at 'class' and 'def' keywords,
+        # plus the successful identifier match
+        cache_entries = len(p.memory)
+        self.assertGreater(cache_entries, initial_cache_size, 
+                          "Packrat cache should record alternatives that were tried")
+        
+        # Verify that we have both success and failure entries in cache
+        # Success entries are (position, pattern_id) -> (result, rest) tuples
+        # Failure entries are (position, pattern_id) -> False
+        has_successful_cache = any(v != False for v in p.memory.values())
+        has_failed_cache = any(v == False for v in p.memory.values())
+        self.assertTrue(has_successful_cache, "Cache should contain successful parse results")
+        self.assertTrue(has_failed_cache, "Cache should contain failed alternative attempts")
+    
+    def test_packrat_prevents_redundant_parsing_in_repetition(self):
+        """Test that packrat caching prevents redundant parsing in repetition patterns.
+        Repetitions naturally retry at the same position multiple times; packrat 
+        ensures we don't re-parse those positions.
+        
+        Grammar: first identifier, then zero or more (comma, identifier) pairs.
+        For "apple,banana,cherry", successfully parses: id, comma, id, comma, id.
+        Cache includes these successful positions plus failed attempts when repetition exhausts."""
+        p = parser(p=True)
+        
+        def ident():
+            return re.compile(r"[a-zA-Z_]\w*")
+        
+        def csv_list():
+            """First item, then zero or more (comma, item) pairs"""
+            return (ident, (-1, (",", ident)))
+        
+        test_input = "apple,banana,cherry"
+        result, rest = p.parseLine(test_input, csv_list)
+        
+        # Verify parsing succeeded and all items were parsed
+        self.assertEqual(rest, "")
+        items = list(result[0].find_all("ident"))
+        self.assertEqual(len(items), 3, "Should parse exactly 3 identifiers from the CSV list")
+        
+        # Verify cache contains entries across multiple input positions
+        unique_cache_positions = set(pos for pos, _ in p.memory.keys())
+        self.assertGreaterEqual(len(unique_cache_positions), 3,
+                               "Cache should have entries at multiple positions as each identifier is parsed")
+        
+        # Verify we have multiple patterns tried at some positions (beyond just the successful parses)
+        total_cache_entries = len(p.memory)
+        self.assertGreater(total_cache_entries, len(unique_cache_positions),
+                          "Should have more total cache entries than unique positions, indicating backtracking/alternatives")
+        
+        # Verify we have both successful and failed cache entries (the repetition retrying at end of input)
+        has_successful_cache = any(v != False for v in p.memory.values())
+        has_failed_cache = any(v == False for v in p.memory.values())
+        self.assertTrue(has_successful_cache, "Cache should contain successful parse results")
+        self.assertTrue(has_failed_cache, "Cache should contain failed attempts when repetition exhausts")
+    
+    def test_packrat_with_complex_nested_alternatives(self):
+        """Test packrat with a more complex, deeply nested grammar.
+        This tests how packrat helps with realistic PEG scenarios where backtracking occurs."""
+        p = parser(p=True)
+        
+        def hex_literal():
+            """0x followed by hex digits"""
+            return ("0x", re.compile(r"[0-9a-fA-F]+"))
+        
+        def decimal():
+            """Plain decimal number"""
+            return re.compile(r"\d+")
+        
+        def number_literal():
+            """Try hex first, fall back to decimal"""
+            return [hex_literal, decimal]
+        
+        def operator():
+            return ["+", "-", "*", "/"]
+        
+        def expr():
+            """Simple expression: number operator number"""
+            return (number_literal, operator, number_literal)
+        
+        p.memory.clear()
+        
+        # Parse an expression
+        test_input = "0xff + 42"
+        result, rest = p.parseLine(test_input, expr)
+        
+        self.assertEqual(rest, "")
+        
+        cache_size = len(p.memory)
+        self.assertGreater(cache_size, 0, "Cache should have multiple entries for complex expression")
+        
+        # Verify the parse result structure
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].__name__, "expr")
+        
+        # Extract the parts: should have number, operator, number
+        numbers = list(result[0].find_all("number_literal"))
+        operators = list(result[0].find_all("operator"))
+        self.assertEqual(len(numbers), 2, "Expression should have two number_literals")
+        self.assertEqual(len(operators), 1, "Expression should have one operator")
 
 
 class TestParseLineFunctions(unittest.TestCase):
