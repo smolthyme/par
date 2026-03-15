@@ -455,6 +455,27 @@ abcd</code></pre>
 </dl>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_definition_list_with_list(self):
+        self.maxDiff=None
+        md_text = '''\
+**Q.** What are the details to connect my domain name to my Gorkulork website?
+:   **A.** Follow these steps:
+:   * Point your "www.**your-domain-name.com**" to "**sites.gorkulork.com**" (We recommend using a 'www' subdomain **CNAME DNS record**).
+'''
+        expected = '''\
+<dl>
+<dt><strong>Q.</strong> What are the details to connect my domain name to my Gorkulork website?</dt>
+<dd><p><strong>A.</strong> Follow these steps:</p>
+</dd>
+<dd><ul>
+<li>Point your "www.<strong>your-domain-name.com</strong>" to "<strong>sites.gorkulork.com</strong>" (We recommend using a 'www' subdomain <strong>CNAME DNS record</strong>).</li>
+</ul>
+</dd>
+</dl>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+    
+
+
     def test_definition_list_multiple_definitions(self):
         md_text = '''\
 Term
