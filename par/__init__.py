@@ -24,10 +24,11 @@ __url__ = None
 __license__ = 'BSD'
 __version__ = '1.4.2'
 
-_ = re.compile
+from functools import lru_cache
+_ = lru_cache(maxsize=256)(re.compile)  # each unique (pattern, flags) compiled once
 
 class SimpleVisitor(object):
-    def __init__(self, grammar=None):
+    def __init__(self, grammar: dict | None = None) -> None:
         self.grammar = grammar
     
     def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
@@ -68,7 +69,7 @@ class SimpleVisitor(object):
 class HTMLVisitor(SimpleVisitor):
     tag_class = {}
     
-    def __init__(self, grammar=None, tag_class=None):
+    def __init__(self, grammar: dict | None = None, tag_class: dict[str, str] | None = None) -> None:
         super(HTMLVisitor, self).__init__(grammar)
     
     def tag(self, tag: str, child='', attrs='', enclose=0, newline=True, **kwargs) -> str:
@@ -103,6 +104,7 @@ class HTMLVisitor(SimpleVisitor):
             case _:   return f'<{ tag}{kwattrs}>{ nline}'
     
     @staticmethod
+    @lru_cache(maxsize=256)
     def slug(text: str, reject_chars_re=re.compile(r'[^-a-zA-Z0-9]+'), separator='-', replace_pairs=(),
                 max_length=0, lowercase=True, clean_html=True):
         """Normalizes a string by removing non-alphanumeric characters and replacing gaps with the separator."""
@@ -136,7 +138,7 @@ class HTMLVisitor(SimpleVisitor):
         return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 class MDHTMLVisitor(HTMLVisitor):
-    def __init__(self, grammar=None, tag_class=None):
+    def __init__(self, grammar: dict | None = None, tag_class: dict[str, str] | None = None) -> None:
         super(MDHTMLVisitor, self).__init__(grammar)
         self.titles_ids = {}
         self.tag_class = tag_class or self.__class__.tag_class

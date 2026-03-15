@@ -5,6 +5,9 @@ import re, types
 from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
 
 from dataclasses import dataclass, field, asdict
+from functools import lru_cache
+
+_ = lru_cache(maxsize=256)(re.compile)
 
 @dataclass(slots=True)
 class ResourceStore:
@@ -42,7 +45,6 @@ class ResourceStore:
             image_references=self.image_references,
         )
 
-_ = re.compile
 
 class MarkdownGrammar(dict):
     def __init__(self):
