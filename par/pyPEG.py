@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 import sys, re
-from typing import Union, Pattern, Callable, List, Tuple, Any, Generator, Optional, Dict, Iterator
+from typing import Any, Union, Optional, Tuple, List
+from collections.abc import Callable, Generator, Iterator
 
 print_trace = False # For debugging
 
@@ -15,7 +16,7 @@ class ignore(object):
         self._regex = re.compile(regex_text, *args)
 
     @property
-    def regex(self) -> Pattern[str]:
+    def regex(self) -> re.Pattern[str]:
         return self._regex
 
 class _and(object):
@@ -29,18 +30,18 @@ class _and(object):
 class _not(_and): pass
 
 # Type alias for parse patterns
-ParsePattern = Union[
-    Pattern[str],                      # compiled regex
-    str,                               # literal text 
-    keyword,                           # named word match
-    ignore,                            # ignore specific text via regex
-    _not,                              # negative lookahead
-    _and,                              # positive lookahead
-    int,                               # integer repetition count
-    list,                              # alternatives (OR) - list of ParsePatterns
-    tuple,                             # sequence - tuple of ParsePatterns and/or ints
-    Callable[[], 'ParsePattern']       # callable returning another pattern
-]
+type ParsePattern = (
+    re.Pattern[str]                    # compiled regex
+    | str                              # literal text
+    | keyword                          # named word match
+    | ignore                           # ignore specific text via regex
+    | _not                             # negative lookahead
+    | _and                             # positive lookahead
+    | int                              # integer repetition count
+    | list                             # alternatives (OR) - list of ParsePatterns
+    | tuple                            # sequence - tuple of ParsePatterns and/or ints
+    | Callable[[], 'ParsePattern']     # callable returning another pattern
+)
 
 class Name(str):
     def __init__(self, *args):
@@ -173,7 +174,9 @@ class parser(object):
             return results, text        
         
         if self.packrat:
-            _cache_key = (len(textline), id(pattern) if isinstance(pattern, (list, tuple)) else pattern)
+            _cache_key = (len(textline),
+                tuple(id(p) for p in pattern) if isinstance(pattern, (list, tuple))
+                else pattern)
             if (cached := self.memory.get(_cache_key)) is not None:
                 if cached is False:
                     raise SyntaxError()
