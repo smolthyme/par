@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 import sys, re
-from typing import Any, Union, Optional, Tuple, List
-from collections.abc import Callable, Generator, Iterator
+from typing import Any
+from collections.abc import Callable, Generator
 
 print_trace = False # For debugging
 
@@ -74,7 +74,7 @@ class Symbol(list):
             result += c.utf8_tree_str(new_prefix, "└── " if is_last else "├── ")
         return result
     
-    def find(self, name: str) -> Optional['Symbol']:
+    def find(self, name: str) -> 'Symbol | None':
         """Find the first node with the given name."""
         for node in self.what:
             if not isinstance(node, str):
@@ -94,12 +94,20 @@ class Symbol(list):
     def find_all_here(self, name: str) -> Generator['Symbol', None, None]:
         """Find all nodes with matching name in the immediate child nodes."""
         yield from (x for x in self.what if not isinstance(x, str) and x.__name__ == name)
+
+    def find_all_names(self, names: frozenset[str]) -> Generator['Symbol', None, None]:
+        """Single-pass traversal yielding all descendants whose name is in `names`."""
+        for node in self.what:
+            if not isinstance(node, str):
+                if node.__name__ in names:
+                    yield node
+                yield from node.find_all_names(names)
     
     @property
     def text(self) -> str:
         return ''.join(node if isinstance(node, str) else node.text for node in self.what)
 
-def skip(skipper, text: str, skipWS: bool, skipComments: Union[Callable, None]) -> str:
+def skip(skipper, text: str, skipWS: bool, skipComments: Callable | None) -> str:
     t = text.lstrip() if skipWS else text
     while skipComments:
         try:
@@ -123,7 +131,7 @@ class parser(object):
         self.memory  = {}
         self.packrat = p
 
-    def parseLine(self, textline, pattern:ParsePattern, resultSoFar=None, skipWS=True, skipComments: Union[Callable, None]=None) -> Tuple[list, str]:
+    def parseLine(self, textline, pattern: ParsePattern, resultSoFar=None, skipWS=True, skipComments: Callable | None = None) -> tuple[list, str]:
         """\
 * textline     : text to parse
 * pattern      : pyPEG language description
@@ -200,100 +208,97 @@ class parser(object):
 
         text = skip(self.skipper, textline, skipWS, skipComments)
 
-        if isinstance(pattern, str):
-            if text[:len(pattern)] == pattern:
-                text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
-                return Result(None, text)
-            else:
-                syntaxError()
-        
-        elif isinstance(pattern, keyword):
-            if m := word_regex.match(text):
-                if m.group(0) == pattern:
+        match pattern:
+            case keyword():   # keyword before str — keyword IS-A str, so order matters
+                if m := word_regex.match(text):
+                    if m.group(0) == pattern:
+                        text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
+                        return Result(None, text)
+                    else:
+                        syntaxError()
+                else:
+                    syntaxError(word_regex.pattern)
+
+            case str():
+                if text[:len(pattern)] == pattern:
                     text = skip(self.skipper, text[len(pattern):], skipWS, skipComments)
                     return Result(None, text)
                 else:
                     syntaxError()
-            else:
-                syntaxError(word_regex.pattern)
-        
-        elif isinstance(pattern, _not):
-            try:
-                r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
-            except:
-                return resultSoFar, textline
-            syntaxError()
-        
-        elif isinstance(pattern, _and):
-            r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
-            return resultSoFar, textline
-        
-        elif isinstance(pattern, ignore):
-            if m := pattern.regex.match(text):
-                text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
-                return Result(None, text)
-            else:
-                syntaxError()
-        
-        elif isinstance(pattern, tuple):
-            n = 1; result = []
-            for p in pattern:
-                if isinstance(p, int):
-                    n = p
-                elif isinstance(n, int):
-                    if n > 0:
-                        for i in range(n):
-                            result, text = self.parseLine(text, p, result, skipWS, skipComments)
-                    elif n == 0:
-                        if text == "":
-                            pass
-                        else:
-                            try:
-                                newResult, newText = self.parseLine(text, p, result, skipWS, skipComments)
-                                result, text = newResult, newText
-                            except SyntaxError:
-                                pass
-                    elif n < 0:
-                        found = False
-                        while True:
-                            try:
-                                newResult, newText = self.parseLine(text, p, result, skipWS, skipComments)
-                                result, text, found = newResult, newText, True
-                            except SyntaxError:
-                                break
-                        if n == -2 and not(found):
-                            syntaxError(f"{text} function={p}")
-                    n = 1
-            return Result(result, text)
-        
-        elif isinstance(pattern, list):
-            result = []
-            found = False
-            for p in pattern:
+
+            case _not():      # _not before _and — _not IS-A _and, so order matters
                 try:
-                    result, text = self.parseLine(text, p, result, skipWS, skipComments)
-                    found = True
-                except SyntaxError:
-                    pass
-                if found:
-                    break
-            if found:
+                    r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
+                except:
+                    return resultSoFar, textline
+                syntaxError()
+
+            case _and():
+                r, t = self.parseLine(text, pattern.obj, [], skipWS, skipComments)
+                return resultSoFar, textline
+
+            case ignore():
+                if m := pattern.regex.match(text):
+                    text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
+                    return Result(None, text)
+                else:
+                    syntaxError()
+
+            case tuple():
+                n = 1; result = []
+                for p in pattern:
+                    if isinstance(p, int):
+                        n = p
+                    elif isinstance(n, int):
+                        if n > 0:
+                            for i in range(n):
+                                result, text = self.parseLine(text, p, result, skipWS, skipComments)
+                        elif n == 0:
+                            if text != "":
+                                try:
+                                    newResult, newText = self.parseLine(text, p, result, skipWS, skipComments)
+                                    result, text = newResult, newText
+                                except SyntaxError:
+                                    pass
+                        elif n < 0:
+                            found = False
+                            while True:
+                                try:
+                                    newResult, newText = self.parseLine(text, p, result, skipWS, skipComments)
+                                    result, text, found = newResult, newText, True
+                                except SyntaxError:
+                                    break
+                            if n == -2 and not found:
+                                syntaxError(f"{text} function={p}")
+                        n = 1
                 return Result(result, text)
-            else:
-                syntaxError()
-        
-        elif isinstance(pattern, re.Pattern):
-            # Handle compiled regex patterns
-            if m := pattern.match(text):
-                text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
-                return Result(m.group(0), text)
-            else:
-                syntaxError()
-        
-        else:
-            raise SyntaxError(f"illegal type in grammar: {type(pattern)}")
-        
-        return resultSoFar, textline # Should never reach this point
+
+            case list():
+                result = []; found = False
+                for p in pattern:
+                    try:
+                        result, text = self.parseLine(text, p, result, skipWS, skipComments)
+                        found = True
+                    except SyntaxError:
+                        pass
+                    if found:
+                        break
+                if found:
+                    return Result(result, text)
+                else:
+                    syntaxError()
+
+            case re.Pattern():
+                if m := pattern.match(text):
+                    text = skip(self.skipper, text[len(m.group(0)):], skipWS, skipComments)
+                    return Result(m.group(0), text)
+                else:
+                    syntaxError()
+
+            case _:
+                raise SyntaxError(f"illegal type in grammar: {type(pattern)}")
+
+        return resultSoFar, textline  # unreachable; satisfies type checkers
     
     def lineNo(self) -> int:
         # NOTE TEST: This is a re-write of a function that was clearly broken. It... partially works?
@@ -314,7 +319,7 @@ class parser(object):
 
         return -1  # Return -1 if no valid line number is found
 
-def parseLine(textline, pattern, resultSoFar = None, skipWS = True, skipComments = None, packrat = False) -> Tuple[List[Any], str]:
+def parseLine(textline, pattern, resultSoFar = None, skipWS = True, skipComments = None, packrat = False) -> tuple[list[Any], str]:
     if resultSoFar is None:
         resultSoFar = []
     p = parser(p=packrat)

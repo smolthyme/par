@@ -4,7 +4,6 @@
 
 import re, types
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
 
 from .pyPEG import *
 
@@ -17,11 +16,11 @@ simple_ext_chars_re = rx(r'^[\.a-z]+$')
 class FileParts():
     """Simple dataclass to hold the parts of a filename, either as a definite set or set of regular expression."""
     title: str
-    tags : List[str]      = field(default_factory=list)
-    meta : Dict[str, str] = field(default_factory=dict)
-    group: Optional[str]  = None
-    exts : Optional[str]  = None
-    sort : Optional[str]  = None
+    tags : list[str]      = field(default_factory=list)
+    meta : dict[str, str] = field(default_factory=dict)
+    group: str | None  = None
+    exts : str | None  = None
+    sort : str | None  = None
     
     def __str__(self):
         # Meta is a dict-like syntax
@@ -159,7 +158,7 @@ def normalize_alpha(string: str) -> float:
         for i, char in enumerate(c for c in string.strip().lower() if c.isalpha())
     )
 
-def file_sort_init(sort_var:Optional[None|str], title:str, sort_default=1.0) -> float:
+def file_sort_init(sort_var: str | None, title: str, sort_default=1.0) -> float:
     """While the filename parser is good, the sort variable sometimes contains strange values.
         This function is a helper to ensure that sort is always a float"""
     first = -888.0  ; firstchars = "^!"

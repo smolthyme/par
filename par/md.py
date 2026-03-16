@@ -5,25 +5,35 @@ import re, types
 from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
 
 from dataclasses import dataclass, field, asdict
+from collections import defaultdict
 from functools import lru_cache
+from typing import Literal, TypedDict
 
 _ = lru_cache(maxsize=256)(re.compile)
+
+
+class LinkRef(TypedDict):
+    url: str;   title: str | None
+
+class FootNote(TypedDict):
+    name: str;  text: str
+
 
 @dataclass(slots=True)
 class ResourceStore:
     """Centralized storage for all resources tracked during markdown parsing."""
     
-    links_ext: list = field(default_factory=list)
-    links_int: list = field(default_factory=list)
-    toc_items: list = field(default_factory=list)
-    footnotes: list = field(default_factory=list)
-    images:    list = field(default_factory=list)
-    videos:    list = field(default_factory=list)
-    audios:    list = field(default_factory=list)
-    
-    titles_ids:       dict = field(default_factory=dict)
-    link_references:  dict = field(default_factory=dict)
-    image_references: dict = field(default_factory=dict)
+    links_ext: list[str]      = field(default_factory=list)
+    links_int: list[str]      = field(default_factory=list)
+    toc_items: list           = field(default_factory=list)
+    footnotes: list[FootNote] = field(default_factory=list)
+    images:    list[str]      = field(default_factory=list)
+    videos:    list[str]      = field(default_factory=list)
+    audios:    list[str]      = field(default_factory=list)
+
+    titles_ids:       defaultdict[int, int]  = field(default_factory=lambda: defaultdict(int))
+    link_references:  dict[str, LinkRef]     = field(default_factory=dict)
+    image_references: dict[str, LinkRef]     = field(default_factory=dict)
     
     
     def to_dict(self):
@@ -40,7 +50,7 @@ class ResourceStore:
             images=self.images,
             videos=self.videos,
             audios=self.audios,
-            titles_ids={},  # Fresh title IDs for nested content
+            titles_ids=defaultdict(int),  # fresh for nested context
             link_references=self.link_references,
             image_references=self.image_references,
         )
@@ -317,15 +327,13 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     
     def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
         if root:
-            # Collect link and image references first
-            [self._collect_link_reference(obj) for obj in nodes[0].find_all('link_reference')]
-            # Collect titles for ToC
-            [self._alt_title(onk) for onk in nodes[0].find_all('title')]
+            # Single-pass pre-scan: collect link references and ToC titles together
+            for node in nodes[0].find_all_names(frozenset({'link_reference', 'title'})):
+                match node.__name__:
+                    case 'link_reference': self._collect_link_reference(node)
+                    case 'title':          self._alt_title(node)
 
-        # Use normal traversal
-        html = super(MarkdownHtmlVisitor, self).visit(nodes, root)
-        # No post-processing of attribute-only paragraphs; attributes are attached via grammar
-        return html
+        return super(MarkdownHtmlVisitor, self).visit(nodes, root)
     
     def parse_markdown(self, text, peg=None, *, title_id_begin_level: int | None = 1):
         g = self.grammar or MarkdownGrammar()
@@ -616,7 +624,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             self._title_id_begin_level = begin
 
         titles = self.resources.titles_ids
-        titles[level] = titles.get(level, 0) + 1
+        titles[level] += 1   # defaultdict(int) — zero-initialises missing keys
 
         ids = [str(titles.get(l, 0)) for l in range(begin, level + 1)]
         return f"title_{'-'.join(ids)}"
@@ -801,7 +809,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         """Check if URL is safe (not javascript:, vbscript:, data:)"""
         return not any(url.lower().strip().startswith(d) for d in ['javascript:', 'vbscript:', 'data:'])
 
-    def _get_media_type(self, url: str) -> tuple[str, str | None]:
+    def _get_media_type(self, url: str) -> tuple[Literal['youtube', 'video', 'audio', 'image'], str | None]:
         """Determine media type and metadata from URL."""
         if match := _RE_YOUTUBE.search(url):
             return 'youtube', match.group(1)
