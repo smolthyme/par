@@ -7,8 +7,8 @@ from enum import Enum
 from functools import lru_cache
 from typing import Any, ClassVar, Iterator
 
-from .__init__ import SimpleVisitor
-from .pyPEG import Symbol, parseLine
+from __init__ import SimpleVisitor
+from pyPEG import Symbol, parseLine
 
 
 _ = lru_cache(maxsize=256)(re.compile)
@@ -156,11 +156,12 @@ class TodoItem:
 class TodoSection:
     """A named group of TODO items."""
 
-    name:  str
-    level: int            = 2
-    items: list[TodoItem] = field(default_factory=list)
-    notes: list[str]      = field(default_factory=list)
-    tags:  list[Tag]      = field(default_factory=list)
+    name:   str
+    level:  int            = 2
+    indent: int            = 0
+    items:  list[TodoItem] = field(default_factory=list)
+    notes:  list[str]      = field(default_factory=list)
+    tags:   list[Tag]      = field(default_factory=list)
 
     def all_items(self) -> Iterator[TodoItem]:
         for item in self.items:
@@ -337,7 +338,7 @@ class TodoGrammar(dict):
         def header(): return name, _(r'[ \t]+TODO:[ \t]*', re.IGNORECASE), eol
 
         def project_name(): return _(rf'\S(?:.*?\S)?(?=\s*:[ \t]*(?:{eol_re}))')
-        def project(): return project_name, _(r'\s*:[ \t]*'), eol
+        def project(): return indent, project_name, _(r'\s*:[ \t]*'), eol
 
         def checkbox(): return _(r'\[[ xX/\-]\]')
         def text(): return _(r'[^\n]*')
@@ -409,10 +410,10 @@ class TodoDocumentVisitor(SimpleVisitor):
         )
         self.doing.clear()
 
-    def _start_section(self, name: str, tags: list[Tag] | None = None, *, level: int = 2) -> None:
+    def _start_section(self, name: str, tags: list[Tag] | None = None, *, level: int = 2, indent: int = 0) -> None:
         self._flush_doing()
         self.stack.clear()
-        self.section = TodoSection(name=name, tags=tags or [], level=level)
+        self.section = TodoSection(name=name, tags=tags or [], level=level, indent=indent)
         self.document.sections.append(self.section)
         self.title_seen = True
 
@@ -462,8 +463,9 @@ class TodoDocumentVisitor(SimpleVisitor):
         return ''
 
     def visit_project(self, node: Symbol) -> str:
+        ind = len(_get_child_text(node, 'indent').expandtabs(4))
         name, tags = _extract_tags(_get_child_text(node, 'project_name', strip=True))
-        self._start_section(name, tags, level=2)
+        self._start_section(name, tags, level=2, indent=ind)
         return ''
 
     def visit_field(self, node: Symbol) -> str:
@@ -520,22 +522,31 @@ class TodoTextVisitor:
             blocks.append('\n'.join(_note_lines(doc.notes)))
         if doc.items:
             blocks.append('\n'.join(self._render_item(item, depth=0) for item in doc.items))
-        blocks.extend(self._render_section(s) for s in doc.sections)
+        # Group subsections (indent > parent) with their parent section
+        sections = doc.sections
+        i = 0
+        while i < len(sections):
+            sec = sections[i]
+            parts = [self._render_section(sec)]
+            i += 1
+            while i < len(sections) and sections[i].indent > sec.indent:
+                parts.append(self._render_section(sections[i]))
+                i += 1
+            blocks.append('\n\n'.join(p for p in parts if p))
         return '\n\n'.join(b for b in blocks if b).strip()
 
     def _render_section(self, section: TodoSection) -> str:
-        heading = f"{'#' * max(2, section.level)} {section.name}".rstrip()
+        pad = ' ' * section.indent
+        heading = f"{pad}{section.name}:".rstrip()
         if tag_text := _format_tags(section.tags):
             heading = f'{heading}  {tag_text}'
-        blocks = [heading]
-        if section.notes:
-            blocks.append('\n'.join(_note_lines(section.notes)))
+        lines = [heading]
         if section.items:
-            blocks.append('\n'.join(self._render_item(item, depth=0) for item in section.items))
-        return '\n\n'.join(b for b in blocks if b)
+            lines.extend(self._render_item(item, depth=0) for item in section.items)
+        return '\n'.join(lines)
 
     def _render_item(self, item: TodoItem, *, depth: int) -> str:
-        indent = '    ' * depth
+        indent = ' ' * item.indent if item.indent else '  ' * depth
 
         if item.kind == 'session' and not item.text:
             lines: list[str] = []
@@ -556,7 +567,7 @@ class TodoTextVisitor:
 
         lines = [line]
         for note_line in _note_lines(item.notes):
-            lines.append(f'{indent}    {note_line}'.rstrip())
+            lines.append(f'{indent}  {note_line}'.rstrip())
         for child in item.children:
             lines.append(self._render_item(child, depth=depth + 1))
         return '\n'.join(lines).rstrip()
