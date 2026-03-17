@@ -4,7 +4,7 @@ Exercises the full ``parse_todo`` pipeline against other rich, real-world-style 
 """
 
 import unittest
-from par.todo import parse_todo, Tag, TodoItem, TodoDocument
+from par.todo import parse_todo_to_ast, Tag, TodoItem, TodoDocument
 
 ## This flavor of todo file is based on trying to match a common subset of existing ideas.
 
@@ -72,7 +72,7 @@ class TestRendererDocumentStructure(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.doc = parse_todo(RENDERER_DOC)
+        cls.doc = parse_todo_to_ast(RENDERER_DOC)
 
     def test_document_title(self):
         self.assertEqual(self.doc.title, "Renderer 2.0")
@@ -106,7 +106,7 @@ class TestShippedSection(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        doc = parse_todo(RENDERER_DOC)
+        doc = parse_todo_to_ast(RENDERER_DOC)
         cls.shipped = next(s for s in doc.sections if s.name == "Shipped")
 
     def test_top_level_item_count(self):
@@ -145,7 +145,7 @@ class TestInFlightSection(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        doc = parse_todo(RENDERER_DOC)
+        doc = parse_todo_to_ast(RENDERER_DOC)
         cls.inflight = next(s for s in doc.sections if s.name == "In Flight")
 
     def test_top_level_count(self):
@@ -187,7 +187,7 @@ class TestBlockedSection(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        doc = parse_todo(RENDERER_DOC)
+        doc = parse_todo_to_ast(RENDERER_DOC)
         cls.blocked = next(s for s in doc.sections if s.name == "Blocked")
 
     def test_cancelled_status(self):
@@ -205,7 +205,7 @@ class TestBetaGateSection(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        doc = parse_todo(RENDERER_DOC)
+        doc = parse_todo_to_ast(RENDERER_DOC)
         cls.beta = next(s for s in doc.sections if s.name == "Beta Gate")
 
     def test_all_open(self):
@@ -228,7 +228,7 @@ class TestParkingLotSection(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        doc = parse_todo(RENDERER_DOC)
+        doc = parse_todo_to_ast(RENDERER_DOC)
         cls.parking = next(s for s in doc.sections if s.name == "Parking Lot")
 
     def test_project_tags(self):
@@ -249,7 +249,7 @@ class TestDocumentAggregation(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.doc = parse_todo(RENDERER_DOC)
+        cls.doc = parse_todo_to_ast(RENDERER_DOC)
 
     def test_all_items_count(self):
         all_items = list(self.doc.all_items())
@@ -286,7 +286,7 @@ class TestDeepNesting(unittest.TestCase):
     - [ ] Level 2
         - [ ] Level 3
 """
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         sec = doc.sections[0]
         self.assertEqual(len(sec.items), 1)
         l1 = sec.items[0]
@@ -303,7 +303,7 @@ class TestDeepNesting(unittest.TestCase):
     - [ ] A2
 - [ ] B
 """
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         self.assertEqual(len(doc.items), 2)
         self.assertEqual(len(doc.items[0].children), 2)
         self.assertEqual(doc.items[1].text, "B")
@@ -315,7 +315,7 @@ class TestDeepNesting(unittest.TestCase):
         - [ ] Grandchild
     - [ ] Child 2
 """
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         parent = doc.items[0]
         self.assertEqual(len(parent.children), 2)
         self.assertEqual(len(parent.children[0].children), 1)
@@ -328,19 +328,19 @@ class TestTagExtraction(unittest.TestCase):
 
     def test_multiple_hashtags(self):
         text = "- [ ] Fix rendering #renderer #performance #urgent"
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         item = doc.items[0]
         self.assertEqual(sorted(item.categories), ["performance", "renderer", "urgent"])
 
     def test_multiple_mentions(self):
         text = "- [ ] Pair review  @alice @bob"
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         item = doc.items[0]
         self.assertEqual(sorted(item.assignees), ["alice", "bob"])
 
     def test_mixed_tags(self):
         text = "- [x] Ship it  #release @alice +engine done:2026-03-17 est:2h"
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         item = doc.items[0]
         self.assertEqual(item.status, "done")
         self.assertIn("release", item.categories)
@@ -351,19 +351,19 @@ class TestTagExtraction(unittest.TestCase):
 
     def test_done_with_date(self):
         text = "- [x] Task done:2026-01-01"
-        item = parse_todo(text).items[0]
+        item = parse_todo_to_ast(text).items[0]
         done_tag = next(t for t in item.tags if t.name == "done" and t.kind == "status")
         # [x] gives one done, done:date gives another
         self.assertEqual(item.status, "done")
 
     def test_priority_prefix(self):
         text = "(A) Critical task @work"
-        item = parse_todo(text).items[0]
+        item = parse_todo_to_ast(text).items[0]
         self.assertEqual(item.priority, "A")
 
     def test_clean_display_text(self):
         text = "- [ ] Fix bug  #renderer @alice est:2h"
-        item = parse_todo(text).items[0]
+        item = parse_todo_to_ast(text).items[0]
         self.assertEqual(item.text, "Fix bug")
 
 
@@ -372,28 +372,28 @@ class TestTagExtraction(unittest.TestCase):
 class TestMinimalDocuments(unittest.TestCase):
 
     def test_empty_document(self):
-        doc = parse_todo("")
+        doc = parse_todo_to_ast("")
         self.assertIsNone(doc.title)
         self.assertEqual(len(doc.sections), 0)
         self.assertEqual(len(doc.items), 0)
 
     def test_title_only(self):
-        doc = parse_todo("# My Project")
+        doc = parse_todo_to_ast("# My Project")
         self.assertEqual(doc.title, "My Project")
         self.assertEqual(len(doc.sections), 0)
 
     def test_single_item(self):
-        doc = parse_todo("- [ ] Do the thing")
+        doc = parse_todo_to_ast("- [ ] Do the thing")
         self.assertEqual(len(doc.items), 1)
         self.assertEqual(doc.items[0].text, "Do the thing")
         self.assertEqual(doc.items[0].status, "open")
 
     def test_single_done_item(self):
-        doc = parse_todo("- [x] Done thing")
+        doc = parse_todo_to_ast("- [x] Done thing")
         self.assertEqual(doc.items[0].status, "done")
 
     def test_notes_without_items(self):
-        doc = parse_todo("Just some text\nMore text")
+        doc = parse_todo_to_ast("Just some text\nMore text")
         self.assertTrue(len(doc.notes) >= 1)
 
 
@@ -407,7 +407,7 @@ class TestNotesAttachment(unittest.TestCase):
     Some context about this task
 - [ ] Task two
 """
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         # The indented note line may be parsed as a bullet or note
         # depending on format — just verify both items exist
         self.assertGreaterEqual(len(doc.items), 1)
@@ -420,7 +420,7 @@ Some descriptive text about this section.
 
 - [ ] Item one
 """
-        doc = parse_todo(text)
+        doc = parse_todo_to_ast(text)
         sec = doc.sections[0]
         # Notes before any item belong to the section
         self.assertTrue(len(sec.notes) >= 1 or len(sec.items) >= 1)

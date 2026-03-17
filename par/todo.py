@@ -193,16 +193,14 @@ class TodoDocument:
         return TodoTextVisitor().visit(self)
 
 
-#  Internal helpers 
+#  Helpers 
 
 def _strip_eol(text: str) -> str:
     return text.rstrip('\n')
 
-
 def _get_child_text(node: Symbol, name: str, *, strip: bool = False) -> str:
     text = child.text if (child := node.find(name)) else ''
     return text.strip() if strip else text
-
 
 def _extract_tags(line: str) -> tuple[str, list[Tag]]:
     """Extract and remove inline tags from *line*; return (clean_text, tags)."""
@@ -274,7 +272,9 @@ def _format_tag(tag: Tag) -> str:
     if isinstance(tag, ProjectTag):
         return f'+{tag.name}'
     if isinstance(tag, PriorityTag):
-        return f'pri:{tag.value or tag.name}'
+        # Render as todo.txt format (A) rather than meta format pri:A
+        # This preserves format compatibility with roundtrip parsing
+        return f'({tag.value or tag.name})'
     if tag.value is not None:
         return f'{tag.name}:{tag.value}'
     return tag.name
@@ -317,8 +317,6 @@ def _coerce_visitor(visitor: Any, default_cls: type[Any], *args: Any) -> Any:
     return visitor(*args) if isinstance(visitor, type) else visitor
 
 
-#  Grammar 
-
 class TodoGrammar(dict):
     """Line-oriented pyPEG grammar for TODO-family documents."""
 
@@ -329,88 +327,45 @@ class TodoGrammar(dict):
     def _get_rules(self):
         eol_re = r'\r\n|\r|\n'
 
-        def eol():
-            return _(eol_re)
+        def eol(): return _(eol_re)
+        def space(): return _(r'[ \t]+')
+        def blank(): return _(r'[ \t]*'), eol
+        def indent(): return _(r'[ \t]*')
+        def heading_level(): return _(r'#{1,6}')
+        def heading_text(): return _(r'[^\n]*')
+        def heading(): return heading_level, space, heading_text, eol
+        def header(): return name, _(r'[ \t]+TODO:[ \t]*', re.IGNORECASE), eol
 
-        def space():
-            return _(r'[ \t]+')
+        def project_name(): return _(rf'\S(?:.*?\S)?(?=\s*:[ \t]*(?:{eol_re}))')
+        def project(): return project_name, _(r'\s*:[ \t]*'), eol
 
-        def list_indent():
-            return _(r'[ \t]*')
+        def checkbox(): return _(r'\[[ xX/\-]\]')
+        def text(): return _(r'[^\n]*')
+        def bullet(): return _(r'[-*•+]|\d+[.)]')
+        def bullet_item(): return indent, bullet, space, 0, checkbox, 0, space, text
+        def checkbox_item(): return indent, checkbox, 0, space, text
+        def item(): return [bullet_item, checkbox_item], eol
 
-        def list_bullet():
-            return _(r'[-*•+]|\d+[.)]')
+        def name(): return _(rf'\S(?:.*?\S)?(?=[ \t]+TODO:[ \t]*(?:{eol_re}))')
 
-        def list_checkbox():
-            return _(r'\[[ xX/\-]\]')
+        def key(): return _(r'Start|End|Notes', re.IGNORECASE)
+        def value(): return _(r'[^\n]*')
+        def field(): return indent, key, _(r'\s*:\s*'), value, eol
 
-        def list_body():
-            return _(r'[^\n]*')
+        def inline():
+            return _(   r'(?:'
+                        r'(?:x\s+(?:\d{4}-\d{2}-\d{2}\s+)?|\([A-Z]\)\s+)[^\n]*'
+                        r'|(?=[^\n]*(?<!\w)(?:\+[A-Za-z][\w-]*|@[A-Za-z][\w.-]*(?:\([^)]+\))?|#[A-Za-z][\w-]*))[^\n]+'
+                        r')'), eol
 
-        def bullet_list_item():
-            return list_indent, list_bullet, space, 0, list_checkbox, 0, space, list_body
-
-        def checkbox_list_item():
-            return list_indent, list_checkbox, 0, space, list_body
-
-        def heading_level():
-            return _(r'#{1,6}')
-
-        def heading_title():
-            return _(r'[^\n]*')
-
-        def component_name():
-            return _(rf'\S(?:.*?\S)?(?=[ \t]+TODO:[ \t]*(?:{eol_re}))')
-
-        def taskpaper_project_name():
-            return _(rf'\S(?:.*?\S)?(?=\s*:[ \t]*(?:{eol_re}))')
-
-        def field_indent():
-            return _(r'[ \t]*')
-
-        def field_name():
-            return _(r'Start|End|Notes', re.IGNORECASE)
-
-        def field_value():
-            return _(r'[^\n]*')
-
-        def blank_line():
-            return _(r'[ \t]*'), eol
-
-        def markdown_heading_line():
-            return heading_level, space, heading_title, eol
-
-        def component_header_line():
-            return component_name, _(r'[ \t]+TODO:[ \t]*', re.IGNORECASE), eol
-
-        def doing_field_line():
-            return field_indent, field_name, _(r'\s*:\s*'), field_value, eol
-
-        def taskpaper_project_line():
-            return taskpaper_project_name, _(r'\s*:[ \t]*'), eol
-
-        def list_item_line():
-            return [bullet_list_item, checkbox_list_item], eol
-
-        def todo_txt_line():
-            return _(r'(?:'
-                     r'(?:x\s+(?:\d{4}-\d{2}-\d{2}\s+)?|\([A-Z]\)\s+)[^\n]*'
-                     r'|(?=[^\n]*(?<!\w)(?:\+[A-Za-z][\w-]*|@[A-Za-z][\w.-]*(?:\([^)]+\))?|#[A-Za-z][\w-]*))[^\n]+'
-                     r')'), eol
-
-        def plain_line():
+        def note():
             return _(r'[^\n]+'), eol
 
         def document():
-            return -1, [
-                blank_line,
-                markdown_heading_line,
-                component_header_line,
-                doing_field_line,
-                taskpaper_project_line,
-                list_item_line,
-                todo_txt_line,
-                plain_line,
+            return -1, [ blank,
+                heading, header,
+                field, project, item,
+                inline, note,
             ]
 
         return {key: value for key, value in locals().items() if isinstance(value, types.FunctionType)}, document
@@ -463,10 +418,10 @@ class TodoDocumentVisitor(SimpleVisitor):
 
     def _append_list_item(self, node: Symbol) -> None:
         self._flush_doing()
-        indent = len(_get_child_text(node, 'list_indent').expandtabs(4))
+        indent = len(_get_child_text(node, 'indent').expandtabs(4))
         source = ' '.join(filter(None, (
-            _get_child_text(node, 'list_checkbox', strip=True),
-            _get_child_text(node, 'list_body', strip=True),
+            _get_child_text(node, 'checkbox', strip=True),
+            _get_child_text(node, 'text', strip=True),
         )))
         text, tags = _extract_tags(source)
         item = TodoItem(raw=_strip_eol(node.text).rstrip(), text=text, tags=tags, indent=indent)
@@ -484,14 +439,14 @@ class TodoDocumentVisitor(SimpleVisitor):
         _items_of(self.section, self.document).append(TodoItem(raw=line.rstrip(), text=text, tags=tags))
         self.title_seen = True
 
-    def visit_blank_line(self, node: Symbol) -> str:
+    def visit_blank(self, node: Symbol) -> str:
         self._flush_doing()
         self.stack.clear()
         return ''
 
-    def visit_markdown_heading_line(self, node: Symbol) -> str:
+    def visit_heading(self, node: Symbol) -> str:
         level = len(_get_child_text(node, 'heading_level'))
-        title, tags = _extract_tags(_get_child_text(node, 'heading_title', strip=True))
+        title, tags = _extract_tags(_get_child_text(node, 'heading_text', strip=True))
         if level == 1 and not self.title_seen:
             self.document.title      = title or None
             self.document.title_tags = tags
@@ -501,31 +456,31 @@ class TodoDocumentVisitor(SimpleVisitor):
         self._start_section(title, tags, level=level)
         return ''
 
-    def visit_component_header_line(self, node: Symbol) -> str:
-        name, tags = _extract_tags(_get_child_text(node, 'component_name', strip=True))
+    def visit_header(self, node: Symbol) -> str:
+        name, tags = _extract_tags(_get_child_text(node, 'name', strip=True))
         self._start_section(name, tags, level=2)
         return ''
 
-    def visit_taskpaper_project_line(self, node: Symbol) -> str:
-        name, tags = _extract_tags(_get_child_text(node, 'taskpaper_project_name', strip=True))
+    def visit_project(self, node: Symbol) -> str:
+        name, tags = _extract_tags(_get_child_text(node, 'project_name', strip=True))
         self._start_section(name, tags, level=2)
         return ''
 
-    def visit_doing_field_line(self, node: Symbol) -> str:
-        if name := _get_child_text(node, 'field_name', strip=True).lower():
-            self.doing[name] = _get_child_text(node, 'field_value', strip=True)
+    def visit_field(self, node: Symbol) -> str:
+        if name := _get_child_text(node, 'key', strip=True).lower():
+            self.doing[name] = _get_child_text(node, 'value', strip=True)
             self.title_seen = True
         return ''
 
-    def visit_list_item_line(self, node: Symbol) -> str:
+    def visit_item(self, node: Symbol) -> str:
         self._append_list_item(node)
         return ''
 
-    def visit_todo_txt_line(self, node: Symbol) -> str:
+    def visit_inline(self, node: Symbol) -> str:
         self._append_flat_item(_strip_eol(node.text))
         return ''
 
-    def visit_plain_line(self, node: Symbol) -> str:
+    def visit_note(self, node: Symbol) -> str:
         line = _strip_eol(node.text)
         stripped = line.strip()
         if not self.title_seen and stripped:
@@ -615,7 +570,7 @@ def parse_todo_tree(text: str, grammar: 'TodoGrammar | type[TodoGrammar] | None'
     result, _rest = parser.parse(text, resultSoFar=[], skipWS=False)
     return result[0]
 
-def parse_todo(
+def parse_todo_to_ast(
     text: str,
     grammar: 'TodoGrammar | type[TodoGrammar] | None' = None,
     visitor: 'TodoDocumentVisitor | type[TodoDocumentVisitor] | None' = None,
@@ -626,41 +581,14 @@ def parse_todo(
     builder = _coerce_visitor(visitor, TodoDocumentVisitor, parser)
     return builder.build(tree)
 
-def parse_todo_items(text: str) -> list[TodoItem]:
+def todo_text_to_list(text: str) -> list[TodoItem]:
     """Convenience helper returning all items in document order."""
-    return list(parse_todo(text).all_items())
+    return list(parse_todo_to_ast(text).all_items())
 
-def render_text(
+def render_text_from_ast(
     todo: 'TodoDocument | TodoSection | TodoItem',
     visitor: 'TodoTextVisitor | type[TodoTextVisitor] | None' = None,
 ) -> str:
     """Render a parsed TODO AST node as canonical plaintext."""
     renderer = _coerce_visitor(visitor, TodoTextVisitor)
     return renderer.visit(todo)
-
-def parseText(
-    text: str,
-    grammar: 'TodoGrammar | type[TodoGrammar] | None' = None,
-    visitor: 'TodoTextVisitor | type[TodoTextVisitor] | None' = None,
-) -> str:
-    """Parse TODO text and return canonical plaintext output."""
-    return render_text(parse_todo(text, grammar=grammar), visitor=visitor)
-
-def parse_text(
-    text: str,
-    grammar: 'TodoGrammar | type[TodoGrammar] | None' = None,
-    visitor: 'TodoTextVisitor | type[TodoTextVisitor] | None' = None,
-) -> str:
-    """Parse TODO text and return canonical plaintext output."""
-    return parseText(text, grammar=grammar, visitor=visitor)
-
-def parseTree(text: str, grammar: 'TodoGrammar | type[TodoGrammar] | None' = None) -> Symbol:
-    """Backward-friendly alias for parse_todo_tree."""
-    return parse_todo_tree(text, grammar=grammar)
-
-def renderText(
-    todo: 'TodoDocument | TodoSection | TodoItem',
-    visitor: 'TodoTextVisitor | type[TodoTextVisitor] | None' = None,
-) -> str:
-    """Backward-friendly alias for render_text."""
-    return render_text(todo, visitor=visitor)
