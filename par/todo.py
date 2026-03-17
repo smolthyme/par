@@ -15,6 +15,12 @@ _ = lru_cache(maxsize=256)(re.compile)
 
 _STATUS_NAMES = frozenset({'done', 'cancelled', 'blocked'})
 _STATUS_AT    = frozenset({'done', 'cancelled', 'blocked'})
+_TAG_TOKEN_RE = _(
+    r'(?<!\w)(?:@(?P<mention_name>[A-Za-z][\w.-]*)(?:\((?P<mention_value>[^)]*)\))?'
+    r'|(?P<meta_key>[a-z]\w*):(?P<meta_value>\S+)'
+    r'|#(?P<hashtag_name>[A-Za-z][\w-]*)'
+    r'|\+(?P<project_name>[A-Za-z][\w-]*))'
+)
 
 
 class TodoStatus(str, Enum):
@@ -193,64 +199,59 @@ def _strip_eol(text: str) -> str:
     return text.rstrip('\n')
 
 
+def _get_child_text(node: Symbol, name: str, *, strip: bool = False) -> str:
+    text = child.text if (child := node.find(name)) else ''
+    return text.strip() if strip else text
+
+
 def _extract_tags(line: str) -> tuple[str, list[Tag]]:
     """Extract and remove inline tags from *line*; return (clean_text, tags)."""
-    tags: list[Tag] = []
-    text = line
+    text, tags = line.strip(), []
 
-    if match := _(r'\[([ xX/\-])\]').search(text):
-        if status := TodoStatus.from_char(match.group(1).lower()):
-            tags.append(StatusTag(status.tag_name()))
-        text = text[:match.start()] + text[match.end():]
-    elif match := _(r'^x\s+(\d{4}-\d{2}-\d{2}\s+)?').match(text):
-        tags.append(StatusTag('done', match.group(1).strip() if match.group(1) else None))
-        text = text[match.end():]
+    while text:
+        if match := _(r'^\[([ xX/\-])\](?:\s+|$)').match(text):
+            if status := TodoStatus.from_char(match.group(1)):
+                tags.append(StatusTag(status.tag_name()))
+        elif match := _(r'^x\s+(?:(\d{4}-\d{2}-\d{2})\s+)?').match(text):
+            tags.append(StatusTag('done', match.group(1)))
+        elif match := _(r'^\(([A-Z])\)(?:\s+|$)').match(text):
+            tags.append(PriorityTag(match.group(1), match.group(1)))
+        else:
+            break
+        text = text[match.end():].lstrip()
 
-    if match := _(r'^\(([A-Z])\)\s+').match(text):
-        tags.append(PriorityTag(match.group(1), match.group(1)))
-        text = text[match.end():]
+    parts, last = [], 0
+    for match in _TAG_TOKEN_RE.finditer(text):
+        parts.append(text[last:match.start()])
+        last = match.end()
 
-    for match in _(r'(?<!\w)@([A-Za-z][\w.-]*)(?:\(([^)]*)\))?').finditer(text):
-        name, value = match.group(1), match.group(2)
-        match name:
-            case 'today':
-                tags.append(MetaTag('due', 'today'))
-            case 'estimate':
-                tags.append(MetaTag('est', value))
-            case 'priority':
-                tags.append(PriorityTag(value or 'priority', value))
-            case _ if name in _STATUS_AT:
-                tags.append(StatusTag(name, value))
-            case _:
-                tags.append(MentionTag(name, value))
-    text = _(r'(?<!\w)@([A-Za-z][\w.-]*)(?:\(([^)]*)\))?').sub('', text)
+        if name := match.group('mention_name'):
+            value = match.group('mention_value')
+            tags.append(
+                MetaTag('due', 'today') if name == 'today' else
+                MetaTag('est', value) if name == 'estimate' else
+                PriorityTag(value or 'priority', value) if name == 'priority' else
+                StatusTag(name, value) if name in _STATUS_AT else
+                MentionTag(name, value)
+            )
+        elif key := match.group('meta_key'):
+            tags.append(StatusTag(key, match.group('meta_value')) if key in _STATUS_NAMES else MetaTag(key, match.group('meta_value')))
+        elif name := match.group('hashtag_name'):
+            tags.append(HashTag(name))
+        elif name := match.group('project_name'):
+            tags.append(ProjectTag(name))
 
-    for match in _(r'(?<!\w)([a-z]\w*):(\S+)').finditer(text):
-        key, value = match.group(1), match.group(2)
-        tags.append(StatusTag(key, value) if key in _STATUS_NAMES else MetaTag(key, value))
-    text = _(r'(?<!\w)([a-z]\w*):(\S+)').sub('', text)
+    deduped: list[Tag] = []
+    status_index: dict[str, int] = {}
+    for tag in tags:
+        if not isinstance(tag, StatusTag) or (i := status_index.get(tag.name)) is None:
+            if isinstance(tag, StatusTag):
+                status_index[tag.name] = len(deduped)
+            deduped.append(tag)
+        elif tag.value and not deduped[i].value:
+            deduped[i] = tag
 
-    for match in _(r'(?<!\w)#([A-Za-z][\w-]*)').finditer(text):
-        tags.append(HashTag(match.group(1)))
-    text = _(r'(?<!\w)#([A-Za-z][\w-]*)').sub('', text)
-
-    for match in _(r'(?<!\w)\+([A-Za-z][\w-]*)').finditer(text):
-        tags.append(ProjectTag(match.group(1)))
-    text = _(r'(?<!\w)\+([A-Za-z][\w-]*)').sub('', text)
-
-    # Deduplicate status tags with the same name: keep the one with a value.
-    seen: dict[str, int] = {}
-    for i, tag in enumerate(tags):
-        if isinstance(tag, StatusTag) and tag.name in seen:
-            j = seen[tag.name]
-            if tag.value and not tags[j].value:
-                tags[j] = tag
-            tags[i] = None  # type: ignore[assignment]
-        elif isinstance(tag, StatusTag):
-            seen[tag.name] = i
-    tags = [t for t in tags if t is not None]
-
-    return ' '.join(text.split()).strip(), tags
+    return ' '.join((''.join([*parts, text[last:]])).split()).strip(), deduped
 
 
 def _items_of(section: TodoSection | None, document: TodoDocument) -> list[TodoItem]:
@@ -326,26 +327,70 @@ class TodoGrammar(dict):
         self.update(peg)
 
     def _get_rules(self):
+        eol_re = r'\r\n|\r|\n'
+
         def eol():
-            return _(r'\r\n|\r|\n')
+            return _(eol_re)
+
+        def space():
+            return _(r'[ \t]+')
+
+        def list_indent():
+            return _(r'[ \t]*')
+
+        def list_bullet():
+            return _(r'[-*•+]|\d+[.)]')
+
+        def list_checkbox():
+            return _(r'\[[ xX/\-]\]')
+
+        def list_body():
+            return _(r'[^\n]*')
+
+        def bullet_list_item():
+            return list_indent, list_bullet, space, 0, list_checkbox, 0, space, list_body
+
+        def checkbox_list_item():
+            return list_indent, list_checkbox, 0, space, list_body
+
+        def heading_level():
+            return _(r'#{1,6}')
+
+        def heading_title():
+            return _(r'[^\n]*')
+
+        def component_name():
+            return _(rf'\S(?:.*?\S)?(?=[ \t]+TODO:[ \t]*(?:{eol_re}))')
+
+        def taskpaper_project_name():
+            return _(rf'\S(?:.*?\S)?(?=\s*:[ \t]*(?:{eol_re}))')
+
+        def field_indent():
+            return _(r'[ \t]*')
+
+        def field_name():
+            return _(r'Start|End|Notes', re.IGNORECASE)
+
+        def field_value():
+            return _(r'[^\n]*')
 
         def blank_line():
             return _(r'[ \t]*'), eol
 
         def markdown_heading_line():
-            return _(r'#{1,6}[ \t]+[^\n]*'), eol
+            return heading_level, space, heading_title, eol
 
         def component_header_line():
-            return _(r'\S.*?[ \t]+TODO:[ \t]*'), eol
+            return component_name, _(r'[ \t]+TODO:[ \t]*', re.IGNORECASE), eol
 
         def doing_field_line():
-            return _(r'[ \t]*(?:Start|End|Notes)\s*:[^\n]*'), eol
+            return field_indent, field_name, _(r'\s*:\s*'), field_value, eol
 
         def taskpaper_project_line():
-            return _(r'\S[^:\n]*\s*:[ \t]*'), eol
+            return taskpaper_project_name, _(r'\s*:[ \t]*'), eol
 
         def list_item_line():
-            return _(r'[ \t]*(?:(?:[-*•+]|\d+[.)])\s+(?:\[[ xX/\-]\]\s*)?[^\n]*|\[[ xX/\-]\]\s*[^\n]*)'), eol
+            return [bullet_list_item, checkbox_list_item], eol
 
         def todo_txt_line():
             return _(r'(?:'
@@ -416,24 +461,15 @@ class TodoDocumentVisitor(SimpleVisitor):
         self.document.sections.append(self.section)
         self.title_seen = True
 
-    def _append_list_item(self, line: str) -> None:
+    def _append_list_item(self, node: Symbol) -> None:
         self._flush_doing()
-        parts = _(
-            r'^(?P<indent>[ \t]*)'
-            r'(?:(?P<bullet>[-*\u2022+]|\d+[.)])\s+)?'
-            r'(?:(?P<checkbox>\[[ xX/\-]\])\s+)?'
-            r'(?P<body>.*)$'
-        ).match(line)
-        if not parts:
-            self.visit_plain_line(Symbol('plain_line', [line, '\n']))
-            return
-
-        indent = len(parts.group('indent').expandtabs(4))
-        checkbox = parts.group('checkbox')
-        body = parts.group('body').strip()
-        source = f'{checkbox} {body}'.strip() if checkbox else body
+        indent = len(_get_child_text(node, 'list_indent').expandtabs(4))
+        source = ' '.join(filter(None, (
+            _get_child_text(node, 'list_checkbox', strip=True),
+            _get_child_text(node, 'list_body', strip=True),
+        )))
         text, tags = _extract_tags(source)
-        item = TodoItem(raw=line.rstrip(), text=text, tags=tags, indent=indent)
+        item = TodoItem(raw=_strip_eol(node.text).rstrip(), text=text, tags=tags, indent=indent)
 
         while self.stack and self.stack[-1].indent >= indent:
             self.stack.pop()
@@ -454,42 +490,35 @@ class TodoDocumentVisitor(SimpleVisitor):
         return ''
 
     def visit_markdown_heading_line(self, node: Symbol) -> str:
-        line = _strip_eol(node.text)
-        if match := _(r'^(#{1,6})\s+(.*)').match(line):
-            level = len(match.group(1))
-            title, tags = _extract_tags(match.group(2).strip())
-            if level == 1 and not self.title_seen:
-                self.document.title      = title or None
-                self.document.title_tags = tags
-                self.title_seen          = True
-                self.stack.clear()
-                return ''
-            self._start_section(title, tags, level=level)
+        level = len(_get_child_text(node, 'heading_level'))
+        title, tags = _extract_tags(_get_child_text(node, 'heading_title', strip=True))
+        if level == 1 and not self.title_seen:
+            self.document.title      = title or None
+            self.document.title_tags = tags
+            self.title_seen          = True
+            self.stack.clear()
+            return ''
+        self._start_section(title, tags, level=level)
         return ''
 
     def visit_component_header_line(self, node: Symbol) -> str:
-        line = _strip_eol(node.text)
-        if match := _(r'^(\S.*?)\s+TODO:\s*$', re.IGNORECASE).match(line):
-            name, tags = _extract_tags(match.group(1).strip())
-            self._start_section(name, tags, level=2)
+        name, tags = _extract_tags(_get_child_text(node, 'component_name', strip=True))
+        self._start_section(name, tags, level=2)
         return ''
 
     def visit_taskpaper_project_line(self, node: Symbol) -> str:
-        line = _strip_eol(node.text)
-        if match := _(r'^(\S[^:]*)\s*:\s*$').match(line):
-            name, tags = _extract_tags(match.group(1).strip())
-            self._start_section(name, tags, level=2)
+        name, tags = _extract_tags(_get_child_text(node, 'taskpaper_project_name', strip=True))
+        self._start_section(name, tags, level=2)
         return ''
 
     def visit_doing_field_line(self, node: Symbol) -> str:
-        line = _strip_eol(node.text)
-        if match := _(r'^\s*(Start|End|Notes)\s*:\s*(.*)', re.IGNORECASE).match(line):
-            self.doing[match.group(1).lower()] = match.group(2).strip()
+        if name := _get_child_text(node, 'field_name', strip=True).lower():
+            self.doing[name] = _get_child_text(node, 'field_value', strip=True)
             self.title_seen = True
         return ''
 
     def visit_list_item_line(self, node: Symbol) -> str:
-        self._append_list_item(_strip_eol(node.text))
+        self._append_list_item(node)
         return ''
 
     def visit_todo_txt_line(self, node: Symbol) -> str:
