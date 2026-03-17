@@ -5,8 +5,6 @@
 #
 # license: BSD
 
-from .pyPEG import *
-
 import re, unicodedata
 from html.entities import name2codepoint
 
