@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Iterator
 from .__init__ import SimpleVisitor
 from .pyPEG import Symbol, parseLine
 
+
 _ = lru_cache(maxsize=256)(re.compile)
 
 _STATUS_NAMES = frozenset({'done', 'cancelled', 'blocked'})
