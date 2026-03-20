@@ -1,118 +1,182 @@
-"""PEG-based TODO parsing and canonical plaintext rendering."""
+"""PEG-based TODO parsing, AST nodes, and canonical plaintext rendering.
+
+    parse(text)         -> TodoDocument
+    parse_to_dict(text) -> dict
+    parse_tree(text)    -> raw pyPEG Symbol tree
+    render(node)        -> canonical plaintext
+"""
 
 import re, types
 from dataclasses import dataclass, field
 from datetime import date as Date
 from enum import Enum
 from functools import lru_cache
-from typing import Any, ClassVar, Iterator
+from typing import Any, Iterator, Literal
 
-from __init__ import SimpleVisitor
-from pyPEG import Symbol, parseLine
-
+from .pyPEG import Symbol, parseLine
 
 _ = lru_cache(maxsize=256)(re.compile)
 
+_TAG_TOKEN_RE = _(r'(?<!\w)(?:@(?P<mention_name>[A-Za-z][\w.-]*)(?:\((?P<mention_value>[^)]*)\))?|(?P<meta_key>[a-z]\w*):(?P<meta_value>\S+)|#(?P<hashtag_name>[A-Za-z][\w-]*)|\+(?P<project_name>[A-Za-z][\w-]*))')
 _STATUS_NAMES = frozenset({'done', 'cancelled', 'blocked'})
-_STATUS_AT    = frozenset({'done', 'cancelled', 'blocked'})
-_TAG_TOKEN_RE = _(
-    r'(?<!\w)(?:@(?P<mention_name>[A-Za-z][\w.-]*)(?:\((?P<mention_value>[^)]*)\))?'
-    r'|(?P<meta_key>[a-z]\w*):(?P<meta_value>\S+)'
-    r'|#(?P<hashtag_name>[A-Za-z][\w-]*)'
-    r'|\+(?P<project_name>[A-Za-z][\w-]*))'
-)
+_STATUS_AT = frozenset({'done', 'cancelled', 'blocked'})
+_CLOSED = frozenset({'done', 'cancelled'})
+_STATUS_MARKERS = {'open': '[ ]', 'progress': '[/]', 'done': '[x]', 'blocked': '[-]', 'cancelled': '[-]'}
+_CYCLE_STATUS   = ['open', 'progress', 'done', 'cancelled']
+_CHAR_MAP       = { 'x': 'done', 'y': 'done', '/': 'progress', '-': 'cancelled',
+                    ' ': 'open', 'o': 'open', 'n': 'cancelled'}
+
+type ThingKind = Literal['item', 'section', 'session']
 
 
 class TodoStatus(str, Enum):
-    """Task completion state — comparable as a plain string for backward compatibility."""
-    OPEN        = 'open'
-    IN_PROGRESS = 'in_progress'
-    DONE        = 'done'
-    BLOCKED     = 'blocked'
-    CANCELLED   = 'cancelled'
+    OPEN = 'open'
+    PROGRESS = 'progress'
+    DONE = 'done'
+    BLOCKED = 'blocked'
+    CANCELLED = 'cancelled'
 
     def marker(self) -> str:
-        return {TodoStatus.OPEN: '[ ]', TodoStatus.IN_PROGRESS: '[/]',
-                TodoStatus.DONE: '[x]', TodoStatus.BLOCKED: '[-]',
-                TodoStatus.CANCELLED: '[-]'}[self]
+        return _STATUS_MARKERS[self.value]
 
     def tag_name(self) -> str:
-        """Internal tag name stored in StatusTag.name (progress ≠ in_progress)."""
-        return 'progress' if self is TodoStatus.IN_PROGRESS else self.value
+        return 'progress' if self is TodoStatus.PROGRESS else self.value
 
     @classmethod
     def from_char(cls, char: str) -> 'TodoStatus | None':
-        return {'x': cls.DONE, '/': cls.IN_PROGRESS, '-': cls.CANCELLED}.get(char.lower())
+        return cls(value) if (value := _CHAR_MAP.get(char.lower())) else None
 
     @classmethod
     def from_tag_name(cls, name: str) -> 'TodoStatus | None':
-        return {'done': cls.DONE, 'cancelled': cls.CANCELLED,
-                'blocked': cls.BLOCKED, 'progress': cls.IN_PROGRESS}.get(name)
+        try:
+            return cls(name)
+        except ValueError:
+            return None
+
+    @classmethod
+    def from_any(cls, value: 'str | TodoStatus') -> 'TodoStatus':
+        match value:
+            case TodoStatus():
+                return value
+            case str() if status := cls.from_char(value):
+                return status
+            case str():
+                return cls(value)
+            case _:
+                return cls(str(value))
 
 
 @dataclass(frozen=True, slots=True)
 class Tag:
-    """A named signal extracted from item or heading text."""
-    name:  str
+    kind: str
+    name: str
     value: str | None = None
-    kind:  ClassVar[str] = 'tag'
-
-    def __repr__(self) -> str:
-        value = f'={self.value}' if self.value else ''
-        return f'Tag({self.kind}:{self.name}{value})'
 
     def to_dict(self) -> dict[str, str | None]:
         return {'kind': self.kind, 'name': self.name, 'value': self.value}
 
+    @classmethod
+    def status(cls, name: str, value: str | None = None) -> 'Tag':
+        return cls('status', name, value)
 
-@dataclass(frozen=True, slots=True)
-class StatusTag(Tag):
-    kind: ClassVar[str] = 'status'
+    @classmethod
+    def mention(cls, name: str, value: str | None = None) -> 'Tag':
+        return cls('mention', name, value)
 
-@dataclass(frozen=True, slots=True)
-class MentionTag(Tag):
-    kind: ClassVar[str] = 'mention'
+    @classmethod
+    def hashtag(cls, name: str) -> 'Tag':
+        return cls('hashtag', name)
 
-@dataclass(frozen=True, slots=True)
-class HashTag(Tag):
-    kind: ClassVar[str] = 'hashtag'
+    @classmethod
+    def project(cls, name: str) -> 'Tag':
+        return cls('project', name)
 
-@dataclass(frozen=True, slots=True)
-class ProjectTag(Tag):
-    kind: ClassVar[str] = 'project'
+    @classmethod
+    def meta(cls, name: str, value: str | None = None) -> 'Tag':
+        return cls('meta', name, value)
 
-@dataclass(frozen=True, slots=True)
-class MetaTag(Tag):
-    kind: ClassVar[str] = 'meta'
-
-@dataclass(frozen=True, slots=True)
-class PriorityTag(Tag):
-    kind: ClassVar[str] = 'priority'
+    @classmethod
+    def priority(cls, name: str, value: str | None = None) -> 'Tag':
+        return cls('priority', name, value)
 
 
 @dataclass(slots=True)
-class TodoItem:
-    """A task item with tags, notes, and optional nested children."""
+class TodoThing:
+    kind: ThingKind
+    text: str
+    raw: str = ''
+    level: int = 0
+    indent: int = 0
+    tags: list[Tag] = field(default_factory=list)
+    nodes: list['TodoThing'] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    parent: 'TodoDocument | TodoThing | None' = field(default=None, repr=False, compare=False)
 
-    raw:      str
-    text:     str
-    indent:   int              = 0
-    kind:     str              = 'task'
-    tags:     list[Tag]        = field(default_factory=list)
-    children: list['TodoItem'] = field(default_factory=list)
-    notes:    list[str]        = field(default_factory=list)
+    @property
+    def is_section(self) -> bool:
+        return self.kind == 'section'
+
+    @property
+    def is_item(self) -> bool:
+        return self.kind == 'item'
+
+    @property
+    def is_session(self) -> bool:
+        return self.kind == 'session'
+
+    @property
+    def label(self) -> str:
+        return self.text
+
+    @property
+    def title(self) -> str:
+        return self.text
+
+    @property
+    def items(self) -> list['TodoThing']:
+        return [node for node in self.nodes if not node.is_section]
+
+    @property
+    def sections(self) -> list['TodoThing']:
+        return [node for node in self.nodes if node.is_section]
+
+    @property
+    def tasks(self) -> list['TodoThing']:
+        return self.items
+
+    @property
+    def visual_depth(self) -> int:
+        return self.indent or max(self.level - 2, 0) * 2
+
+    @property
+    def own_status(self) -> TodoStatus:
+        return next((status for tag in self.tags if tag.kind == 'status' and (status := TodoStatus.from_tag_name(tag.name))), TodoStatus.OPEN)
+
+    @property
+    def branch_status(self) -> TodoStatus:
+        if not self.is_section and not self.nodes:
+            return self.own_status
+        if not (items := [*self.all_items()]):
+            return TodoStatus.OPEN
+        statuses = [item.own_status for item in items]
+        return (
+            TodoStatus.CANCELLED if all(status is TodoStatus.CANCELLED for status in statuses) else
+            TodoStatus.DONE if all(status.value in _CLOSED for status in statuses) else
+            TodoStatus.PROGRESS if any(status is not TodoStatus.OPEN for status in statuses) else
+            TodoStatus.OPEN
+        )
 
     @property
     def status(self) -> TodoStatus:
-        for tag in self.tags:
-            if isinstance(tag, StatusTag):
-                if s := TodoStatus.from_tag_name(tag.name):
-                    return s
-        return TodoStatus.OPEN
+        return self.branch_status if self.is_section else self.own_status
 
     @property
     def is_done(self) -> bool:
         return self.status is TodoStatus.DONE
+
+    @property
+    def is_complete(self) -> bool:
+        return self.branch_status.value in _CLOSED
 
     @property
     def due(self) -> str | None:
@@ -120,207 +184,183 @@ class TodoItem:
 
     @property
     def due_date(self) -> Date | None:
-        if raw := self.due:
-            try:
-                return Date.fromisoformat(raw)
-            except ValueError:
-                pass
-        return None
+        if not (value := self.due):
+            return None
+        try:
+            return Date.fromisoformat(value)
+        except ValueError:
+            return None
 
     @property
     def priority(self) -> str | None:
-        return next((tag.value or tag.name for tag in self.tags if isinstance(tag, PriorityTag)), None)
+        return next((tag.value or tag.name for tag in self.tags if tag.kind == 'priority'), None)
 
     @property
     def assignees(self) -> list[str]:
-        return [tag.name for tag in self.tags if isinstance(tag, MentionTag)]
+        return [tag.name for tag in self.tags if tag.kind == 'mention']
 
     @property
     def categories(self) -> list[str]:
-        return [tag.name for tag in self.tags if isinstance(tag, HashTag)]
+        return [tag.name for tag in self.tags if tag.kind == 'hashtag']
 
     @property
     def projects(self) -> list[str]:
-        return [tag.name for tag in self.tags if isinstance(tag, ProjectTag)]
+        return [tag.name for tag in self.tags if tag.kind == 'project']
 
-    def all_items(self) -> Iterator['TodoItem']:
-        yield self
-        for child in self.children:
-            yield from child.all_items()
+    def walk(self, *, include_self: bool = True) -> Iterator['TodoThing']:
+        if include_self:
+            yield self
+        for node in self.nodes:
+            yield from node.walk()
+
+    def descendants(self, *, include_self: bool = False) -> Iterator['TodoThing']:
+        yield from self.walk(include_self=include_self)
+
+    def all_items(self) -> Iterator['TodoThing']:
+        if not self.is_section:
+            yield self
+        for node in self.nodes:
+            yield from node.all_items()
+
+    def all_sections(self) -> Iterator['TodoThing']:
+        if self.is_section:
+            yield self
+        for node in self.sections:
+            yield from node.all_sections()
+
+    def set_status(self, value: str | TodoStatus, *, cascade: bool = True) -> 'TodoThing':
+        target = TodoStatus.from_any(value)
+        if self.is_section:
+            for item in self.all_items():
+                item.set_status(target, cascade=False)
+            return self
+        self.tags = [tag for tag in self.tags if tag.kind != 'status']
+        if target is not TodoStatus.OPEN:
+            self.tags.insert(0, Tag.status('done', Date.today().isoformat()) if target is TodoStatus.DONE else Tag.status(target.tag_name()))
+        if cascade:
+            for node in self.nodes:
+                node.set_status(target, cascade=True)
+        return self
+
+    def cycle_status(self) -> 'TodoThing':
+        current = self.branch_status.value if self.is_section else self.status.value
+        return self.set_status(_CYCLE_STATUS[(_CYCLE_STATUS.index(current) + 1) % len(_CYCLE_STATUS)])
+
+    def toggle_status(self) -> 'TodoThing':
+        return self.set_status(TodoStatus.OPEN if self.is_complete else TodoStatus.DONE)
+
+    def edit_text(self, new_text: str) -> 'TodoThing':
+        clean, tags = _extract_tags(new_text)
+        if (old_status := [tag for tag in self.tags if tag.kind == 'status']) and not any(tag.kind == 'status' for tag in tags):
+            tags = [*old_status, *tags]
+        self.text, self.tags, self.raw = clean, tags, ''
+        return self
 
     def to_text(self) -> str:
-        return TodoTextVisitor().visit(self)
+        return _render_section(self) if self.is_section else _render_item(self, depth=0)
+
+    def to_dict(self) -> dict:
+        return {
+            'kind': self.kind,
+            'text': self.text,
+            'status': self.status.value,
+            'branch_status': self.branch_status.value,
+            'level': self.level,
+            'indent': self.indent,
+            'tags': [tag.to_dict() for tag in self.tags],
+            'notes': self.notes,
+            'nodes': [node.to_dict() for node in self.nodes],
+            'assignees': self.assignees,
+            'categories': self.categories,
+            'projects': self.projects,
+            'priority': self.priority,
+            'due': self.due,
+        }
 
 
-@dataclass(slots=True)
-class TodoSection:
-    """A named group of TODO items."""
-
-    name:   str
-    level:  int            = 2
-    indent: int            = 0
-    items:  list[TodoItem] = field(default_factory=list)
-    notes:  list[str]      = field(default_factory=list)
-    tags:   list[Tag]      = field(default_factory=list)
-
-    def all_items(self) -> Iterator[TodoItem]:
-        for item in self.items:
-            yield from item.all_items()
-
-    def to_text(self) -> str:
-        return TodoTextVisitor().visit(self)
+type TodoNode = TodoThing
 
 
 @dataclass(slots=True)
 class TodoDocument:
-    """Logical AST root of a parsed TODO document."""
+    title: str | None = None
+    title_tags: list[Tag] = field(default_factory=list)
+    nodes: list[TodoThing] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
-    title:      str | None        = None
-    title_tags: list[Tag]         = field(default_factory=list)
-    sections:   list[TodoSection] = field(default_factory=list)
-    items:      list[TodoItem]    = field(default_factory=list)
-    notes:      list[str]         = field(default_factory=list)
+    @property
+    def items(self) -> list[TodoThing]:
+        return [node for node in self.nodes if not node.is_section]
 
-    def all_items(self) -> Iterator[TodoItem]:
-        for item in self.items:
-            yield from item.all_items()
-        for section in self.sections:
-            yield from section.all_items()
+    @property
+    def tasks(self) -> list[TodoThing]:
+        return self.items
 
-    def all_sections(self) -> list[TodoSection]:
-        return list(self.sections)
+    @property
+    def sections(self) -> list[TodoThing]:
+        return [section for node in self.nodes for section in node.all_sections()]
+
+    @property
+    def status(self) -> TodoStatus:
+        if not (items := [*self.all_items()]):
+            return TodoStatus.OPEN
+        statuses = [item.own_status for item in items]
+        return (
+            TodoStatus.CANCELLED if all(status is TodoStatus.CANCELLED for status in statuses) else
+            TodoStatus.DONE if all(status.value in _CLOSED for status in statuses) else
+            TodoStatus.PROGRESS if any(status is not TodoStatus.OPEN for status in statuses) else
+            TodoStatus.OPEN
+        )
+
+    @property
+    def is_complete(self) -> bool:
+        return self.status.value in _CLOSED
+
+    def walk(self, *, include_self: bool = False):
+        if include_self:
+            yield self
+        for node in self.nodes:
+            yield from node.walk()
+
+    def descendants(self, *, include_self: bool = False):
+        yield from self.walk(include_self=include_self)
+
+    def all_items(self) -> Iterator[TodoThing]:
+        for node in self.nodes:
+            yield from node.all_items()
+
+    def all_sections(self) -> Iterator[TodoThing]:
+        for node in self.nodes:
+            yield from node.all_sections()
+
+    def root_sections(self) -> list[TodoThing]:
+        return [node for node in self.nodes if node.is_section]
+
+    def find_section(self, text: str) -> TodoThing | None:
+        target = text.lower()
+        return next((section for section in self.sections if section.text.lower() == target), None)
+
+    def find_item(self, index: int) -> TodoThing | None:
+        return next((item for i, item in enumerate(self.all_items(), 1) if i == index), None)
+
+    def indexed_items(self) -> list[tuple[int, TodoThing]]:
+        return [(i, item) for i, item in enumerate(self.all_items(), 1)]
 
     def to_text(self) -> str:
-        return TodoTextVisitor().visit(self)
+        return _render_document(self)
 
-
-#  Helpers 
-
-def _strip_eol(text: str) -> str:
-    return text.rstrip('\n')
-
-def _get_child_text(node: Symbol, name: str, *, strip: bool = False) -> str:
-    text = child.text if (child := node.find(name)) else ''
-    return text.strip() if strip else text
-
-def _extract_tags(line: str) -> tuple[str, list[Tag]]:
-    """Extract and remove inline tags from *line*; return (clean_text, tags)."""
-    text, tags = line.strip(), []
-
-    while text:
-        if match := _(r'^\[([ xX/\-])\](?:\s+|$)').match(text):
-            if status := TodoStatus.from_char(match.group(1)):
-                tags.append(StatusTag(status.tag_name()))
-        elif match := _(r'^x\s+(?:(\d{4}-\d{2}-\d{2})\s+)?').match(text):
-            tags.append(StatusTag('done', match.group(1)))
-        elif match := _(r'^\(([A-Z])\)(?:\s+|$)').match(text):
-            tags.append(PriorityTag(match.group(1), match.group(1)))
-        else:
-            break
-        text = text[match.end():].lstrip()
-
-    parts, last = [], 0
-    for match in _TAG_TOKEN_RE.finditer(text):
-        parts.append(text[last:match.start()])
-        last = match.end()
-
-        if name := match.group('mention_name'):
-            value = match.group('mention_value')
-            tags.append(
-                MetaTag('due', 'today') if name == 'today' else
-                MetaTag('est', value) if name == 'estimate' else
-                PriorityTag(value or 'priority', value) if name == 'priority' else
-                StatusTag(name, value) if name in _STATUS_AT else
-                MentionTag(name, value)
-            )
-        elif key := match.group('meta_key'):
-            tags.append(StatusTag(key, match.group('meta_value')) if key in _STATUS_NAMES else MetaTag(key, match.group('meta_value')))
-        elif name := match.group('hashtag_name'):
-            tags.append(HashTag(name))
-        elif name := match.group('project_name'):
-            tags.append(ProjectTag(name))
-
-    deduped: list[Tag] = []
-    status_index: dict[str, int] = {}
-    for tag in tags:
-        if not isinstance(tag, StatusTag) or (i := status_index.get(tag.name)) is None:
-            if isinstance(tag, StatusTag):
-                status_index[tag.name] = len(deduped)
-            deduped.append(tag)
-        elif tag.value and not deduped[i].value:
-            deduped[i] = tag
-
-    return ' '.join((''.join([*parts, text[last:]])).split()).strip(), deduped
-
-
-def _items_of(section: TodoSection | None, document: TodoDocument) -> list[TodoItem]:
-    return section.items if section else document.items
-
-def _notes_of(section: TodoSection | None, document: TodoDocument) -> list[str]:
-    return section.notes if section else document.notes
-
-def _note_lines(notes: list[str]) -> list[str]:
-    lines: list[str] = []
-    for note in notes:
-        lines.extend(note.splitlines() or [''])
-    return lines
-
-def _format_tag(tag: Tag) -> str:
-    if isinstance(tag, MentionTag):
-        return f'@{tag.name}{f"({tag.value})" if tag.value else ""}'
-    if isinstance(tag, HashTag):
-        return f'#{tag.name}'
-    if isinstance(tag, ProjectTag):
-        return f'+{tag.name}'
-    if isinstance(tag, PriorityTag):
-        # Render as todo.txt format (A) rather than meta format pri:A
-        # This preserves format compatibility with roundtrip parsing
-        return f'({tag.value or tag.name})'
-    if tag.value is not None:
-        return f'{tag.name}:{tag.value}'
-    return tag.name
-
-def _format_tags(tags: list[Tag], *, primary_status: TodoStatus | None = None) -> str:
-    mentions:   list[str] = []
-    hashtags:   list[str] = []
-    projects:   list[str] = []
-    priorities: list[str] = []
-    meta:       list[str] = []
-
-    for tag in tags:
-        if isinstance(tag, MentionTag):
-            mentions.append(_format_tag(tag))
-        elif isinstance(tag, HashTag):
-            hashtags.append(_format_tag(tag))
-        elif isinstance(tag, ProjectTag):
-            projects.append(_format_tag(tag))
-        elif isinstance(tag, PriorityTag):
-            priorities.append(_format_tag(tag))
-        elif (isinstance(tag, StatusTag) and tag.value is None
-              and primary_status is not None
-              and TodoStatus.from_tag_name(tag.name) == primary_status):
-            continue  # suppress checkbox-derived status tag (shown as marker already)
-        else:
-            meta.append(_format_tag(tag))
-
-    parts = [*mentions, *hashtags, *projects, *priorities, *meta]
-    return '  '.join(p for p in parts if p)
-
-
-def _coerce_grammar(grammar: 'TodoGrammar | type[TodoGrammar] | None') -> 'TodoGrammar':
-    if grammar is None:
-        return TodoGrammar()
-    return grammar() if isinstance(grammar, type) else grammar
-
-def _coerce_visitor(visitor: Any, default_cls: type[Any], *args: Any) -> Any:
-    if visitor is None:
-        return default_cls(*args)
-    return visitor(*args) if isinstance(visitor, type) else visitor
+    def to_dict(self) -> dict:
+        return {
+            'kind': 'document',
+            'title': self.title,
+            'status': self.status.value,
+            'title_tags': [tag.to_dict() for tag in self.title_tags],
+            'notes': self.notes,
+            'nodes': [node.to_dict() for node in self.nodes],
+        }
 
 
 class TodoGrammar(dict):
-    """Line-oriented pyPEG grammar for TODO-family documents."""
-
     def __init__(self):
         peg, self.root = self._get_rules()
         self.update(peg)
@@ -336,270 +376,307 @@ class TodoGrammar(dict):
         def heading_text(): return _(r'[^\n]*')
         def heading(): return heading_level, space, heading_text, eol
         def header(): return name, _(r'[ \t]+TODO:[ \t]*', re.IGNORECASE), eol
-
         def project_name(): return _(rf'\S(?:.*?\S)?(?=\s*:[ \t]*(?:{eol_re}))')
         def project(): return indent, project_name, _(r'\s*:[ \t]*'), eol
-
         def checkbox(): return _(r'\[[ xX/\-]\]')
         def text(): return _(r'[^\n]*')
-        def bullet(): return _(r'[-*•+]|\d+[.)]')
+        def bullet(): return _(r'[-*\u2022+]|\d+[.)]')
         def bullet_item(): return indent, bullet, space, 0, checkbox, 0, space, text
         def checkbox_item(): return indent, checkbox, 0, space, text
         def item(): return [bullet_item, checkbox_item], eol
-
         def name(): return _(rf'\S(?:.*?\S)?(?=[ \t]+TODO:[ \t]*(?:{eol_re}))')
-
         def key(): return _(r'Start|End|Notes', re.IGNORECASE)
         def value(): return _(r'[^\n]*')
         def field(): return indent, key, _(r'\s*:\s*'), value, eol
-
         def inline():
-            return _(   r'(?:'
-                        r'(?:x\s+(?:\d{4}-\d{2}-\d{2}\s+)?|\([A-Z]\)\s+)[^\n]*'
-                        r'|(?=[^\n]*(?<!\w)(?:\+[A-Za-z][\w-]*|@[A-Za-z][\w.-]*(?:\([^)]+\))?|#[A-Za-z][\w-]*))[^\n]+'
-                        r')'), eol
+            return _(r'(?:(?:x\s+(?:\d{4}-\d{2}-\d{2}\s+)?|\([A-Z]\)\s+)[^\n]*|(?=[^\n]*(?<!\w)(?:\+[A-Za-z][\w-]*|@[A-Za-z][\w.-]*(?:\([^)]+\))?|#[A-Za-z][\w-]*))[^\n]+)'), eol
+        def note(): return _(r'[^\n]+'), eol
+        
+        def document(): return -1, [blank, heading, header, field, project, item, inline, note]
+        
+        return {name: value for name, value in locals().items() 
+                if isinstance(value, types.FunctionType)}, document
 
-        def note():
-            return _(r'[^\n]+'), eol
-
-        def document():
-            return -1, [ blank,
-                heading, header,
-                field, project, item,
-                inline, note,
-            ]
-
-        return {key: value for key, value in locals().items() if isinstance(value, types.FunctionType)}, document
-
-    def parse(self, text: str, root=None, skipWS: bool = False, **kwargs: Any):
+    def parse(self, text: str, root=None, skipWS: bool = False, **kw: Any):
         text = _(r'\r\n|\r').sub('\n', text + ('\n' if not text.endswith('\n') else ''))
-        kwargs.setdefault('packrat', True)
-        kwargs.setdefault('resultSoFar', [])
-        return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
+        kw.setdefault('packrat', True)
+        kw.setdefault('resultSoFar', [])
+        return parseLine(text, root or self.root, skipWS=skipWS, **kw)
 
 
-#  AST builder 
-
-class TodoDocumentVisitor(SimpleVisitor):
-    """Build the logical TODO AST from the pyPEG parse tree."""
-
-    def __init__(self, grammar: TodoGrammar | None = None):
-        super().__init__(grammar)
-        self.document = TodoDocument()
-        self.section: TodoSection | None = None
-        self.stack: list[TodoItem] = []
-        self.doing: dict[str, str] = {}
+class _ASTBuilder:
+    def __init__(self):
+        self.doc = TodoDocument()
+        self.current_section: TodoThing | None = None
+        self.section_stack: list[TodoThing] = []
+        self.item_stack: list[TodoThing] = []
+        self.session_fields: dict[str, str] = {}
         self.title_seen = False
 
-    def build(self, nodes: Symbol | list[Symbol]) -> TodoDocument:
-        super().visit(nodes, root=True)
-        self._flush_doing()
-        return self.document
+    def build(self, nodes: Symbol | list) -> TodoDocument:
+        self._walk(nodes if isinstance(nodes, list) else [nodes])
+        self._flush_session()
+        return self.doc
 
-    def __end__(self) -> str:
-        self._flush_doing()
-        return ''
+    def _walk(self, nodes: list) -> None:
+        for node in nodes:
+            if isinstance(node, str):
+                continue
+            if handler := getattr(self, f'_visit_{node.__name__}', None):
+                handler(node)
+            elif not isinstance(node.what, str):
+                self._walk(node.what)
 
-    def _flush_doing(self) -> None:
-        if not self.doing:
+    def _flush_session(self) -> None:
+        if not self.session_fields:
             return
-        tags: list[Tag]  = [MetaTag(key, self.doing[key]) for key in ('start', 'end') if key in self.doing]
-        notes = [self.doing['notes']] if self.doing.get('notes') else []
-        _items_of(self.section, self.document).append(
-            TodoItem(raw='', text='', tags=tags, notes=notes, kind='session')
-        )
-        self.doing.clear()
+        parent = self.current_section or self.doc
+        tags = [Tag.meta(key, self.session_fields[key]) for key in ('start', 'end') if key in self.session_fields]
+        notes = [self.session_fields['notes']] if self.session_fields.get('notes') else []
+        _target_nodes(self.current_section, self.doc).append(TodoThing(kind='session', text='', tags=tags, notes=notes, parent=parent))
+        self.session_fields.clear()
 
-    def _start_section(self, name: str, tags: list[Tag] | None = None, *, level: int = 2, indent: int = 0) -> None:
-        self._flush_doing()
-        self.stack.clear()
-        self.section = TodoSection(name=name, tags=tags or [], level=level, indent=indent)
-        self.document.sections.append(self.section)
+    def _start_section(self, text: str, tags: list[Tag] | None = None, *, level: int = 2, indent: int = 0) -> None:
+        self._flush_session()
+        self.item_stack.clear()
+        section = TodoThing(kind='section', text=text, tags=tags or [], level=level, indent=indent)
+        while self.section_stack and self.section_stack[-1].visual_depth >= section.visual_depth:
+            self.section_stack.pop()
+        if self.section_stack:
+            section.parent = self.section_stack[-1]
+            self.section_stack[-1].nodes.append(section)
+        else:
+            section.parent = self.doc
+            self.doc.nodes.append(section)
+        self.section_stack.append(section)
+        self.current_section = section
         self.title_seen = True
 
     def _append_list_item(self, node: Symbol) -> None:
-        self._flush_doing()
-        indent = len(_get_child_text(node, 'indent').expandtabs(4))
-        source = ' '.join(filter(None, (
-            _get_child_text(node, 'checkbox', strip=True),
-            _get_child_text(node, 'text', strip=True),
-        )))
+        self._flush_session()
+        indent = len(_child_text(node, 'indent').expandtabs(4))
+        source = ' '.join(filter(None, (_child_text(node, 'checkbox', strip=True), _child_text(node, 'text', strip=True))))
         text, tags = _extract_tags(source)
-        item = TodoItem(raw=_strip_eol(node.text).rstrip(), text=text, tags=tags, indent=indent)
-
-        while self.stack and self.stack[-1].indent >= indent:
-            self.stack.pop()
-        (self.stack[-1].children if self.stack else _items_of(self.section, self.document)).append(item)
-        self.stack.append(item)
+        item = TodoThing(kind='item', raw=_strip_eol(node.text).rstrip(), text=text, tags=tags, indent=indent)
+        while self.item_stack and self.item_stack[-1].indent >= indent:
+            self.item_stack.pop()
+        parent = self.item_stack[-1] if self.item_stack else self.current_section or self.doc
+        item.parent = parent
+        (self.item_stack[-1].nodes if self.item_stack else _target_nodes(self.current_section, self.doc)).append(item)
+        self.item_stack.append(item)
         self.title_seen = True
 
     def _append_flat_item(self, line: str) -> None:
-        self._flush_doing()
-        self.stack.clear()
+        self._flush_session()
+        self.item_stack.clear()
         text, tags = _extract_tags(line.strip())
-        _items_of(self.section, self.document).append(TodoItem(raw=line.rstrip(), text=text, tags=tags))
+        _target_nodes(self.current_section, self.doc).append(TodoThing(kind='item', raw=line.rstrip(), text=text, tags=tags, parent=self.current_section or self.doc))
         self.title_seen = True
 
-    def visit_blank(self, node: Symbol) -> str:
-        self._flush_doing()
-        self.stack.clear()
-        return ''
+    def _visit_blank(self, node: Symbol) -> None:
+        self._flush_session()
+        self.item_stack.clear()
 
-    def visit_heading(self, node: Symbol) -> str:
-        level = len(_get_child_text(node, 'heading_level'))
-        title, tags = _extract_tags(_get_child_text(node, 'heading_text', strip=True))
+    def _visit_heading(self, node: Symbol) -> None:
+        level = len(_child_text(node, 'heading_level'))
+        text, tags = _extract_tags(_child_text(node, 'heading_text', strip=True))
         if level == 1 and not self.title_seen:
-            self.document.title      = title or None
-            self.document.title_tags = tags
-            self.title_seen          = True
-            self.stack.clear()
-            return ''
-        self._start_section(title, tags, level=level)
-        return ''
-
-    def visit_header(self, node: Symbol) -> str:
-        name, tags = _extract_tags(_get_child_text(node, 'name', strip=True))
-        self._start_section(name, tags, level=2)
-        return ''
-
-    def visit_project(self, node: Symbol) -> str:
-        ind = len(_get_child_text(node, 'indent').expandtabs(4))
-        name, tags = _extract_tags(_get_child_text(node, 'project_name', strip=True))
-        self._start_section(name, tags, level=2, indent=ind)
-        return ''
-
-    def visit_field(self, node: Symbol) -> str:
-        if name := _get_child_text(node, 'key', strip=True).lower():
-            self.doing[name] = _get_child_text(node, 'value', strip=True)
+            self.doc.title, self.doc.title_tags = text or None, tags
             self.title_seen = True
-        return ''
+            self.current_section = None
+            self.section_stack.clear()
+            self.item_stack.clear()
+            return
+        self._start_section(text, tags, level=level)
 
-    def visit_item(self, node: Symbol) -> str:
+    def _visit_header(self, node: Symbol) -> None:
+        text, tags = _extract_tags(_child_text(node, 'name', strip=True))
+        self._start_section(text, tags, level=2)
+
+    def _visit_project(self, node: Symbol) -> None:
+        indent = len(_child_text(node, 'indent').expandtabs(4))
+        text, tags = _extract_tags(_child_text(node, 'project_name', strip=True))
+        self._start_section(text, tags, level=2, indent=indent)
+
+    def _visit_field(self, node: Symbol) -> None:
+        if key := _child_text(node, 'key', strip=True).lower():
+            self.session_fields[key] = _child_text(node, 'value', strip=True)
+            self.title_seen = True
+
+    def _visit_item(self, node: Symbol) -> None:
         self._append_list_item(node)
-        return ''
 
-    def visit_inline(self, node: Symbol) -> str:
+    def _visit_inline(self, node: Symbol) -> None:
         self._append_flat_item(_strip_eol(node.text))
-        return ''
 
-    def visit_note(self, node: Symbol) -> str:
+    def _visit_note(self, node: Symbol) -> None:
         line = _strip_eol(node.text)
         stripped = line.strip()
         if not self.title_seen and stripped:
             self.title_seen = True
-
-        if self.doing:
-            previous = self.doing.get('notes', '')
-            self.doing['notes'] = f'{previous}\n{stripped}'.lstrip('\n') if previous else stripped
-        elif self.stack:
-            self.stack[-1].notes.append(stripped)
+        if self.session_fields:
+            prev = self.session_fields.get('notes', '')
+            self.session_fields['notes'] = f'{prev}\n{stripped}'.lstrip('\n') if prev else stripped
+        elif self.item_stack:
+            self.item_stack[-1].notes.append(stripped)
         else:
-            _notes_of(self.section, self.document).append(stripped)
-        return ''
+            _target_notes(self.current_section, self.doc).append(stripped)
 
 
-#  Text renderer 
+def _render_document(doc: TodoDocument) -> str:
+    blocks = [f'# {doc.title}{f"  {tag_text}" if (tag_text := _format_tags(doc.title_tags)) else ""}' if doc.title else '']
+    if doc.notes:
+        blocks.append('\n'.join(_note_lines(doc.notes)))
+    blocks.extend(_render_nodes(doc.nodes))
+    return '\n\n'.join(block for block in blocks if block).strip()
 
-class TodoTextVisitor:
-    """Render the logical TODO AST as canonical plaintext."""
+def _render_nodes(nodes: list[TodoThing]) -> list[str]:
+    result: list[str] = []
+    item_cache: list[str] = []
+    for node in nodes:
+        if node.is_section:
+            if item_cache:
+                result.append('\n'.join(item_cache))
+                item_cache.clear()
+            result.append(_render_section(node))
+        else:
+            item_cache.append(_render_item(node, depth=0))
+    return result + (['\n'.join(item_cache)] if item_cache else [])
 
-    def visit(self, node: 'TodoDocument | TodoSection | TodoItem | list') -> str:
-        match node:
-            case TodoDocument():   return self._render_document(node)
-            case TodoSection():    return self._render_section(node)
-            case TodoItem():       return self._render_item(node, depth=0)
-            case list():           return '\n\n'.join(self.visit(n) for n in node)
-            case _:                return ''
+def _render_section(node: TodoThing) -> str:
+    heading = f"{' ' * node.visual_depth}{node.text}:".rstrip()
+    if tag_text := _format_tags(node.tags):
+        heading = f'{heading}  {tag_text}'
+    return '\n\n'.join(block for block in [heading, *_render_nodes(node.nodes)] if block)
 
-    def _render_document(self, doc: TodoDocument) -> str:
-        blocks: list[str] = []
-        if doc.title:
-            title = f'# {doc.title}'
-            if tag_text := _format_tags(doc.title_tags):
-                title = f'{title}  {tag_text}'
-            blocks.append(title)
-        if doc.notes:
-            blocks.append('\n'.join(_note_lines(doc.notes)))
-        if doc.items:
-            blocks.append('\n'.join(self._render_item(item, depth=0) for item in doc.items))
-        # Group subsections (indent > parent) with their parent section
-        sections = doc.sections
-        i = 0
-        while i < len(sections):
-            sec = sections[i]
-            parts = [self._render_section(sec)]
-            i += 1
-            while i < len(sections) and sections[i].indent > sec.indent:
-                parts.append(self._render_section(sections[i]))
-                i += 1
-            blocks.append('\n\n'.join(p for p in parts if p))
-        return '\n\n'.join(b for b in blocks if b).strip()
 
-    def _render_section(self, section: TodoSection) -> str:
-        pad = ' ' * section.indent
-        heading = f"{pad}{section.name}:".rstrip()
-        if tag_text := _format_tags(section.tags):
-            heading = f'{heading}  {tag_text}'
-        lines = [heading]
-        if section.items:
-            lines.extend(self._render_item(item, depth=0) for item in section.items)
-        return '\n'.join(lines)
-
-    def _render_item(self, item: TodoItem, *, depth: int) -> str:
-        indent = ' ' * item.indent if item.indent else '  ' * depth
-
-        if item.kind == 'session' and not item.text:
-            lines: list[str] = []
-            tag_map = {t.name: t.value for t in item.tags if isinstance(t, MetaTag)}
-            if start := tag_map.get('start'):
-                lines.append(f'{indent}Start: {start}')
-            if end := tag_map.get('end'):
-                lines.append(f'{indent}End: {end}')
-            for i, note_line in enumerate(_note_lines(item.notes)):
-                prefix = 'Notes: ' if i == 0 else '       '
-                lines.append(f'{indent}{prefix}{note_line}')
-            return '\n'.join(lines).rstrip()
-
-        marker = item.status.marker()
-        line   = f'{indent}{marker} {item.text}'.rstrip()
-        if tag_text := _format_tags(item.tags, primary_status=item.status):
-            line = f'{line}  {tag_text}'
-
-        lines = [line]
-        for note_line in _note_lines(item.notes):
-            lines.append(f'{indent}  {note_line}'.rstrip())
-        for child in item.children:
-            lines.append(self._render_item(child, depth=depth + 1))
+def _render_item(node: TodoThing, *, depth: int) -> str:
+    indent = ' ' * node.indent if node.indent else '  ' * depth
+    if node.is_session and not node.text:
+        meta = {tag.name: tag.value for tag in node.tags if tag.kind == 'meta'}
+        lines = [
+            *[f'{indent}Start: {value}' for value in [meta.get('start')] if value],
+            *[f'{indent}End: {value}' for value in [meta.get('end')] if value],
+            *[f'{indent}{"Notes: " if i == 0 else "       "}{line}' for i, line in enumerate(_note_lines(node.notes))],
+        ]
         return '\n'.join(lines).rstrip()
+    line = f'{indent}{node.status.marker()} {node.text}{f"  {tag_text}" if (tag_text := _format_tags(node.tags, primary_status=node.status)) else ""}'.rstrip()
+    lines = [line, *[f'{indent}  {note}'.rstrip() for note in _note_lines(node.notes)], *[_render_item(child, depth=depth + 1) for child in node.nodes]]
+    return '\n'.join(line for line in lines if line).rstrip()
 
 
-#  Public API 
+def _extract_tags(line: str) -> tuple[str, list[Tag]]:
+    text, tags = line.strip(), []
+    while text:
+        match text:
+            case _ if (m := _(r'^\[([ xX/\-])\](?:\s+|$)').match(text)) and (status := TodoStatus.from_char(m.group(1))):
+                tags.append(Tag.status(status.tag_name()))
+                text = text[m.end():].lstrip()
+            case _ if m := _(r'^x\s+(?:(\d{4}-\d{2}-\d{2})\s+)?').match(text):
+                tags.append(Tag.status('done', m.group(1)))
+                text = text[m.end():].lstrip()
+            case _ if m := _(r'^\(([A-Z])\)(?:\s+|$)').match(text):
+                tags.append(Tag.priority(m.group(1), m.group(1)))
+                text = text[m.end():].lstrip()
+            case _:
+                break
+    parts, last = [], 0
+    for match in _TAG_TOKEN_RE.finditer(text):
+        parts.append(text[last:match.start()])
+        last = match.end()
+        if name := match.group('mention_name'):
+            value = match.group('mention_value')
+            tags.append(
+                Tag.meta('due', 'today') if name == 'today' else
+                Tag.meta('est', value) if name == 'estimate' else
+                Tag.priority(value or 'priority', value) if name == 'priority' else
+                Tag.status(name, value) if name in _STATUS_AT else
+                Tag.mention(name, value)
+            )
+        elif key := match.group('meta_key'):
+            tags.append(Tag.status(key, match.group('meta_value')) if key in _STATUS_NAMES else Tag.meta(key, match.group('meta_value')))
+        elif name := match.group('hashtag_name'):
+            tags.append(Tag.hashtag(name))
+        elif name := match.group('project_name'):
+            tags.append(Tag.project(name))
+    deduped: list[Tag] = []
+    status_index: dict[str, int] = {}
+    for tag in tags:
+        if tag.kind != 'status' or (i := status_index.get(tag.name)) is None:
+            if tag.kind == 'status':
+                status_index[tag.name] = len(deduped)
+            deduped.append(tag)
+        elif tag.value and not deduped[i].value:
+            deduped[i] = tag
+    clean = ' '.join((''.join([*parts, text[last:]])).split()).strip()
+    return clean, deduped
 
-def parse_todo_tree(text: str, grammar: 'TodoGrammar | type[TodoGrammar] | None' = None) -> Symbol:
-    """Parse TODO text and return the raw pyPEG tree."""
-    parser = _coerce_grammar(grammar)
-    result, _rest = parser.parse(text, resultSoFar=[], skipWS=False)
+
+def _format_tag(tag: Tag) -> str:
+    return (
+        f'@{tag.name}{f"({tag.value})" if tag.value else ""}' if tag.kind == 'mention' else
+        f'#{tag.name}' if tag.kind == 'hashtag' else
+        f'+{tag.name}' if tag.kind == 'project' else
+        f'({tag.value or tag.name})' if tag.kind == 'priority' else
+        f'{tag.name}:{tag.value}' if tag.value else
+        tag.name
+    )
+
+
+def _format_tags(tags: list[Tag], *, primary_status: TodoStatus | None = None) -> str:
+    groups = {'mention': [], 'hashtag': [], 'project': [], 'priority': [], 'meta': []}
+    for tag in tags:
+        match tag.kind:
+            case 'mention':
+                groups['mention'].append(_format_tag(tag))
+            case 'hashtag':
+                groups['hashtag'].append(_format_tag(tag))
+            case 'project':
+                groups['project'].append(_format_tag(tag))
+            case 'priority':
+                groups['priority'].append(_format_tag(tag))
+            case 'status' if tag.value is None and primary_status and TodoStatus.from_tag_name(tag.name) == primary_status:
+                pass
+            case _:
+                groups['meta'].append(_format_tag(tag))
+    return '  '.join(part for part in [*groups['mention'], *groups['hashtag'], *groups['project'], *groups['priority'], *groups['meta']] if part)
+
+
+def _strip_eol(text: str) -> str:
+    return text.rstrip('\n')
+
+def _child_text(node: Symbol, name: str, *, strip: bool = False) -> str:
+    text = child.text if (child := node.find(name)) else ''
+    return text.strip() if strip else text
+
+def _target_nodes(section: TodoThing | None, doc: TodoDocument) -> list[TodoThing]:
+    return section.nodes if section else doc.nodes
+
+def _target_notes(section: TodoThing | None, doc: TodoDocument) -> list[str]:
+    return section.notes if section else doc.notes
+
+def _note_lines(notes: list[str]) -> list[str]:
+    return [line for note in notes for line in note.splitlines() or ['']]
+
+
+_grammar_singleton: TodoGrammar | None = None
+
+
+def the_grammar() -> TodoGrammar:
+    global _grammar_singleton
+    if _grammar_singleton is None:
+        _grammar_singleton = TodoGrammar()
+    return _grammar_singleton
+
+def parse_tree(text: str) -> Symbol:
+    result, _ = the_grammar().parse(text, resultSoFar=[], skipWS=False)
     return result[0]
 
-def parse_todo_to_ast(
-    text: str,
-    grammar: 'TodoGrammar | type[TodoGrammar] | None' = None,
-    visitor: 'TodoDocumentVisitor | type[TodoDocumentVisitor] | None' = None,
-) -> TodoDocument:
-    """Parse a TODO document into the logical TODO AST."""
-    parser  = _coerce_grammar(grammar)
-    tree    = parse_todo_tree(text, parser)
-    builder = _coerce_visitor(visitor, TodoDocumentVisitor, parser)
-    return builder.build(tree)
+def parse(text: str) -> TodoDocument:
+    return _ASTBuilder().build(parse_tree(text))
 
-def todo_text_to_list(text: str) -> list[TodoItem]:
-    """Convenience helper returning all items in document order."""
-    return list(parse_todo_to_ast(text).all_items())
+def parse_to_dict(text: str) -> dict:
+    return parse(text).to_dict()
 
-def render_text_from_ast(
-    todo: 'TodoDocument | TodoSection | TodoItem',
-    visitor: 'TodoTextVisitor | type[TodoTextVisitor] | None' = None,
-) -> str:
-    """Render a parsed TODO AST node as canonical plaintext."""
-    renderer = _coerce_visitor(visitor, TodoTextVisitor)
-    return renderer.visit(todo)
+def render(node: TodoDocument | TodoThing) -> str:
+    return node.to_text()
