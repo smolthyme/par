@@ -2,7 +2,6 @@
 # Based on YPL parser 1.5 by 'VB' -- Thanks!
 # Hacked on by serpn subsequently
 
-from __future__ import annotations
 import sys, re
 from typing import Any
 from collections.abc import Callable, Generator
@@ -11,7 +10,7 @@ print_trace = False # For debugging
 
 class keyword(str): pass
 
-class ignore(object):
+class ignore():
     def __init__(self, regex_text: str, *args):
         self._regex = re.compile(regex_text, *args)
 
@@ -19,7 +18,7 @@ class ignore(object):
     def regex(self) -> re.Pattern[str]:
         return self._regex
 
-class _and(object):
+class _and():
     def __init__(self, something: ParsePattern):
         self._obj = something
 
@@ -43,15 +42,11 @@ type ParsePattern = (
     | Callable[[], 'ParsePattern']     # callable returning another pattern
 )
 
-class Name(str):
-    def __init__(self, *args):
-        self.line = 0
-        self.file = ""
-
 class Symbol(list):
-    def __init__(self, name: str, what: Any):
+    def __init__(self, name: str, what: Any, offset: int = -1):
         self.__name__ = name
         self.what = what
+        self._offset = offset
         self.extend(what)
     
     def __call__(self) -> Any:
@@ -107,12 +102,17 @@ class Symbol(list):
     def text(self) -> str:
         return ''.join(node if isinstance(node, str) else node.text for node in self.what)
 
+    @property
+    def offset(self) -> int:
+        """Character offset in source text, or -1 if unknown."""
+        return self._offset
+
 def skip(skipper, text: str, skipWS: bool, skipComments: Callable | None) -> str:
     t = text.lstrip() if skipWS else text
     while skipComments:
         try:
             skip, t = skipper.parseLine(t, skipComments, [], skipWS, None)
-        except:
+        except SyntaxError:
             break
     return t
 
@@ -127,7 +127,6 @@ class parser(object):
             self.skipper = self
         self.textlen = 0
         self.restlen = -1
-        self.lines   = []
         self.memory  = {}
         self.packrat = p
 
@@ -165,11 +164,9 @@ class parser(object):
             
             results = resultSoFar
             if name and result:
-                name.line = self.lineNo()
-                results.append(Symbol(name, result))
+                results.append(Symbol(name, result, _start_offset))
             elif name:
-                name.line = self.lineNo()
-                results.append(Symbol(name, []))
+                results.append(Symbol(name, [], _start_offset))
             elif result:
                 if isinstance(result, list):
                     results.extend(result)
@@ -182,7 +179,7 @@ class parser(object):
             return results, text        
         
         if self.packrat:
-            _cache_key = (len(textline),
+            _cache_key = (textline,
                 tuple(id(p) for p in pattern) if isinstance(pattern, (list, tuple))
                 else pattern)
             if (cached := self.memory.get(_cache_key)) is not None:
@@ -200,13 +197,14 @@ class parser(object):
                     except: pass
 
             if pattern.__name__[0] != "_":
-                name = Name(pattern.__name__)
+                name = pattern.__name__
 
             pattern = pattern()
             if callable(pattern):
                 pattern = (pattern,)
 
         text = skip(self.skipper, textline, skipWS, skipComments)
+        _start_offset = self.textlen - len(text)
 
         match pattern:
             case keyword():   # keyword before str — keyword IS-A str, so order matters
@@ -300,52 +298,29 @@ class parser(object):
 
         return resultSoFar, textline  # unreachable; satisfies type checkers
     
-    def lineNo(self) -> int:
-        # NOTE TEST: This is a re-write of a function that was clearly broken. It... partially works?
-        if not self.lines or self.restlen == -1:
-            return -1  # Return -1 to indicate an invalid line number
-
-        parsed = self.textlen - self.restlen
-        left, right = 0, len(self.lines) - 1
-
-        while left <= right:
-            mid = (left + right) // 2
-            if self.lines[mid][0] <= parsed:
-                if mid + 1 < len(self.lines) and self.lines[mid + 1][0] > parsed:
-                    return self.lines[mid][1]
-                left  = mid + 1
-            else:
-                right = mid - 1
-
-        return -1  # Return -1 if no valid line number is found
 
 def parseLine(textline, pattern, resultSoFar = None, skipWS = True, skipComments = None, packrat = False) -> tuple[list[Any], str]:
     if resultSoFar is None:
         resultSoFar = []
     p = parser(p=packrat)
+    p.textlen = len(textline)  # Set textlen to enable correct offset tracking
     text = skip(p.skipper, textline, skipWS, skipComments)
     return p.parseLine(text, pattern, resultSoFar, skipWS, skipComments)
 
-def parse(language, lineSource, skipWS = True, skipComments = None, packrat = False, lineCount = True):
-    lines, lineNo = [], 0
+def parse(language, lineSource, skipWS = True, skipComments = None, packrat = False):
     """\
 * language     : pyPEG language description
-* lineSource   : a fileinput.FileInput object
-* skipWS:      : should whitespace be skipped (default: True)
+* lineSource   : a fileinput.FileInput object or iterable of lines
+* skipWS       : should whitespace be skipped (default: True)
 * skipComments : function which returns pyPEG for matching comments
-* packrat      : cache parse results at each position to avoid redundant work (packrat)
-* lineCount    : add line number information to AST
+* packrat      : cache parse results at each position to avoid redundant work (default: False)
 
 - returns   pyAST"""
     
-    orig = ""
-    for line in lineSource:
-        lines.append((len(orig), lineSource.filename(), lineSource.lineno() - 1))
-        orig += line
+    orig = "".join(lineSource)
     
     p = parser(p=packrat)
     p.textlen = len(orig)
-    p.lines = [] if not lineCount else lines 
     
     try:
         text = skip(p.skipper, orig, skipWS, skipComments)
@@ -353,22 +328,18 @@ def parse(language, lineSource, skipWS = True, skipComments = None, packrat = Fa
         if text:
             raise SyntaxError()
     
-    except SyntaxError as msg:
-        textlen = len(orig)
-        parsed = textlen - p.restlen
-        textlen = 0
-        nn, lineNo, file = 0, 0, ""
-        for n, ld, l in lines:
-            if n >= parsed:
-                break
-            else:
-                lineNo = l
-                nn    += 1
-                file   = ld
+    except SyntaxError as e:
+        err_msg_str = str(e)
+        offset = len(orig) - p.restlen if p.restlen >= 0 else len(orig)
         
-        lineNo += 1
-        nn -= 1
-        lineCont = orig.splitlines()[nn]
-        raise SyntaxError(f"syntax error in {file}:{lineNo} : {lineCont}")
+        err_msg = err_msg_str if (err_msg_str and err_msg_str != "None") else "syntax error"
+        
+        # Extract a snippet of text around the error for context
+        snippet_start = max(0, offset - 20)
+        snippet_end = min(len(orig), offset + 20)
+        snippet = orig[snippet_start:snippet_end].replace('\n', ' ')
+        indicator = " " * (offset - snippet_start) + "^"
+        
+        raise SyntaxError(f"parse error at offset {offset}: {err_msg}\n  ...{snippet}...\n  ...{indicator}") from e
 
     return result
