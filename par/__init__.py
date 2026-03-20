@@ -1,13 +1,18 @@
 #! /usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Based on pyPEG (previous author: Limodou)
 #
 # license: BSD
 
+__author__ = 'smolchoad'
+__author_email__ = None
+__url__ = None
+__license__ = 'BSD'
+__version__ = '1.4.2'
+
 import re, unicodedata
 from html.entities import name2codepoint
-
+from .pyPEG import Symbol
 HTML_NAMED_ENTITY_RE= re.compile(r'&(%s);' % '|'.join(name2codepoint))
 HTML_HEX_ENTITY_RE  = re.compile(r'&#x([\da-fA-F]+);')
 HTML_DECIMAL_RE     = re.compile(r'&#(\d+);')
@@ -16,11 +21,7 @@ DUPLICATE_DASH_RE   = re.compile(r'--+')
 NUM_SEP_COMMAS_RE   = re.compile(r'(?<=\d),(?=\d)')
 VALID_SLUG_RE       = re.compile(r'^[-a-zA-Z0-9]+$')
 
-__author__ = 'smolchoad'
-__author_email__ = None
-__url__ = None
-__license__ = 'BSD'
-__version__ = '1.4.2'
+
 
 from functools import lru_cache
 _ = lru_cache(maxsize=256)(re.compile)  # each unique (pattern, flags) compiled once
