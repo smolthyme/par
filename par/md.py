@@ -297,6 +297,9 @@ class MarkdownGrammar(dict):
     
     def parse(self, text:str, root=None, skipWS=False, **kwargs):
         """Parse markdown text"""
+        if text in ["", None] or not isinstance(text, str):
+            return ""
+
         # Normalise on unix-style line ending and we end with a newline
         text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
         # Hard line breaks: two+ trailing spaces or a trailing backslash before newline.
