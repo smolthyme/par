@@ -30,7 +30,11 @@ class SimpleVisitor(object):
     def __init__(self, grammar: dict | None = None) -> None:
         self.grammar = grammar
     
-    def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
+    def visit(self, nodes, root=False) -> str:
+        """Visit nodes and convert them to output.
+        Args:
+          * nodes: Can be Symbol, Node object, list/tuple of nodes, or string
+          * root: Whether this is the root level visit"""
         buf = []
         if not isinstance(nodes, (list, tuple)):
             nodes = [nodes]
