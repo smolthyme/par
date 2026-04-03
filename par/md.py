@@ -7,16 +7,9 @@ from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from functools import lru_cache
-from typing import Literal, TypedDict
+from typing import Literal
 
 _ = lru_cache(maxsize=256)(re.compile)
-
-
-class LinkRef(TypedDict):
-    url: str;   title: str | None
-
-class FootNote(TypedDict):
-    name: str;  text: str
 
 
 @dataclass(slots=True)
@@ -26,14 +19,14 @@ class ResourceStore:
     links_ext: list[str]      = field(default_factory=list)
     links_int: list[str]      = field(default_factory=list)
     toc_items: list           = field(default_factory=list)
-    footnotes: list[FootNote] = field(default_factory=list)
+    footnotes: list[dict]     = field(default_factory=list)  # list of {'name': str, 'text': str}
     images:    list[str]      = field(default_factory=list)
     videos:    list[str]      = field(default_factory=list)
     audios:    list[str]      = field(default_factory=list)
 
     titles_ids:       defaultdict[int, int]  = field(default_factory=lambda: defaultdict(int))
-    link_references:  dict[str, LinkRef]     = field(default_factory=dict)
-    image_references: dict[str, LinkRef]     = field(default_factory=dict)
+    link_references:  dict[str, dict]        = field(default_factory=dict)  # dict of {label: {'url': str, 'title': str | None}}
+    image_references: dict[str, dict]        = field(default_factory=dict)  # dict of {label: {'url': str, 'title': str | None}}
     
     
     def to_dict(self):
@@ -295,10 +288,10 @@ class MarkdownGrammar(dict):
         
         return {k: v for k, v in locals().items() if isinstance(v, types.FunctionType)}, article
     
-    def parse(self, text:str, root=None, skipWS=False, **kwargs):
+    def parse(self, text: str, root=None, skipWS: bool = False, **kwargs):
         """Parse markdown text"""
-        if text in ["", None] or not isinstance(text, str):
-            return ""
+        if not text or not isinstance(text, str):
+            return (), ""
 
         # Normalise on unix-style line ending and we end with a newline
         text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
@@ -316,6 +309,8 @@ _RE_SUBSCRIPT_FALLBACK   = re.compile(r',,([^,\n]+),,')
 _RE_STRIKETHROUGH_FALLBACK = re.compile(r'~~(.+?)~~')
 _RE_EMPHASIS_RECOVERY    = re.compile(r'^<em><em>([^<]+?) <em>(.+?)</em></em>(.*?)</em>$')
 _RE_YOUTUBE = re.compile(r'(?:youtube\.com/(?:watch\?v=|embed/|v/)|youtu\.be/)([^&?]{11})')
+_RE_P_TAG = re.compile(r'</?p\b[^>]*>', re.I | re.MULTILINE)
+_RE_SINGLE_P_BLOCK = re.compile(r'^\s*<p\b[^>]*>(?:(?!<p\b).)*?</p>\s*$', re.I | re.S)
 
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):    
@@ -328,29 +323,39 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self._current_section_level = None
         self._title_id_begin_level: int | None = 1
     
-    def visit(self, nodes: Symbol|list[Symbol], root=False) -> str:
-        if root:
+    def visit(self, nodes, root=False) -> str:
+        if root and nodes and isinstance(nodes, (list, tuple)) and len(nodes) > 0:
             # Single-pass pre-scan: collect link references and ToC titles together
-            for node in nodes[0].find_all_names(frozenset({'link_reference', 'title'})):
-                match node.__name__:
-                    case 'link_reference': self._collect_link_reference(node)
-                    case 'title':          self._alt_title(node)
+            first_node = nodes[0] if isinstance(nodes, (list, tuple)) else nodes
+            if hasattr(first_node, 'find_all_names'):
+                for node in first_node.find_all_names(frozenset({'link_reference', 'title'})):
+                    match node.__name__:
+                        case 'link_reference': self._collect_link_reference(node)
+                        case 'title':          self._alt_title(node)
 
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
     
-    def parse_markdown(self, text, peg=None, *, title_id_begin_level: int | None = 1):
-        g = self.grammar or MarkdownGrammar()
+    def parse_markdown(self, text: str, peg=None, *, title_id_begin_level: int | None = 1) -> str:
+        g = self.grammar if self.grammar else MarkdownGrammar()
+        
+        if not isinstance(g, MarkdownGrammar):
+            g = MarkdownGrammar()
+        
         if isinstance(peg, str):
             peg = g[peg]
         resultSoFar = []
         result, rest = g.parse(text, root=peg, resultSoFar=resultSoFar, skipWS=False)
+        
+        if not result or len(result) == 0:
+            return ""
+        
         # Create nested visitor with fresh title IDs for isolated context
         nested_resources = self.resources.nested_store()
         v = self.__class__(self.tag_class, g, footnote_id=self.footnote_id, resources=nested_resources)
         v._title_id_begin_level = title_id_begin_level
-        parsed_output = v.visit(result[0])
+        parsed_output = v.visit(result[0] if isinstance(result, (list, tuple)) else result)
         self.footnote_id = v.footnote_id
-        # Ensure any open sections are closed
+        # Ensure any open sections are closed. This is a reasonable place.
         parsed_output += v._close_section()
         
         return parsed_output
@@ -653,7 +658,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         attrs = self._extract_attrs(node)
         _cls = attrs.get('_class', '')
         _id = attrs.get('_id') or self.get_title_id(level)
-        title_raw = (title_node := node.find('title_text')) and title_node.text.strip() or "!Bad title!"
+        title_node = node.find('title_text')
+        title_raw: str = (title_node.text.strip() if title_node else "!Bad title!")
         # Render inline markdown within titles (support bold/italic/code/longdash etc.)
         title_rendered = self.parse_markdown(title_raw, 'text').strip()
         anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
@@ -805,8 +811,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             title = self._extract_title(title_node.text) if title_node else None
             
             # Store both as link reference and image reference
-            self.resources.link_references[label]  = {'url': url, 'title': title}
-            self.resources.image_references[label] = {'url': url, 'title': title}
+            ref_item = {'url': url, 'title': title}
+            self.resources.link_references[label]  = ref_item
+            self.resources.image_references[label] = ref_item
 
     def _is_safe_url(self, url: str) -> bool:
         """Check if URL is safe (not javascript:, vbscript:, data:)"""
@@ -1218,36 +1225,50 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             s.append(self.tag('ol', enclose=3, newline=False) + self.tag('div', enclose=3, newline=False))
         return '\n'.join(s).strip()
 
+
+def _safe_parse_and_extract(text, grammar=None):
+    """Parse text safely and extract the result element, returning (parse_result, grammar)"""
+    g = grammar or MarkdownGrammar()
+    result, _ = g.parse(text, resultSoFar=[], skipWS=False)
+    if not result:
+        return None, g
+    parse_result = result[0] if isinstance(result, (list, tuple)) else result
+    return parse_result, g
+
+
 def parseText(text, grammar=None, visitor=None):
     """Parse markdown text and return plain text representation"""
-    g = (grammar or MarkdownGrammar)()
-    result, rest = g.parse(text, resultSoFar=[], skipWS=False)
+    parse_result, g = _safe_parse_and_extract(text, grammar)
+    if parse_result is None:
+        return ""
     v = (visitor or SimpleVisitor)(g)
-    return v.visit(result, root=True)
+    return v.visit(parse_result, root=True)
+
 
 def parseHtml(text, tag_class=None, grammar=None, visitor=None):
     """Parse markdown text and return HTML"""
-    g = (grammar or MarkdownGrammar)()
-    result, rest = g.parse(text, resultSoFar=[], skipWS=False)
+    parse_result, g = _safe_parse_and_extract(text, grammar)
+    if parse_result is None:
+        return ""
     v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g)
-    return v.visit(result[0], root=True)
+    return v.visit(parse_result, root=True)
+
 
 def parseEmbeddedHtml(text):
     """Parse markdown and strip outer <p> tags if only one paragraph"""
-    parsed = parseHtml(text)
-    # Only strip <p> tags when the entire output is a single paragraph element
-    # (use a tempered regex to ensure no additional <p> tags exist).
-    clean = re.compile(r"</?p\b[^>]*>", re.I | re.MULTILINE)
-    if re.match(r'^\s*<p\b[^>]*>(?:(?!<p\b).)*?</p>\s*$', parsed, re.I | re.S):
-        parsed = re.sub(clean, "", parsed)
-    return parsed
+    if html := parseHtml(text):
+        if _RE_SINGLE_P_BLOCK.match(html):
+            return _RE_P_TAG.sub('', html)
+    return html
+
 
 def parseHtmlDebug(text, tag_class=None, grammar=None, visitor=None):
     """Parse markdown text and return tuple of (HTML, resources_dict)
        * resources_dict contains all tracked resources including links, images, videos, etc.
     """
-    g = (grammar or MarkdownGrammar)()
-    result, rest = g.parse(text, resultSoFar=[], skipWS=False)
+    parse_result, g = _safe_parse_and_extract(text, grammar)
     v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g)
-    html = v.visit(result[0], root=True)
+    if parse_result is None:
+        return "", v.resources.to_dict()
+    html = v.visit(parse_result, root=True)
     return (html, v.resources.to_dict())
