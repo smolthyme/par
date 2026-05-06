@@ -79,7 +79,7 @@ class MarkdownGrammar(dict):
         
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
-        def fmt_bold2()        : return _(r'(?<!\w)__'),   words , _(r'__(?!\w)')
+        def fmt_bold2()        : return _(r'(?<!\w)__(?![\s_])(.+?)__(?!\w)')
         def fmt_italic2()      : return _(r'(?<!\w)_(?![\s_])(.+?)_(?!\w)')
         def fmt_code()         : return _(r'`'),    words , _(r'`')
         def fmt_subscript()    : return _(r',,'), 0 ,space, words,  _(r',,')

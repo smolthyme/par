@@ -288,6 +288,30 @@ class TestListsAdvanced(unittest.TestCase):
         self.assertGreaterEqual(item_count, 2)
 
 
+
+    def test_list_items_starting_with_low_level_formatting(self):
+        """List items starting with low-level formatting characters"""
+        md_text = '''\
+* *Italic item*
+* **Bold item**
+* `Code item`
+'''
+        result = parseHtml(md_text)
+        self.assertIn('<li><em>Italic item</em></li>', result)
+        self.assertIn('<li><strong>Bold item</strong></li>', result)
+        self.assertIn('<li><code>Code item</code></li>', result)
+
+    def test_list_items_starting_with_underscores_strong(self):
+        """List items starting with underscore bolding"""
+        md_text = '''\
+* __Mon-Fri__: 8am-6pm
+* __Sat__: 8am-6pm
+* __Sun__: 8am-6pm
+'''
+        result = parseHtml(md_text)
+        self.assertIn('<li><strong>Mon-Fri</strong>: 8am-6pm</li>', result)
+        self.assertIn('<li><strong>Sun</strong>: 8am-6pm</li>', result)
+
 class TestCodeBlocksAdvanced(unittest.TestCase):
     """Tests for advanced code block features"""
     
