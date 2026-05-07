@@ -227,7 +227,7 @@ class MarkdownGrammar(dict):
         def image_link()       : return _(r'\['), _(r'!\['), 0, image_alt, _(r'\]'), _(r'\('), 0, space, image_url, 0, (space, image_title), 0, space, _(r'\)'), _(r'\]'), _(r'\('), 0, space, link_url, 0, (space, link_title), 0, space, _(r'\)'), 0, attr_def
 
         # Buttons - syntax: ((Label|>url)), ((Label|>> url)), ((Label|/form-id or /action)), ((Label|$ js))
-        def button_label()    : return _(r'[^|\)]+')
+        def button_label()    : return _(r'(?:[^|)]|\)(?!\)))+')
         # Allow any content up until the closing '))' sequence (so JS with parens is permitted)
         def button_action()   : return _(r'(?:>>|>|/|\$)'), 0, _(r'.*(?=\)\))', re.S)
         def button()          : return _(r'\(\('), 0, button_label, 0, (_(r'\|\s*'), button_action), _(r'\)\)'), 0, attr_def
@@ -924,7 +924,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_button(self, node: Symbol) -> str:
         if label := (node.find('button_label')):
-            label = label.text.strip()
+            label = self.parse_markdown(label.text.strip(), 'text').strip()
             action_node = node.find('button_action')
             action = action_node.text.strip() if action_node else None
 

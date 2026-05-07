@@ -1285,6 +1285,11 @@ class TestButtonsHTML(unittest.TestCase):
         expected = '<p>Please click <form action="https://example.com" method="get"><button type="submit">here</button></form> to proceed.</p>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_button_linked_image_with_text(self):
+        md_text = "((![muffin icon](muffin_white.svg) PLACE AN ORDER|>contact-us.html))"
+        expected = '<p><form action="contact-us.html" method="get"><button type="submit"><img alt="muffin icon" src="images/muffin_white.svg"/> PLACE AN ORDER</button></form></p>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
     def test_button_link_mixed_into_complex_multiline_content(self):
         md_text = '''\
 Welcome to the place!
