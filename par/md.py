@@ -99,6 +99,10 @@ class MarkdownGrammar(dict):
         #def words()            : return word, -1, [space, word]
         def words(ig=r'(?!)')  : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
         def text()             : return 0, space, -2, words
+        # inline_text: like text but excludes raw_url/email auto-linking (can't nest <a> inside <a>)
+        def inline_word()      : return [x for x in word() if x not in (raw_url, email_address)]
+        def inline_words(ig=r'(?!)') : return inline_word, -1, [space, ignore(ig), inline_word]
+        def inline_text()      : return 0, space, -2, inline_words
         def paragraph()        : return text, -1, [space, text], blanklines
         
         def directive_name()   : return _(r'\w+')
@@ -496,7 +500,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('dl', enclose=3)
 
     def visit_dl_dt(self, node: Symbol) -> str:
-        return self.tag('dt', self.visit(node).strip(), enclose=2, newline=True)
+        return self.tag('dt', self.parse_markdown(node.text.strip(':| \t'), 'inline_text').strip(), enclose=2, newline=True)
 
     def visit_dl_dd(self, node: Symbol) -> str:
         description_nodes = node.find_all('dl_dd_content')
@@ -616,7 +620,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         attrib = node.find("quote_name")
         atrdat = node.find("quote_date")
         if attrib:
-            result = f"{result} &mdash; {self.tag('i', attrib.text, _class='quote-attrib')}"
+            result = f"{result} &mdash; {self.tag('i', self.parse_markdown(attrib.text, 'inline_text').strip(), _class='quote-attrib')}"
         if atrdat:
             result = result + self.tag('span', self.tag("span", atrdat.text, _class='text-date'), _class='quote-timeplace')
         return self.tag('blockquote', result.strip())
@@ -883,7 +887,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (url_node := node.find('link_url')):
             return self.tag('a', "Malformed link")
         
-        text = (text_node.text if (text_node := node.find('link_text')) else url_node.text)
+        raw = (text_node.text if (text_node := node.find('link_text')) else url_node.text)
+        text = self.parse_markdown(raw, 'inline_text').strip()
         url = url_node.text
         title = (self._extract_title(title_node.text) if (title_node := node.find('link_title')) else None)
 
@@ -902,7 +907,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (text_node := node.find('link_text')):
             return node.text
         
-        text = text_node.text
+        text = self.parse_markdown(text_node.text, 'inline_text').strip()
         label = (label_node.text.lower() 
                 if (label_node := node.find('link_label')) and label_node.text 
                 else text.lower())
@@ -916,15 +921,15 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not (text_node := node.find('link_text')):
             return node.text
 
-        text = text_node.text
-        if not (ref := self.resources.link_references.get(text.lower())):
+        text = self.parse_markdown(text_node.text, 'inline_text').strip()
+        if not (ref := self.resources.link_references.get(text_node.text.lower())):
             return node.text
 
         return self._render_link(ref['url'], text, ref.get('title'))
 
     def visit_button(self, node: Symbol) -> str:
         if label := (node.find('button_label')):
-            label = self.parse_markdown(label.text.strip(), 'text').strip()
+            label = self.parse_markdown(label.text.strip(), 'inline_text').strip()
             action_node = node.find('button_action')
             action = action_node.text.strip() if action_node else None
 
@@ -1012,7 +1017,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     
     def visit_input_elem(self, node: Symbol) -> str:
         """Handle input elements: [Label: >type___*]"""
-        label = (label_node.text.strip() if (label_node := node.find('input_label')) else '')
+        label = self.parse_markdown(label_node.text.strip(), 'inline_text').strip() if (label_node := node.find('input_label')) else ''
         
         # Determine input type from type modifier
         type_mod = (mod_node.text if (mod_node := node.find('input_type_mod')) else '')
@@ -1075,7 +1080,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_output_elem(self, node: Symbol) -> str:
         """Handle output elements: [Label <___]"""
-        label = (label_node.text.strip() if (label_node := node.find('input_label')) else '')
+        label = self.parse_markdown(label_node.text.strip(), 'inline_text').strip() if (label_node := node.find('input_label')) else ''
         
         # Extract attributes
         attrs = self._extract_attrs(node)
@@ -1096,7 +1101,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_wiki_link(self, node: Symbol) -> str:
         page   = (page_node.text   if   (page_node := node.find('wiki_link_page')) else '')
         anchor = (anchor_node.text if (anchor_node := node.find('wiki_link_anchor')) else '')
-        text   = (text_node.text   if   (text_node := node.find('wiki_link_text')) else page)
+        raw    = (text_node.text   if   (text_node := node.find('wiki_link_text')) else page)
+        text   = self.parse_markdown(raw, 'inline_text').strip() if raw else page
         
         url = (page.lower().replace(' ', '-') + '.html' + anchor) if page else anchor
         
