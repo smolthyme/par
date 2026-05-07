@@ -232,8 +232,8 @@ class MarkdownGrammar(dict):
 
         # Buttons - syntax: ((Label|>url)), ((Label|>> url)), ((Label|/form-id or /action)), ((Label|$ js))
         def button_label()    : return _(r'(?:[^|)]|\)(?!\)))+')
-        # Allow any content up until the closing '))' sequence (so JS with parens is permitted)
-        def button_action()   : return _(r'(?:>>|>|/|\$)'), 0, _(r'.*(?=\)\))', re.S)
+        # Match marker + balanced content: non-parens OR complete (...) pairs. This allows natural JS like alert("ok")
+        def button_action()   : return _(r'(?:>>|>|/|\$)(?:[^()]|\([^)]*\))*', re.S)
         def button()          : return _(r'\(\('), 0, button_label, 0, (_(r'\|\s*'), button_action), _(r'\)\)'), 0, attr_def
 
         # Wiki-style links (wiki_link_text uses shared bracketed_text)
