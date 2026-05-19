@@ -429,7 +429,7 @@ class TestLinksAndImagesAdvanced(unittest.TestCase):
 
 [img1]: http://example.com/image.jpg "Image Title"
 '''
-        expected = '<p><img alt="Alt text" src="http://example.com/image.jpg" title="Image Title"></img></p>'
+        expected = '<p><img alt="Alt text" src="http://example.com/image.jpg" title="Image Title"/></p>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_reference_style_image_no_title(self):

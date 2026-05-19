@@ -74,6 +74,16 @@ class HTMLVisitor(SimpleVisitor):
     
     def __init__(self, grammar: dict | None = None, tag_class: dict[str, str] | None = None) -> None:
         super(HTMLVisitor, self).__init__(grammar)
+
+    @staticmethod
+    def _escape_attr_value(value) -> str:
+        return (
+            str(value)
+            .replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+            .replace('"', '&quot;')
+        )
     
     def tag(self, tag: str, child='', attrs='', enclose=0, newline=True, **kwargs) -> str:
         """HTML tag generator
@@ -95,7 +105,11 @@ class HTMLVisitor(SimpleVisitor):
         else:
             kw['class'] = _class
 
-        kwattrs = ' '.join(x if y is True else f'{x}="{y}"' for x, y in sorted(kw.items()) if y)
+        kwattrs = ' '.join(
+            x if y is True else f'{x}="{self._escape_attr_value(y)}"'
+            for x, y in sorted(kw.items())
+            if y
+        )
         kwattrs = f' {kwattrs}{f" {attrs}" if attrs != '' else ""}' if kwattrs else attrs
         nline = '\n' if newline else ''
         enclose = 2 if child else enclose

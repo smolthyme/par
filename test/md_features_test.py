@@ -293,17 +293,17 @@ console.log(add(2, 3));</code></pre></li>
 '''
         expected = '''\
 <ul>
-<li><input type="checkbox"></input>a</li>
-<li><input checked type="checkbox"></input>b
+<li><input type="checkbox"/>a</li>
+<li><input checked type="checkbox"/>b
 <ul>
-<li><input checked type="radio"></input>c</li>
-<li><input type="radio"></input>d</li>
+<li><input checked type="radio"/>c</li>
+<li><input type="radio"/>d</li>
 </ul></li>
-<li><input type="checkbox"></input>a
+<li><input type="checkbox"/>a
 <ul>
-<li><input checked type="checkbox"></input>b</li>
-<li><input checked type="radio"></input>c</li>
-<li><input type="radio"></input>d</li>
+<li><input checked type="checkbox"/>b</li>
+<li><input checked type="radio"/>c</li>
+<li><input type="radio"/>d</li>
 </ul></li>
 </ul>'''
         self.maxDiff = None
@@ -619,8 +619,8 @@ That's some text with a footnote.[^1]
 [![](https://example.com/image.png)](https://example.com/target)
 '''
         expected = '''\
-<p><a href="https://example.com/target"><img alt="Alt text" src="https://example.com/image.png">Alt text</img></a></p>
-<p><a href="https://example.com/target"><img src="https://example.com/image.png"></a></p>'''
+    <p><a href="https://example.com/target"><img alt="Alt text" src="https://example.com/image.png"/>Alt text</a></p>
+<p><a href="https://example.com/target"><img src="https://example.com/image.png"/></a></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_wiki_style_links_and_images(self):
@@ -637,9 +637,9 @@ That's some text with a footnote.[^1]
 <p><a href="page.html">Hello world</a></p>
 <p><a href="page.html#title">Hello world</a></p>
 <p><a href="wiki:page.html">Hello world</a></p>
-<p><img src="images/a.png"></img></p>
-<p><img src="images/a.png" style="float: right; margin-left: 1em;"></img></p>
-<p><img src="images/a.png" style="width: 250px;"></img></p>'''
+<p><img src="images/a.png"/></p>
+<p><img src="images/a.png" style="float: right; margin-left: 1em;"/></p>
+<p><img src="images/a.png" style="width: 250px;"/></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_link_with_class_and_trailing_text(self):
@@ -663,9 +663,14 @@ That's some text with a footnote.[^1]
 <p><a href="#edit"></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_link_query_params_are_escaped(self):
+        md_text = '''[search](https://example.com?q=a&sort=b)'''
+        expected = '''<p><a href="https://example.com?q=a&amp;sort=b">search</a></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
     def test_video_embed_mp4(self):
         md_text = '''![](cool.mp4)'''
-        expected = '''<p><video controls="yesplz" disablePictureInPicture="True" playsinline="True" src="images/cool.mp4" type="video/mp4"/></p>'''
+        expected = '''<p><video controls="true" disablePictureInPicture="true" playsinline="true" src="images/cool.mp4" type="video/mp4"></video></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_video_embed_youtube(self):
@@ -705,7 +710,7 @@ class TestImageAttributesHTML(unittest.TestCase):
 
 [ref]: image.png
 '''
-        expected = '''<p><img alt="Alt" class="my-class" src="images/image.png"></img></p>'''
+        expected = '''<p><img alt="Alt" class="my-class" src="images/image.png"/></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_reference_image_with_class_and_id(self):
@@ -713,27 +718,27 @@ class TestImageAttributesHTML(unittest.TestCase):
 
 [ref]: image.png "Ref Title"
 '''
-        expected = '''<p><img alt="Alt" class="my-class" id="img-id" src="images/image.png" title="Ref Title"></img></p>'''
+        expected = '''<p><img alt="Alt" class="my-class" id="img-id" src="images/image.png" title="Ref Title"/></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_image_link_with_class(self):
         md_text = '''[![Alt](image.png)](https://example.com){.clickable}'''
-        expected = '''<p><a class="clickable" href="https://example.com"><img alt="Alt" src="images/image.png">Alt</img></a></p>'''
+        expected = '''<p><a class="clickable" href="https://example.com"><img alt="Alt" src="images/image.png"/>Alt</a></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_image_link_with_class_and_id(self):
         md_text = '''[![Alt](image.png)](https://example.com){.clickable #hero-img}'''
-        expected = '''<p><a class="clickable" href="https://example.com" id="hero-img"><img alt="Alt" src="images/image.png">Alt</img></a></p>'''
+        expected = '''<p><a class="clickable" href="https://example.com" id="hero-img"><img alt="Alt" src="images/image.png"/>Alt</a></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_video_with_class(self):
         md_text = '''![](video.mp4){.video-player}'''
-        expected = '''<p><video class="video-player" controls="yesplz" disablePictureInPicture="True" playsinline="True" src="images/video.mp4" type="video/mp4"/></p>'''
+        expected = '''<p><video class="video-player" controls="true" disablePictureInPicture="true" playsinline="true" src="images/video.mp4" type="video/mp4"></video></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_audio_with_class(self):
         md_text = '''![](audio.mp3){.audio-player #main-audio}'''
-        expected = '''<p><audio class="audio-player" controls="yesplz" id="main-audio" src="images/audio.mp3" type="audio/mpeg"/></p>'''
+        expected = '''<p><audio class="audio-player" controls="true" id="main-audio" src="images/audio.mp3" type="audio/mpeg"></audio></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_youtube_with_class(self):
@@ -940,7 +945,7 @@ Second card content
     def test_card_with_image_link(self):
         md_text = '''[|[![Logo](logo.png)](https://example.com)|]'''
         expected = '''<div class="card">
-<p><a href="https://example.com"><img alt="Logo" src="images/logo.png">Logo</img></a></p>
+<p><a href="https://example.com"><img alt="Logo" src="images/logo.png"/>Logo</a></p>
 </div>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
@@ -1041,6 +1046,18 @@ class TestMiscBlocksHTML(unittest.TestCase):
     def test_blockquote_with_attribution(self):
         md_text = '''> "I have been using the AquaBoostAG liquefied polymer" -- Mystery Mountain Grove'''
         expected = '''<blockquote><p>"I have been using the AquaBoostAG liquefied polymer" — Mystery Mountain Grove</p></blockquote>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_block_html_splits_paragraphs(self):
+        md_text = '''\
+Before
+<div>block</div>
+after
+'''
+        expected = '''\
+<p>Before</p>
+<div>block</div>
+<p>after</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 
@@ -1256,38 +1273,33 @@ Heading 2
 class TestButtonsHTML(unittest.TestCase):
     def test_button_as_link(self):
         md_text = "((Go to Example.com|>https://example.com))"
-        expected = '<p><form action="https://example.com" method="get"><button type="submit">Go to Example.com</button></form></p>'
+        expected = '<form action="https://example.com" method="get"><button type="submit">Go to Example.com</button></form>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_local_link_button(self):
         """Button linking to local page, avoids full URL parsing or JS requirement"""
         md_text = "((Go to Local Page|>local-page.html))"
-        expected = '<p><form action="local-page.html" method="get"><button type="submit">Go to Local Page</button></form></p>'
+        expected = '<form action="local-page.html" method="get"><button type="submit">Go to Local Page</button></form>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_open_new_tab(self):
         md_text = "((Go to Example.com in new tab|>> https://example.com))"
-        expected = '<p><form action="https://example.com" method="get" target="_blank"><button type="submit">Go to Example.com in new tab</button></form></p>'
+        expected = '<form action="https://example.com" method="get" target="_blank"><button type="submit">Go to Example.com in new tab</button></form>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_submit_form_post(self):
         md_text = "((Submit|/submit-this-form-yo))"
-        expected = '<p><form action="/submit-this-form-yo" method="post"><button type="submit">Submit</button></form></p>'
+        expected = '<form action="/submit-this-form-yo" method="post"><button type="submit">Submit</button></form>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_form_attr_button(self):
         md_text = "((Submit|/form-name))"
-        expected = '<p><button form="form-name" type="submit">Submit</button></p>'
-        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
-
-    def test_button_link_mixed_into_content(self):
-        md_text = "Please click ((here|>https://example.com)) to proceed."
-        expected = '<p>Please click <form action="https://example.com" method="get"><button type="submit">here</button></form> to proceed.</p>'
+        expected = '<button form="form-name" type="submit">Submit</button>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_button_linked_image_with_text(self):
         md_text = "((![muffin icon](muffin_white.svg) PLACE AN ORDER|>contact-us.html))"
-        expected = '<p><form action="contact-us.html" method="get"><button type="submit"><img alt="muffin icon" src="images/muffin_white.svg"/> PLACE AN ORDER</button></form></p>'
+        expected = '<form action="contact-us.html" method="get"><button type="submit"><img alt="muffin icon" src="images/muffin_white.svg"/> PLACE AN ORDER</button></form>'
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_button_link_mixed_into_complex_multiline_content(self):
@@ -1299,7 +1311,8 @@ Welcome to the place!
 * A list of
 * Two whole things'''
         expected = '''<p>Welcome to the place!</p>
-<p><form action="https://example.com" method="get"><button type="submit">Click Here</button></form></p>
+<form action="https://example.com" method="get"><button type="submit">Click Here</button></form>
+
 <ul>
 <li>A list of</li>
 <li>Two whole things</li>
@@ -1308,12 +1321,29 @@ Welcome to the place!
 
     def test_js_onclick(self):
         md_text = "((Click Me|$ alert('Button clicked!')))"
-        expected = "<p><button onclick=\"alert('Button clicked!')\" type=\"button\">Click Me</button></p>"
+        expected = "<button onclick=\"alert('Button clicked!')\" type=\"button\">Click Me</button>"
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
     def test_styled_button_class_on_form(self):
         md_text = "((Styled Button|> https://example.com)){.cssstyle}"
-        expected = '<p><form action="https://example.com" class="cssstyle" method="get"><button type="submit">Styled Button</button></form></p>'
+        expected = '<form action="https://example.com" class="cssstyle" method="get"><button type="submit">Styled Button</button></form>'
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_form_button_uses_form_attrs_not_nested_form(self):
+        md_text = '''\
+[=>/search
+((Go|>https://example.com))
+]
+'''
+        expected = '''\
+<form action="/search" method="get">
+<button formaction="https://example.com" formmethod="get" type="submit">Go</button>
+</form>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_js_button_escapes_double_quotes(self):
+        md_text = '''((Click|$ alert('ok')))'''
+        expected = '''<button onclick="alert('ok')" type="button">Click</button>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 

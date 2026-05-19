@@ -73,7 +73,7 @@ class MarkdownGrammar(dict):
 
 
         def htmlentity()       : return _(r'&\w+;')
-        def escaped_string()    : return _(r'\\'), _(r'.')
+        def escaped_string()   : return _(r'\\'), _(r'.')
         def string()           : return _(r'[^\\\*\^~ \t\r\n`,<\[\],]+')
         def punctuation()      : return _(r'[,:;.!?()<>~]+')
         
@@ -93,7 +93,7 @@ class MarkdownGrammar(dict):
         
         ## embedded html
         def html_block()       : return _(r'<(table|thead|tbody|tr|th|td|pre|div|p|ul|ol|li|h1|h2|h3|h4|h5|h6|blockquote|code|iframe|section|dl|dt|dd|form|label|textarea|output|button|video|audio|object)\b[^>]*?>[\s\S]*?</\1>', re.I|re.DOTALL)
-        def html_inline()      : return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input)\b[^>]*?>[^<]*?<(/\1)>|<(img|br|hr).*?/>', re.I|re.DOTALL)
+        def html_inline()      : return _(r'<(span|del|font|a|b|code|i|em|strong|sub|sup|input)\b[^>]*?>[^<]*?<(/\1)>|<(img|br|hr|input)\b.*?/>', re.I|re.DOTALL)
         def html_comment()     : return _(r'<!--.*?-->', re.DOTALL)
         
         #def words()            : return word, -1, [space, word]
@@ -271,7 +271,7 @@ class MarkdownGrammar(dict):
         def word()             : return [
                 escaped_string, html_block, html_inline,footnote,
                 # Links and images (before formatting)
-                image_link, button, input_elem, output_elem, inline_image, reference_image, wiki_image,
+                image_link, input_elem, output_elem, inline_image, reference_image, wiki_image,
                 inline_link, reference_link, shortcut_reference_link, wiki_link,
                 raw_url, email_address,
                 # Formatting
@@ -284,7 +284,7 @@ class MarkdownGrammar(dict):
         def content(): return -2, [blankline,
                 link_reference,
                 hr, directive,
-                pre, html_comment, html_block, lists, form,
+                pre, html_comment, html_block, lists, form, button,
                 card, side_block, table, dl, blockquote, footnote_desc,
                 title, paragraph ]
         
@@ -326,6 +326,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         self.resources   = resources if resources is not None else ResourceStore()
         self._current_section_level = None
         self._title_id_begin_level: int | None = 1
+        self._form_stack: list[dict[str, str]] = []
     
     def visit(self, nodes, root=False) -> str:
         if root and nodes and isinstance(nodes, (list, tuple)) and len(nodes) > 0:
@@ -456,7 +457,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return ''
 
     def visit_check_radio(self, node: Symbol) -> str:
-        return self.tag('input', '',  newline=False, enclose=2,
+        return self.tag('input', '',  newline=False, enclose=1,
             checked=node.text[1] in ['x', 'X', '*'],
             type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else '' )
 
@@ -848,20 +849,20 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         elif media_type == 'video':
             self.resources.videos.append(url)
             src = self._prefix_local_image(url)
-            return self.tag('video', controls="yesplz", disablePictureInPicture="True", 
-                            playsinline="True", src=src, type=f'video/{meta}', enclose=enclose, _class=_class, _id=_id)
+            return self.tag('video', controls='true', disablePictureInPicture='true', 
+                            playsinline='true', src=src, type=f'video/{meta}', enclose=2, _class=_class, _id=_id)
         
         elif media_type == 'audio':
             self.resources.audios.append(url)
             src = self._prefix_local_image(url)
             mime = 'audio/mpeg' if meta == 'mp3' else f'audio/{meta}'
-            return self.tag('audio', controls="yesplz", src=src, type=mime, enclose=enclose, _class=_class, _id=_id)
+            return self.tag('audio', controls='true', src=src, type=mime, enclose=2, _class=_class, _id=_id)
             
             
         else: # Image
             self.resources.images.append(url)
             src = self._prefix_local_image(url)
-            return self.tag('img', content, src=src, alt=alt, title=title, style=style, enclose=enclose, newline=False, _class=_class, _id=_id)
+            return self.tag('img', '', src=src, alt=alt, title=title, style=style, enclose=1, newline=False, _class=_class, _id=_id)
 
     def _render_link(self, url: str, text: str, title: str | None = None) -> str:
         """Unified link rendering logic"""
@@ -954,6 +955,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if not self._is_safe_url(url):
                     return node.text
                 target = '_blank' if marker == '>>' else None
+                if self._form_stack:
+                    return self.tag('button', label,
+                        type='submit', formaction=url, formmethod='get', formtarget=target,
+                        _class=cls_str, _id=_id)
                 # Render a small form that contains a button performing a GET
                 return self.tag( 'form',
                     self.tag('button', label, type='submit', newline=False),
@@ -962,6 +967,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             # Slash-prefixed: form action (POST) if 'submit' in path, otherwise a button referencing form id
             if marker == '/':
                 if 'submit' in action.lower():
+                    if self._form_stack:
+                        return self.tag('button', label,
+                            type='submit', formaction=action, formmethod='post',
+                            _class=cls_str, _id=_id)
                     return self.tag( 'form',
                         self.tag('button', label, type='submit', newline=False),
                         action=action, method='post', newline=False, **attrs)
@@ -991,7 +1000,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         # Parse content using grammar-driven repeated 'form_content' to avoid paragraph wrapping
         # Use a direct pattern tuple (-1, form_content) so we parse multiple form_content entries
         # Render each `form_content` node directly so inputs/buttons are preserved
-        parsed_content = ''.join([self.visit(c) for c in content_nodes]).strip()
+        self._form_stack.append({'type': form_type_text, 'action': action})
+        try:
+            parsed_content = ''.join([self.visit(c) for c in content_nodes]).strip()
+        finally:
+            self._form_stack.pop()
 
         match form_type_text:
             case '&>':
@@ -1118,7 +1131,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return url
 
     def visit_image_link(self, node: Symbol) -> str:
-        """Handle [![alt](image-url)](link-url) syntax - generates <a><img/></a>"""
+        """Handle [![alt](image-url)](link-url) syntax - generates <a><img/>alt</a>."""
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else None)
         
         # Extract image URL and title
@@ -1139,10 +1152,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         img_tag = self._render_media(image_url, alt or "", image_title, enclose=0, content=alt or "")
+        link_text = self.parse_markdown(alt, 'inline_text').strip() if alt else ''
         
         attrs = self._extract_attrs(node)
         self.resources.links_ext.append(link_url)
-        return self.tag('a', img_tag, href=link_url, title=link_title, newline=False, **attrs)
+        return self.tag('a', f"{img_tag}{link_text}", href=link_url, title=link_title, newline=False, **attrs)
 
     # Image visitors
     def visit_inline_image(self, node: Symbol) -> str:
