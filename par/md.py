@@ -171,7 +171,7 @@ class MarkdownGrammar(dict):
         def bullet_list_item() : return 0, _(r' {1,4}'), _(r'[\*\+\-]'), space, list_content
         def bullet_list_item_empty() : return 0, _(r' {1,4}'), _(r'[\*\+\-]'), 0, space, blankline
         def number_list_item() : return 0, _(r' {1,4}'), _(r'\d+\.'), space, list_content
-        def lists()            : return -2, [bullet_list_item, bullet_list_item_empty, number_list_item], -1, blankline
+        def lists()            : return -2, [bullet_list_item, bullet_list_item_empty, number_list_item], 0, attr_def
         
         ## Definition Lists
         def dl_dt()            : return _(r"^(?!=\s*[\*\d])"), -2, words(ig=r'--\B'), 0, _(r'--'), blankline
@@ -389,6 +389,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if a := node.find('words'):
             return self.visit(a)
         return node.text.strip(strip_chars)
+
+    def visit_attr_def(self, node: Symbol) -> str:
+        return ''
     
     def visit_string(self, node: Symbol) -> str:
         escaped = self.to_html_charcodes(node.text)
@@ -462,6 +465,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             type='checkbox' if node.text[0] == '[' else 'radio' if node.text[0] == '<' else '' )
 
     def visit_lists_end(self, node: Symbol) -> str:
+        attrs = self._extract_attrs(node)
+
         def process_node(n):
             if n is None:
                 return ''
@@ -485,7 +490,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     if parent:
                         l_items.append(self.tag(parent, enclose=3))
                     parent = 'ul' if _type == 'b' else 'ol'
-                    l_items.append(self.tag(parent))
+                    l_items.append(self.tag(parent, **(attrs if not l_items and attrs else {})))
                     l_items.append(self.tag('li', process_node(_node)))
                     old = _type
             if len(l_items) > 0 and parent:

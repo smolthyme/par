@@ -137,6 +137,42 @@ class TestListsSimpleHTML(unittest.TestCase):
 </ul>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_unordered_list_with_id_and_class(self):
+        md_text = '''\
+* Todo
+* Done
+{#checklist .task-list}
+'''
+        expected = '''\
+<ul class="task-list" id="checklist">
+<li>Todo</li>
+<li>Done</li>
+</ul>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_unordered_list_with_class(self):
+        md_text = '''\
+* Item 1
+* Item 2
+{.highlight}'''
+        expected = '''\
+<ul class="highlight">
+<li>Item 1</li>
+<li>Item 2</li>
+</ul>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_ordered_list_with_data_attribute(self):
+        md_text = '''\
+1. Step one
+2. Step two
+{data-steps=2}'''
+        expected = '''\
+<ol data-steps="2">
+<li>Step one</li>
+<li>Step two</li>
+</ol>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
 class TestListsComplexHTML(unittest.TestCase):
     def test_complex_nested_lists(self):
