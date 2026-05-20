@@ -220,7 +220,8 @@ class ASTNode:
         seen: set[int] | None = None,
         depth: int = 0,
         line_for_offset: Callable[[int | None], int | None] | None = None,
-    ) -> ASTNode:
+        include_text_leaves: bool = True,
+    ) -> ASTNode | None:
         """Convert a pyPEG Symbol tree to ASTNode, deriving line numbers from offsets."""
         if seen is None:
             seen = set()
@@ -228,6 +229,8 @@ class ASTNode:
         # Plain string without pyPEG metadata (handle before cycle checks,
         # otherwise interned/reused strings may be incorrectly flagged as cycles).
         if isinstance(symbol, str):
+            if not include_text_leaves:
+                return None
             truncated = (symbol[:60] + "…") if len(symbol) > 60 else symbol
             return ASTNode("text", text=truncated, node_type=NodeType.TEXT)
 
@@ -257,8 +260,10 @@ class ASTNode:
                     seen=seen,
                     depth=depth + 1,
                     line_for_offset=line_for_offset,
+                    include_text_leaves=include_text_leaves,
                 )
-                node.add_child(child_node)
+                if child_node is not None:
+                    node.add_child(child_node)
 
             return node
 
@@ -282,8 +287,38 @@ class ASTNode:
                     seen=seen,
                     depth=depth + 1,
                     line_for_offset=line_for_offset,
+                    include_text_leaves=include_text_leaves,
                 )
-                node.add_child(child_node)
+                if child_node is not None:
+                    node.add_child(child_node)
+
+        return node
+
+    @staticmethod
+    def collapse_single_child_symbol_chains(node: ASTNode) -> ASTNode:
+        """Collapse linear Symbol->Symbol chains in-place for a denser tree display."""
+        for i, child in enumerate(node.children):
+            node.children[i] = ASTNode.collapse_single_child_symbol_chains(child)
+            node.children[i].parent = node
+
+        while len(node.children) == 1:
+            child = node.children[0]
+            if node.node_type != NodeType.SYMBOL or child.node_type != NodeType.SYMBOL:
+                break
+
+            node.name = f"{node.name}/{child.name}"
+
+            # Preserve the broader parent text where available, otherwise inherit.
+            if not node.text and child.text:
+                node.text = child.text
+
+            # Prefer the existing line marker, otherwise inherit child line.
+            if node.line is None:
+                node.line = child.line
+
+            node.children = child.children
+            for grandchild in node.children:
+                grandchild.parent = node
 
         return node
 
@@ -448,6 +483,9 @@ class OutputPanel(urwid.WidgetPlaceholder):
 
     def __init__(self) -> None:
         self._tree_view: ASTTreeListBox = ASTTreeListBox()
+        # Default to compact, high-signal AST rendering.
+        self._hide_text_leaves = True
+        self._collapse_symbol_chains = True
         # Two possible views: 'ast' (navigable AST tree) and 'html' (rendered output the Visitor, e.g. HTML for Markdown
         self._render_widget = urwid.Text("", wrap="any")
         self._render_view = urwid.ListBox(urwid.SimpleFocusListWalker([self._render_widget]))
@@ -487,7 +525,10 @@ class OutputPanel(urwid.WidgetPlaceholder):
                 root = ASTNode.from_pyPEG(
                     ast,
                     line_for_offset=self._build_line_lookup(source_text),
+                    include_text_leaves=not self._hide_text_leaves,
                 )
+                if root and self._collapse_symbol_chains:
+                    root = ASTNode.collapse_single_child_symbol_chains(root)
                 self._tree_view.set_root(root)
             except Exception:
                 self._tree_view.set_root(None)
