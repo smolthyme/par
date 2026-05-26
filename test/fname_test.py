@@ -2,7 +2,7 @@ import unittest
 
 from par.filoname import get_filename_parts
 
-test_cases = {
+BASE_TEST_CASES = {
     '^. The first item {cool=yes}.html': {
         'title': 'The first item',
         'sort' : '^.',
@@ -34,6 +34,16 @@ test_cases = {
 }
 
 
+class FileNameParsingTests(unittest.TestCase):
+    def test_existing_filename_examples(self):
+        for filename, expected in BASE_TEST_CASES.items():
+            with self.subTest(filename=filename):
+                parts = get_filename_parts(filename)
+
+                for attr, exp_val in expected.items():
+                    self.assertEqual(getattr(parts, attr), exp_val)
+
+
 class FileNameMetaParsingTests(unittest.TestCase):
     def test_meta_value_can_contain_dots(self):
         parts = get_filename_parts('Testi {hero=banner.jpg,hammer=one}.md.txt')
@@ -42,32 +52,37 @@ class FileNameMetaParsingTests(unittest.TestCase):
         self.assertEqual(parts.meta, {'hero': 'banner.jpg', 'hammer': 'one'})
         self.assertEqual(parts.exts, 'md.txt')
 
-class termfont:
-    # foreground              # background              # end/reset
-    fg_black    = '\033[30m'; bg_black    = '\033[40m'; endc         = '\033[0m'   
-    fg_red      = '\033[31m'; bg_red      = '\033[41m'; 
-    fg_green    = '\033[32m'; bg_green    = '\033[42m'; # effects 
-    fg_orange   = '\033[33m'; bg_orange   = '\033[43m'; ef_bold      = '\033[1m'   # 'bright'?
-    fg_blue     = '\033[34m'; bg_blue     = '\033[44m'; ef_dim       = '\033[2m'
-    fg_magenta  = '\033[35m'; bg_magenta  = '\033[45m'; ef_underline = '\033[4m'
-    fg_cyan     = '\033[36m'; bg_cyan     = '\033[46m'; ef_flash     = '\033[5m'
-    fg_white    = '\033[37m'; bg_white    = '\033[47m'; ef_highlight = '\033[7m'
 
-    fg_default  = '\033[39m'; bg_default  = '\033[49m'; ef_default   = '\033[22m'  # test?
+class FileNameCssSelectorParsingTests(unittest.TestCase):
+    def test_selector_style_titles_round_trip_cleanly(self):
+        cases = {
+            '.hero.svg': {'title': '.hero', 'exts': 'svg'},
+            '.hero.banner.svg': {'title': '.hero.banner', 'exts': 'svg'},
+            '.hero-banner.is-active.svg': {'title': '.hero-banner.is-active', 'exts': 'svg'},
+            '#app.main-shell.svg': {'title': '#app.main-shell', 'exts': 'svg'},
+            '.layout .hero-block.svg': {'title': '.layout .hero-block', 'exts': 'svg'},
+            '.gallery+.caption.svg': {'title': '.gallery+.caption', 'exts': 'svg'},
+            '.hero~.note-card.svg': {'title': '.hero~.note-card', 'exts': 'svg'},
+            '.hero {display=flex}.svg': {'title': '.hero', 'meta': {'display': 'flex'}, 'exts': 'svg'},
+        }
 
-total_issues = 0
-for filename, expected in test_cases.items():
-    parts = get_filename_parts(filename)
-    mismatches = []
-    for attr, exp_val in expected.items():
-        actual_val = getattr(parts, attr)
-        if actual_val != exp_val:
-            mismatches.append(f"{termfont.fg_orange}{attr:6}{termfont.endc}: got {termfont.fg_red}{actual_val!r}{termfont.endc}, expected {termfont.fg_green}{exp_val!r}{termfont.endc}")
-    if mismatches:
-        print(f'{termfont.ef_dim}Filename{termfont.endc}: "{termfont.ef_bold}{filename}{termfont.endc}"')
-        for mismatch in mismatches:
-            print(mismatch)
-        print(f"{' '*10} {'-'*10} {' '*10}")
-        total_issues = total_issues + len(mismatches)
+        for filename, expected in cases.items():
+            with self.subTest(filename=filename):
+                parts = get_filename_parts(filename)
 
-print(f"{termfont.fg_blue}Total issues found: {total_issues}{termfont.endc}")
+                self.assertEqual(parts.title, expected['title'])
+                self.assertEqual(parts.exts, expected['exts'])
+                self.assertEqual(parts.meta, expected.get('meta', {}))
+
+    def test_hashtag_tags_still_parse_after_selector_expansion(self):
+        parts = get_filename_parts('small_wall #carousel.jpg')
+
+        self.assertEqual(parts.title, 'small_wall')
+        self.assertEqual(parts.tags, ['carousel'])
+        self.assertEqual(parts.exts, 'jpg')
+
+    def test_ambiguous_bare_word_dotted_names_remain_conservative(self):
+        parts = get_filename_parts('main.hero.svg')
+
+        self.assertEqual(parts.title, 'main')
+        self.assertEqual(parts.exts, 'hero.svg')

@@ -99,7 +99,10 @@ class FilonameGrammar(dict):
         def title():
             # File title or CSS selector expression
             # Stop at: {, [, # which signify group, meta, tag
-            return [rx(r'[#\.][\w\-# ,\.]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|[\[\{]|/|$)'), rx(r"[^\{\[]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}\b|[\[\{\#]|/|$)")], 0, ws
+            return [
+                rx(r'[#\.][\w\-# ,\.\+~]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}(?:/|$)|[\[\{]|/|$)'),
+                rx(r"[^\{\[]+?(?=(?:\.[a-zA-Z\d]{2,5}){1,2}(?:/|$)|[\[\{\#]|/|$)")
+            ], 0, ws
 
         # Tag: #tag
         def tag(): return word
