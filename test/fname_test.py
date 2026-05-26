@@ -1,3 +1,5 @@
+import unittest
+
 from par.filoname import get_filename_parts
 
 test_cases = {
@@ -30,6 +32,15 @@ test_cases = {
     '_. Company [pages]/': {'title': 'Company', 'sort': '_.', 'group': 'pages'},
     '_. Last item {cool=false}.dj.html': {'title': 'Last item','sort': '_.', 'meta': {'cool': 'false'},'exts': 'dj.html'}
 }
+
+
+class FileNameMetaParsingTests(unittest.TestCase):
+    def test_meta_value_can_contain_dots(self):
+        parts = get_filename_parts('Testi {hero=banner.jpg,hammer=one}.md.txt')
+
+        self.assertEqual(parts.title, 'Testi')
+        self.assertEqual(parts.meta, {'hero': 'banner.jpg', 'hammer': 'one'})
+        self.assertEqual(parts.exts, 'md.txt')
 
 class termfont:
     # foreground              # background              # end/reset

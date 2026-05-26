@@ -111,7 +111,8 @@ class FilonameGrammar(dict):
 
         # Meta: {key=val}
         def key(): return word
-        def key_n_val(): return key, ig(r'\s*[=:]\s*'), word, -1, ig(r"[,; ]")
+        def val(): return rx(r"[\w.\-']+")
+        def key_n_val(): return key, ig(r'\s*[=:]\s*'), val, -1, ig(r"[,; ]")
         def metas(): return ig(r"\{"), -1, [key_n_val, ws], ig(r"\}"), 0, ws
 
         # Extension: .ext or .ext.ext
