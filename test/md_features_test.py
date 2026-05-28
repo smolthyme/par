@@ -32,6 +32,11 @@ class TestFormattingSimpleHTML(unittest.TestCase):
         expected = '''<p>This is <code>inline code</code>.</p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_inline_code_with_form_markers(self):
+        md_text = '''Use `[*= result.value=a.value*2]` and `[Name: >___*]` literally.'''
+        expected = '''<p>Use <code>[*= result.value=a.value*2]</code> and <code>[Name: >___*]</code> literally.</p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
     def test_bold_and_code_text(self):
         md_text = '''This is **bold** and `code`.'''
         expected = '''<p>This is <strong>bold</strong> and <code>code</code>.</p>'''
@@ -159,6 +164,16 @@ class TestListsSimpleHTML(unittest.TestCase):
 <ul class="highlight">
 <li>Item 1</li>
 <li>Item 2</li>
+</ul>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_list_item_with_inline_code_markers(self):
+        md_text = '''\
+- Unexpected order: inspect numeric prefixes and special markers (`^`, `_`).
+'''
+        expected = '''\
+<ul>
+<li>Unexpected order: inspect numeric prefixes and special markers (<code>^</code>, <code>_</code>).</li>
 </ul>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 

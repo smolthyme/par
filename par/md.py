@@ -75,13 +75,13 @@ class MarkdownGrammar(dict):
         def htmlentity()       : return _(r'&\w+;')
         def escaped_string()   : return _(r'\\'), _(r'.')
         def string()           : return _(r'[^\\\*\^~ \t\r\n`,<\[\],]+')
-        def punctuation()      : return _(r'[,:;.!?()<>~]+')
+        def punctuation()      : return _(r'(?:[,:;.!?()~]+|<(?!/?[A-Za-z])|>(?!/?[A-Za-z]))')
         
         def fmt_bold()         : return _(r'\*\*'), words , _(r'\*\*')
         def fmt_italic()       : return _(r'\*'),   words , _(r'\*')
         def fmt_bold2()        : return _(r'(?<!\w)__(?![\s_])(.+?)__(?!\w)')
         def fmt_italic2()      : return _(r'(?<!\w)_(?![\s_])(.+?)_(?!\w)')
-        def fmt_code()         : return _(r'`'),    words , _(r'`')
+        def fmt_code()         : return _(r'`'), _(r'[^`\r\n]*'), _(r'`')
         def fmt_subscript()    : return _(r',,'), 0 ,space, words,  _(r',,')
         def fmt_superscript()  : return _(r'\^'), 0 ,space, words,  _(r'\^')
         def fmt_strikethrough(): return _(r'~~'), 0 ,space, words , _(r'~~')
@@ -99,7 +99,7 @@ class MarkdownGrammar(dict):
         #def words()            : return word, -1, [space, word]
         def words(ig=r'(?!)')  : return word, -1, [space, ignore(ig), word] # (?!) is a negative lookahead that never matches   
         def text()             : return 0, space, -2, words
-        # inline_text: like text but excludes raw_url/email auto-linking (can't nest <a> inside <a>)
+        # inline_text (used by name for post-parsing): like text but excludes raw_url/email auto-linking (can't nest <a> inside <a>)
         def inline_word()      : return [x for x in word() if x not in (raw_url, email_address)]
         def inline_words(ig=r'(?!)') : return inline_word, -1, [space, ignore(ig), inline_word]
         def inline_text()      : return 0, space, -2, inline_words
@@ -555,7 +555,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('code', newline=False)
     
     def visit_fmt_code(self, node: Symbol) -> str:
-        return self.fmt_tag(node, 'code', '`')
+        # Inline code is literal text: do not recurse into markdown parsing.
+        return node.text.strip('`')
 
     def visit_fmt_code_end(self, node: Symbol) -> str:
         return self.tag('code', enclose=3, newline=False)
