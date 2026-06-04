@@ -797,6 +797,11 @@ class TestImageAttributesHTML(unittest.TestCase):
         expected = '''<p><object class="yt-embed yt-player" data="https://www.youtube.com/embed/iNiImDNtLpQ"></object></p>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_inline_image_with_custom_attribute_variables(self):
+        md_text = '''![Alt](image.png){data-custom .cool-class #cool_id delay=2}'''
+        expected = '''<p><img alt="Alt" class="cool-class" data-custom delay="2" id="cool_id" src="images/image.png"/></p>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
 
 class TestSideBySideBlocksHTML(unittest.TestCase):
     def test_sidebyside_blocks(self):
@@ -877,6 +882,16 @@ Good stuff all round! Test examples rock!
 </div>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
+    def test_sidebyside_with_attribute_variables(self):
+        md_text = '''\
+||| {data-custom #cool_id delay=2 .custom-class}
+Block content.
+'''
+        expected = '''<div class="collection-horiz custom-class" data-custom delay="2" id="cool_id">
+<p>Block content.</p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
 class TestCardsHTML(unittest.TestCase):
     def test_inline_card_simple(self):
         md_text = '''[|A simple card with just text|]'''
@@ -944,6 +959,13 @@ Some paragraph text here.
         md_text = '''[|Card with attrs|]{#my-card .special}'''
         expected = '''<div class="card special" id="my-card">
 <p>Card with attrs</p>
+</div>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_card_with_attribute_variables(self):
+        md_text = '''[|Card body|]{data-custom james=nine dollars=2}'''
+        expected = '''<div class="card" data-custom dollars="2" james="nine">
+<p>Card body</p>
 </div>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 
@@ -1245,6 +1267,16 @@ test  {#test}
 </section>
 <section id="section-hello">
 <h2 class="hello class" id="title">hello<a class="anchor" href="#title"></a></h2>
+</section>'''
+        self.assertEqual(parseHtml(md_text).strip(), expected.strip())
+
+    def test_heading_attributes_with_variables(self):
+        md_text = '''\
+## hello ## {#id2 data-custom delay=2}
+'''
+        expected = '''\
+<section id="section-hello">
+<h2 data-custom delay="2" id="id2">hello<a class="anchor" href="#id2"></a></h2>
 </section>'''
         self.assertEqual(parseHtml(md_text).strip(), expected.strip())
 

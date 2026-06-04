@@ -669,6 +669,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         attrs = self._extract_attrs(node)
         _cls = attrs.get('_class', '')
         _id = attrs.get('_id') or self.get_title_id(level)
+        attrs.pop('_class', None); attrs.pop('_id', None)
         title_node = node.find('title_text')
         title_raw: str = (title_node.text.strip() if title_node else "!Bad title!")
         # Render inline markdown within titles (support bold/italic/code/longdash etc.)
@@ -676,7 +677,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         anchor = self.tag('a', enclose=2, newline=False, _class='anchor', href=f'#{_id}')
         section_s = self._open_section(self.slug(f"{title_raw}"))
         
-        return section_s + self.tag(f'h{level}', f"{title_rendered}{anchor}", id=_id, _class=_cls)
+        return section_s + self.tag(f'h{level}', f"{title_rendered}{anchor}", id=_id, _class=_cls, **attrs)
 
     def visit_atx_title(self, node: Symbol) -> str:
         level = len(level.text) if (level := node.find('hashes')) and level.text else 1
@@ -705,7 +706,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             content = ''
         
         attrs = self._extract_attrs(node)
-        return self.tag('div', f"\n{content}\n", _class=f"card {attrs.get('_class','')}".strip(), _id=attrs.get('_id'))
+        attrs['_class'] = f"card {attrs.pop('_class', '')}".strip(); attrs['_id'] = attrs.pop('_id', None)
+        return self.tag('div', f"\n{content}\n", **attrs)
 
     def visit_side_block(self, node: Symbol) -> str:
         content = [self.parse_markdown(thing.text, 'content').strip()
@@ -713,7 +715,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         if head := node.find('side_block_head'):
             attrs = self._extract_attrs(head)
-            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class=f"collection-horiz {attrs.get('_class','')}", _id=attrs.get('_id'))
+            attrs['_class'] = f"collection-horiz {attrs.pop('_class', '')}".strip(); attrs['_id'] = attrs.pop('_id', None)
+            return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, **attrs)
         else:
             return self.tag('div', f"\n{'\n'.join(content)}\n", enclose=1, _class="collection-horiz")
 
@@ -843,32 +846,32 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return 'image', None
 
-    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '', _class: str = '', _id: str | None = None) -> str:
+    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '', _class: str = '', _id: str | None = None, **attrs) -> str:
         """Unified media rendering logic"""
         media_type, meta = self._get_media_type(url)
         
         if media_type == 'youtube':
             self.resources.videos.append(url)
             yt_class = f'yt-embed {_class}'.strip() if _class else 'yt-embed'
-            return self.tag('object', '', enclose=2, _class=yt_class, data=f'https://www.youtube.com/embed/{meta}')
+            return self.tag('object', '', enclose=2, _class=yt_class, data=f'https://www.youtube.com/embed/{meta}', **attrs)
         
         elif media_type == 'video':
             self.resources.videos.append(url)
             src = self._prefix_local_image(url)
             return self.tag('video', controls='true', disablePictureInPicture='true', 
-                            playsinline='true', src=src, type=f'video/{meta}', enclose=2, _class=_class, _id=_id)
+                            playsinline='true', src=src, type=f'video/{meta}', enclose=2, _class=_class, _id=_id, **attrs)
         
         elif media_type == 'audio':
             self.resources.audios.append(url)
             src = self._prefix_local_image(url)
             mime = 'audio/mpeg' if meta == 'mp3' else f'audio/{meta}'
-            return self.tag('audio', controls='true', src=src, type=mime, enclose=2, _class=_class, _id=_id)
+            return self.tag('audio', controls='true', src=src, type=mime, enclose=2, _class=_class, _id=_id, **attrs)
             
             
         else: # Image
             self.resources.images.append(url)
             src = self._prefix_local_image(url)
-            return self.tag('img', '', src=src, alt=alt, title=title, style=style, enclose=1, newline=False, _class=_class, _id=_id)
+            return self.tag('img', '', src=src, alt=alt, title=title, style=style, enclose=1, newline=False, _class=_class, _id=_id, **attrs)
 
     def _render_link(self, url: str, text: str, title: str | None = None) -> str:
         """Unified link rendering logic"""
@@ -1178,7 +1181,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=1, _class=attrs.get('_class',''), _id=attrs.get('_id'))
+        return self._render_media(url, alt, title, enclose=1, **attrs)
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
@@ -1196,7 +1199,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=2, _class=attrs.get('_class',''), _id=attrs.get('_id'))
+        return self._render_media(url, alt, title, enclose=2, **attrs)
 
     def visit_wiki_image(self, node: Symbol) -> str:
         if not (file_node := node.find('wiki_image_file')):
