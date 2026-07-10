@@ -1008,7 +1008,7 @@ Second card content
 <div class="collection-horiz">
 <div class="card">
 <section id="section-card-two">
-<h2 id="title_1">Card Two<a class="anchor" href="#title_1"></a></h2>
+<h2 id="title_2">Card Two<a class="anchor" href="#title_2"></a></h2>
 <p>Second card content</p>
 </section>
 </div>

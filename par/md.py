@@ -4,49 +4,10 @@ from .__init__ import SimpleVisitor, MDHTMLVisitor # Visits parsed nodes and con
 import re, types
 from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
 
-from dataclasses import dataclass, field, asdict
-from collections import defaultdict
 from functools import lru_cache
 from typing import Literal
 
 _ = lru_cache(maxsize=256)(re.compile)
-
-
-@dataclass(slots=True)
-class ResourceStore:
-    """Centralized storage for all resources tracked during markdown parsing."""
-    
-    links_ext: list[str]      = field(default_factory=list)
-    links_int: list[str]      = field(default_factory=list)
-    toc_items: list           = field(default_factory=list)
-    footnotes: list[dict]     = field(default_factory=list)  # list of {'name': str, 'text': str}
-    images:    list[str]      = field(default_factory=list)
-    videos:    list[str]      = field(default_factory=list)
-    audios:    list[str]      = field(default_factory=list)
-
-    titles_ids:       defaultdict[int, int]  = field(default_factory=lambda: defaultdict(int))
-    link_references:  dict[str, dict]        = field(default_factory=dict)  # dict of {label: {'url': str, 'title': str | None}}
-    image_references: dict[str, dict]        = field(default_factory=dict)  # dict of {label: {'url': str, 'title': str | None}}
-    
-    
-    def to_dict(self):
-        """Return all resources as a dictionary for external access."""
-        return asdict(self)
-    
-    #Create isolated context for visitor with fresh title IDs
-    def nested_store(self):
-        return ResourceStore(
-            links_ext=self.links_ext,
-            links_int=self.links_int,
-            toc_items=[],  # Don't share ToC items for nested parsing
-            footnotes=self.footnotes,
-            images=self.images,
-            videos=self.videos,
-            audios=self.audios,
-            titles_ids=defaultdict(int),  # fresh for nested context
-            link_references=self.link_references,
-            image_references=self.image_references,
-        )
 
 
 class MarkdownGrammar(dict):
@@ -323,7 +284,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         self.tag_class   = tag_class
         self.footnote_id = footnote_id
-        self.resources   = resources if resources is not None else ResourceStore()
+        self.resources   = resources if resources is not None else {
+            'links_ext': [], 'links_int': [],
+            'images': [], 'videos': [], 'audios': [],
+            'toc': [], 'footnotes': [], 'ids': {},
+            'link_refs': {}, 'image_refs': {},
+        }
         self._current_section_level = None
         self._title_id_begin_level: int | None = 1
         self._form_stack: list[dict[str, str]] = []
@@ -354,9 +320,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not result or len(result) == 0:
             return ""
         
-        # Create nested visitor with fresh title IDs for isolated context
-        nested_resources = self.resources.nested_store()
-        v = self.__class__(self.tag_class, g, footnote_id=self.footnote_id, resources=nested_resources)
+        # Nested parsing contributes to the same resource collections.
+        v = self.__class__(self.tag_class, g, footnote_id=self.footnote_id, resources=self.resources)
         v._title_id_begin_level = title_id_begin_level
         parsed_output = v.visit(result[0] if isinstance(result, (list, tuple)) else result)
         self.footnote_id = v.footnote_id
@@ -642,8 +607,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             begin = level
             self._title_id_begin_level = begin
 
-        titles = self.resources.titles_ids
-        titles[level] += 1   # defaultdict(int) — zero-initialises missing keys
+        titles = self.resources['ids']
+        titles[level] = titles.get(level, 0) + 1
 
         ids = [str(titles.get(l, 0)) for l in range(begin, level + 1)]
         return f"title_{'-'.join(ids)}"
@@ -663,7 +628,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         attrs = self._extract_attrs(node)
         _id = attrs.get('_id') or self.get_title_id(level)
         title = (title_node := node.find('title_text')) and title_node.text
-        self.resources.toc_items.append((level, _id, title))
+        self.resources['toc'].append((level, _id, title))
 
     def _get_title(self, node: Symbol, level: int):
         attrs = self._extract_attrs(node)
@@ -760,10 +725,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('table', enclose=3)
 
     def visit_directive(self, node: Symbol):
-        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources.toc_items:
+        if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources['toc']:
             toc = [self.tag('section', _class='toc')]
             count = 1; hi = 0
-            for lvl, anchor, title in self.resources.toc_items:
+            for lvl, anchor, title in self.resources['toc']:
                 if lvl > hi:
                     toc.append(self.tag('ul'))
                 elif lvl < hi:
@@ -774,7 +739,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             toc.append(self.tag('ul', enclose=3))
             toc.append(self.tag('section', enclose=3, newline=False))
             # Since we visited these before generating, reset the dict to make sure headings get correct id's
-            self.resources.titles_ids.clear()
+            self.resources['ids'].clear()
             return ''.join(toc)
 
     def visit_footnote(self, node: Symbol) -> str:
@@ -785,12 +750,12 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
 
     def visit_footnote_desc(self, node):
         name = node.find('footnote').text.strip('[^]')
-        if name in [fn['name'] for fn in self.resources.footnotes]:
+        if name in [fn['name'] for fn in self.resources['footnotes']]:
             raise Exception("The footnote %s is already existed" % name)
 
         txt = self.visit(node.find('footnote_text')).rstrip()
         text = self.parse_markdown(txt, 'content').rstrip()
-        self.resources.footnotes.append({'name': name, 'text': text})
+        self.resources['footnotes'].append({'name': name, 'text': text})
         return ''
 
     def _open_section(self, id):
@@ -826,8 +791,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             
             # Store both as link reference and image reference
             ref_item = {'url': url, 'title': title}
-            self.resources.link_references[label]  = ref_item
-            self.resources.image_references[label] = ref_item
+            self.resources['link_refs'][label] = ref_item
+            self.resources['image_refs'][label] = ref_item
 
     def _is_safe_url(self, url: str) -> bool:
         """Check if URL is safe (not javascript:, vbscript:, data:)"""
@@ -851,25 +816,25 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         media_type, meta = self._get_media_type(url)
         
         if media_type == 'youtube':
-            self.resources.videos.append(url)
+            self.resources['videos'].append(url)
             yt_class = f'yt-embed {_class}'.strip() if _class else 'yt-embed'
             return self.tag('object', '', enclose=2, _class=yt_class, data=f'https://www.youtube.com/embed/{meta}', **attrs)
         
         elif media_type == 'video':
-            self.resources.videos.append(url)
+            self.resources['videos'].append(url)
             src = self._prefix_local_image(url)
             return self.tag('video', controls='true', disablePictureInPicture='true', 
                             playsinline='true', src=src, type=f'video/{meta}', enclose=2, _class=_class, _id=_id, **attrs)
         
         elif media_type == 'audio':
-            self.resources.audios.append(url)
+            self.resources['audios'].append(url)
             src = self._prefix_local_image(url)
             mime = 'audio/mpeg' if meta == 'mp3' else f'audio/{meta}'
             return self.tag('audio', controls='true', src=src, type=mime, enclose=2, _class=_class, _id=_id, **attrs)
             
             
         else: # Image
-            self.resources.images.append(url)
+            self.resources['images'].append(url)
             src = self._prefix_local_image(url)
             return self.tag('img', '', src=src, alt=alt, title=title, style=style, enclose=1, newline=False, _class=_class, _id=_id, **attrs)
 
@@ -878,7 +843,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return text
             
-        self.resources.links_ext.append(url)
+        self.resources['links_ext'].append(url)
         return self.tag('a', text, href=url, title=title, newline=False)
 
     def visit_raw_url(self, node: Symbol) -> str:
@@ -905,7 +870,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return text
 
-        self.resources.links_ext.append(url)
+        self.resources['links_ext'].append(url)
 
         attrs = self._extract_attrs(node)
         if attrs == {}:
@@ -922,7 +887,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (label_node := node.find('link_label')) and label_node.text 
                 else text.lower())
         
-        if not (ref := self.resources.link_references.get(label)):
+        if not (ref := self.resources['link_refs'].get(label)):
             return node.text
         
         return self._render_link(ref['url'], text, ref.get('title'))
@@ -932,7 +897,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
 
         text = self.parse_markdown(text_node.text, 'inline_text').strip()
-        if not (ref := self.resources.link_references.get(text_node.text.lower())):
+        if not (ref := self.resources['link_refs'].get(text_node.text.lower())):
             return node.text
 
         return self._render_link(ref['url'], text, ref.get('title'))
@@ -1128,7 +1093,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         url = (page.lower().replace(' ', '-') + '.html' + anchor) if page else anchor
         
-        self.resources.links_int.append(url)
+        self.resources['links_int'].append(url)
         return self.tag('a', text or page, href=url, newline=False)
 
     def _prefix_local_image(self, url: str) -> str:
@@ -1164,7 +1129,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         link_text = self.parse_markdown(alt, 'inline_text').strip() if alt else ''
         
         attrs = self._extract_attrs(node)
-        self.resources.links_ext.append(link_url)
+        self.resources['links_ext'].append(link_url)
         return self.tag('a', f"{img_tag}{link_text}", href=link_url, title=link_title, newline=False, **attrs)
 
     # Image visitors
@@ -1189,7 +1154,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                 if (label_node := node.find('image_ref_label')) and label_node.text 
                 else alt.lower())
         
-        if not (ref := self.resources.image_references.get(label)):
+        if not (ref := self.resources['image_refs'].get(label)):
             return node.text
         
         url = ref['url']
@@ -1244,9 +1209,9 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             s.append(self._close_section())
             self._current_section_level = None
 
-        if self.resources.footnotes:
+        if self.resources['footnotes']:
             s.append(self.tag('div', _class='footnotes', newline=False) + self.tag('ol', newline=False))
-            for note in self.resources.footnotes:
+            for note in self.resources['footnotes']:
                 s.append(self.tag('li', id=f"fn-{note['name']}", newline=False, enclose=0))
                 s.append(note['text'] + "\n")
                 s.append(self.tag('a', '↩', href=f'#fnref-{note['name']}', _class='footnote-backref inner', newline=False))
@@ -1298,6 +1263,6 @@ def parseHtmlDebug(text, tag_class=None, grammar=None, visitor=None):
     parse_result, g = _safe_parse_and_extract(text, grammar)
     v = (visitor or MarkdownHtmlVisitor)(tag_class or {}, g)
     if parse_result is None:
-        return "", v.resources.to_dict()
+        return "", v.resources
     html = v.visit(parse_result, root=True)
-    return (html, v.resources.to_dict())
+    return html, v.resources
