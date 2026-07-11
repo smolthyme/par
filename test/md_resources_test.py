@@ -12,8 +12,8 @@ class TestDebugResourcesBasics(unittest.TestCase):
         self.assertEqual(
             resources,
             {
-                "links_ext": [],
-                "links_int": [],
+                "links_ext": set(),
+                "links_int": set(),
                 "images": [],
                 "videos": [],
                 "audios": [],
@@ -32,8 +32,8 @@ class TestDebugResourcesBasics(unittest.TestCase):
 
         self.assertIn('<a href="https://example.com">', html)
         self.assertIn('<img alt="logo" src="images/logo.png"/>', html)
-        self.assertEqual(resources["links_ext"], ["https://example.com"])
-        self.assertEqual(resources["links_int"], ["home.html"])
+        self.assertEqual(resources["links_ext"], {"https://example.com"})
+        self.assertEqual(resources["links_int"], {"home.html"})
         self.assertEqual(resources["images"], ["logo.png"])
         self.assertEqual(resources["videos"], [])
         self.assertEqual(resources["audios"], [])
@@ -47,7 +47,7 @@ class TestDebugResourcesBasics(unittest.TestCase):
 
         self.assertIn('title="Docs"', html)
         self.assertIn('src="images/icon.svg"', html)
-        self.assertEqual(resources["links_ext"], ["https://example.com/docs"])
+        self.assertEqual(resources["links_ext"], {"https://example.com/docs"})
         self.assertEqual(resources["images"], ["icon.svg"])
         expected_refs = {
             "docs": {"url": "https://example.com/docs", "title": "Docs"},
@@ -85,11 +85,11 @@ The result is documented here.[^note]
         self.assertIn('https://example.com/guide', html)
         self.assertIn('walkthrough.mp4', html)
         self.assertIn('fn-note', html)
-        self.assertEqual(set(resources["links_ext"]), {
+        self.assertEqual(resources["links_ext"], {
             "https://example.com/guide",
             "https://example.com/support.",
         })
-        self.assertEqual(resources["links_int"], [])
+        self.assertEqual(resources["links_int"], set())
         self.assertEqual(resources["images"], ["product.png"])
         self.assertEqual(resources["videos"], [
             "walkthrough.mp4",
@@ -133,8 +133,8 @@ Audio preview: ![](preview.ogg)
         self.assertIn('<h2 id="title_1">Featured product', html)
         self.assertIn('href="product-details.html"', html)
         self.assertIn('class="collection-horiz benefits"', html)
-        self.assertEqual(set(resources["links_ext"]), {"https://example.com/track"})
-        self.assertEqual(resources["links_int"], ["product-details.html"])
+        self.assertEqual(resources["links_ext"], {"https://example.com/track"})
+        self.assertEqual(resources["links_int"], {"product-details.html"})
         self.assertEqual(resources["images"], ["hero.jpg", "badge.svg"])
         self.assertEqual(resources["videos"], [])
         self.assertEqual(resources["audios"], ["preview.ogg"])
@@ -163,8 +163,8 @@ For urgent issues, see [status][status-page] or listen to ![](notice.mp3).
         self.assertIn('name="email" required type="email"', html)
         self.assertIn('formaction="https://example.com/thanks"', html)
         self.assertIn('src="images/notice.mp3"', html)
-        self.assertEqual(resources["links_ext"], ["https://status.example.com"])
-        self.assertEqual(resources["links_int"], [])
+        self.assertEqual(resources["links_ext"], {"https://status.example.com"})
+        self.assertEqual(resources["links_int"], set())
         self.assertEqual(resources["images"], [])
         self.assertEqual(resources["videos"], [])
         self.assertEqual(resources["audios"], ["notice.mp3"])
