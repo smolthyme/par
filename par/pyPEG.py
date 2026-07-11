@@ -43,10 +43,13 @@ type ParsePattern = (
 )
 
 class Symbol(list):
+    __slots__ = ('__name__', 'what', '_offset', '_text_cache')
+
     def __init__(self, name: str, what: Any, offset: int = -1):
         self.__name__ = name
         self.what = what
         self._offset = offset
+        self._text_cache: str | None = None
         self.extend(what)
     
     def __call__(self) -> Any:
@@ -100,7 +103,12 @@ class Symbol(list):
     
     @property
     def text(self) -> str:
-        return ''.join(node if isinstance(node, str) else node.text for node in self.what)
+        if self._text_cache is None:
+            self._text_cache = ''.join(
+                node if isinstance(node, str) else node.text
+                for node in self.what
+            )
+        return self._text_cache
 
     @property
     def offset(self) -> int:

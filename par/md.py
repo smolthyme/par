@@ -2,12 +2,15 @@
 from .__init__ import SimpleVisitor, MDHTMLVisitor # Visits parsed nodes and converts to HTML/text etc.
 
 import re, types
-from par.pyPEG import _not, _and, keyword, ignore, Symbol, parseLine
+from par.pyPEG import _not, ignore, Symbol, parseLine
 
 from functools import lru_cache
 from typing import Literal
 
 _ = lru_cache(maxsize=256)(re.compile)
+
+_RE_LINE_ENDINGS = re.compile(r'\r\n|\r')
+_RE_HARD_BREAK = re.compile(r'(?<=[^\s|]) {2,}\n(?=[^\n])|\\\n')
 
 
 class MarkdownGrammar(dict):
@@ -259,16 +262,18 @@ class MarkdownGrammar(dict):
             return (), ""
 
         # Normalise on unix-style line ending and we end with a newline
-        text = re.sub(r'\r\n|\r', '\n', text + ("\n" if not text.endswith("\n") else ''))
+        text = _RE_LINE_ENDINGS.sub('\n', text + ("\n" if not text.endswith("\n") else ''))
         # Hard line breaks: two+ trailing spaces or a trailing backslash before newline.
         # FIXME: We replace with literal <br/> so inline processing keeps them within the same paragraph
         # Preserve the trailing newline after converting to a <br/> so parsing retains line boundary
         # Only convert two+ spaces followed by newline into a <br/> when the newline is followed
         # by non-blank content (avoid converting trailing spaces at end-of-text into a <br/>).
-        text = re.sub(r'(?<=[^\s|]) {2,}\n(?=[^\n])|\\\n', '<br/>\n', text)
+        text = _RE_HARD_BREAK.sub('<br/>\n', text)
         kwargs.setdefault('packrat', True)
         return parseLine(text, root or self.root, skipWS=skipWS, **kwargs)
 
+
+_DEFAULT_GRAMMAR = MarkdownGrammar()
 
 _RE_SUBSCRIPT_FALLBACK   = re.compile(r',,([^,\n]+),,')
 _RE_STRIKETHROUGH_FALLBACK = re.compile(r'~~(.+?)~~')
@@ -279,13 +284,13 @@ _RE_SINGLE_P_BLOCK = re.compile(r'^\s*<p\b[^>]*>(?:(?!<p\b).)*?</p>\s*$', re.I |
 
 
 class MarkdownHtmlVisitor(MDHTMLVisitor):    
-    def __init__(self, tag_class={}, grammar=None, footnote_id=1, resources=None):
+    def __init__(self, tag_class=None, grammar=None, footnote_id=1, resources=None):
         super().__init__(grammar)
         
-        self.tag_class   = tag_class
+        self.tag_class   = tag_class or {}
         self.footnote_id = footnote_id
         self.resources   = resources if resources is not None else {
-            'links_ext': [], 'links_int': [],
+            'links_ext': set(), 'links_int': set(),
             'images': [], 'videos': [], 'audios': [],
             'toc': [], 'footnotes': [], 'ids': {},
             'link_refs': {}, 'image_refs': {},
@@ -307,10 +312,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return super(MarkdownHtmlVisitor, self).visit(nodes, root)
     
     def parse_markdown(self, text: str, peg=None, *, title_id_begin_level: int | None = 1) -> str:
-        g = self.grammar if self.grammar else MarkdownGrammar()
-        
-        if not isinstance(g, MarkdownGrammar):
-            g = MarkdownGrammar()
+        g = self.grammar if isinstance(self.grammar, MarkdownGrammar) else _DEFAULT_GRAMMAR
         
         if isinstance(peg, str):
             peg = g[peg]
@@ -350,7 +352,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     attrs[key] = val
         return attrs
 
-    def fmt_tag(self, node: Symbol, html_tag: str, strip_chars: str) -> str:
+    def fmt_tag(self, node: Symbol, strip_chars: str) -> str:
         if a := node.find('words'):
             return self.visit(a)
         return node.text.strip(strip_chars)
@@ -497,7 +499,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('em', newline=False)
 
     def visit_fmt_italic(self, node: Symbol) -> str:
-        return self.fmt_tag(node, 'em', '*_')
+        return self.fmt_tag(node, '*_')
     
     def visit_fmt_italic_end(self, node: Symbol) -> str:
         return self.tag('em', enclose=3, newline=False)
@@ -511,7 +513,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('u', newline=False)
     
     def visit_fmt_underline(self, node: Symbol) -> str:
-        return self.fmt_tag(node, 'u', '_')
+        return self.fmt_tag(node, '_')
     
     def visit_fmt_underline_end(self, node: Symbol) -> str:
         return self.tag('u', enclose=3, newline=False)
@@ -530,7 +532,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('sub', newline=False)
     
     def visit_fmt_subscript(self, node: Symbol) -> str:
-        return self.fmt_tag(node, 'sub', ',')
+        return self.fmt_tag(node, ',')
 
     def visit_fmt_subscript_end(self, node: Symbol) -> str:
         return self.tag('sub', enclose=3, newline=False)
@@ -539,7 +541,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('sup', newline=False)
     
     def visit_fmt_superscript(self, node: Symbol) -> str:
-        return self.fmt_tag(node, 'sup', '^')
+        return self.fmt_tag(node, '^')
 
     def visit_fmt_superscript_end(self, node: Symbol) -> str:
         return self.tag('sup', enclose=3, newline=False)
@@ -548,7 +550,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         return self.tag('span', style="text-decoration: line-through", newline=False)
 
     def visit_fmt_strikethrough(self, node: Symbol) -> str:
-        return self.fmt_tag(node, 'span', '~')
+        return self.fmt_tag(node, '~')
 
     def visit_fmt_strikethrough_end(self, node: Symbol) -> str:
         return self.tag('span', enclose=3, newline=False)
@@ -727,7 +729,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
     def visit_directive(self, node: Symbol):
         if (name := node.find('directive_name')) and name.text in ['toc', 'contents'] and self.resources['toc']:
             toc = [self.tag('section', _class='toc')]
-            count = 1; hi = 0
+            hi = 0
             for lvl, anchor, title in self.resources['toc']:
                 if lvl > hi:
                     toc.append(self.tag('ul'))
@@ -735,7 +737,6 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
                     toc.append(self.tag('ul', enclose=3))
                 hi = lvl
                 toc.append(self.tag('li', self.tag('a', title, href=f"#{anchor}", newline=False)))
-                count += 1
             toc.append(self.tag('ul', enclose=3))
             toc.append(self.tag('section', enclose=3, newline=False))
             # Since we visited these before generating, reset the dict to make sure headings get correct id's
@@ -811,7 +812,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         return 'image', None
 
-    def _render_media(self, url: str, alt: str, title: str | None = None, enclose: int = 1, style: str | None = None, content: str = '', _class: str = '', _id: str | None = None, **attrs) -> str:
+    def _render_media(self, url: str, alt: str, title: str | None = None, style: str | None = None, _class: str = '', _id: str | None = None, **attrs) -> str:
         """Unified media rendering logic"""
         media_type, meta = self._get_media_type(url)
         
@@ -842,8 +843,8 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         """Unified link rendering logic"""
         if not self._is_safe_url(url):
             return text
-            
-        self.resources['links_ext'].append(url)
+
+        self.resources['links_ext'].add(url)
         return self.tag('a', text, href=url, title=title, newline=False)
 
     def visit_raw_url(self, node: Symbol) -> str:
@@ -870,12 +871,10 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(url):
             return text
 
-        self.resources['links_ext'].append(url)
-
         attrs = self._extract_attrs(node)
-        if attrs == {}:
+        if not attrs:
             return self._render_link(url, text, title)
-        
+        self.resources['links_ext'].add(url)
         return self.tag('a', text, href=url, title=title, newline=False, **attrs)
 
     def visit_reference_link(self, node: Symbol) -> str:
@@ -1093,7 +1092,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         url = (page.lower().replace(' ', '-') + '.html' + anchor) if page else anchor
         
-        self.resources['links_int'].append(url)
+        self.resources['links_int'].add(url)
         return self.tag('a', text or page, href=url, newline=False)
 
     def _prefix_local_image(self, url: str) -> str:
@@ -1125,11 +1124,11 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         if not self._is_safe_url(image_url) or not self._is_safe_url(link_url):
             return node.text
         
-        img_tag = self._render_media(image_url, alt or "", image_title, enclose=0, content=alt or "")
+        img_tag = self._render_media(image_url, alt or "", image_title)
         link_text = self.parse_markdown(alt, 'inline_text').strip() if alt else ''
         
         attrs = self._extract_attrs(node)
-        self.resources['links_ext'].append(link_url)
+        self.resources['links_ext'].add(link_url)
         return self.tag('a', f"{img_tag}{link_text}", href=link_url, title=link_title, newline=False, **attrs)
 
     # Image visitors
@@ -1146,7 +1145,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=1, **attrs)
+        return self._render_media(url, alt, title, **attrs)
 
     def visit_reference_image(self, node: Symbol) -> str:
         alt = (alt_node.text if (alt_node := node.find('image_alt')) else '')
@@ -1164,7 +1163,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
             return node.text
         
         attrs = self._extract_attrs(node)
-        return self._render_media(url, alt, title, enclose=2, **attrs)
+        return self._render_media(url, alt, title, **attrs)
 
     def visit_wiki_image(self, node: Symbol) -> str:
         if not (file_node := node.find('wiki_image_file')):
@@ -1201,7 +1200,7 @@ class MarkdownHtmlVisitor(MDHTMLVisitor):
         
         style = ' '.join(styles) if styles else None
         
-        return self._render_media(url, '', None, enclose=2, style=style)
+        return self._render_media(url, '', None, style=style)
 
     def __end__(self):
         s = []; 

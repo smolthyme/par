@@ -157,5 +157,4 @@ class HTMLVisitor(SimpleVisitor):
 class MDHTMLVisitor(HTMLVisitor):
     def __init__(self, grammar: dict | None = None, tag_class: dict[str, str] | None = None) -> None:
         super(MDHTMLVisitor, self).__init__(grammar)
-        self.titles_ids = {}
         self.tag_class = tag_class or self.__class__.tag_class
